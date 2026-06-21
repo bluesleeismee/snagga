@@ -97,7 +97,7 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
       </div>
 
       {/* Kategorie-Chips */}
-      <div className="no-scroll" style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '13px 16px 4px', flexShrink: 0 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '13px 16px 4px', flexShrink: 0 }}>
         {categories.map(cat => {
           const active = cat === selectedCat
           return (
@@ -105,7 +105,7 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
               key={cat}
               onClick={() => setSelectedCat(cat)}
               style={{
-                flexShrink: 0, padding: '8px 15px', borderRadius: 10,
+                padding: '8px 15px', borderRadius: 10,
                 fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap',
                 border: `1px solid ${active ? 'var(--red)' : 'var(--border)'}`,
                 background: active ? 'var(--red-soft)' : 'var(--bg-elev2)',
