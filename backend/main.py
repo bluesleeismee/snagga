@@ -186,4 +186,4 @@ async def refresh_deals():
 async def health():
     async with aiosqlite.connect(DB_PATH) as db:
         row = await (await db.execute("SELECT COUNT(*) FROM products")).fetchone()
-    return {"status": "ok", "products": row[0] if row else 0
+    return {"status": "ok", "products": row[0] if row else 0}
