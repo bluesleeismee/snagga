@@ -105,7 +105,7 @@ export default function SettingsPage({ theme, onSetTheme, hiddenCats, onToggleCa
               ['Version', '1.0.0'],
               ['Datenquelle', 'CamelCamelCamel RSS'],
               ['Marktplatz', 'Amazon.de'],
-              ['Affiliate', 'Snagga-21'],
+              ['Affiliate', 'snagga-21'],
             ].map(([k, v]) => (
               <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
                 <span style={{ color: 'var(--muted)' }}>{k}</span>

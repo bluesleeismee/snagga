@@ -16,7 +16,7 @@ from database import DB_PATH
 # Konfiguration
 # ---------------------------------------------------------------------------
 
-AFFILIATE_TAG = "Snagga-21"
+AFFILIATE_TAG = "snagga-21"
 
 RSS_FEEDS = [
     "https://camelcamelcamel.com/top_drops/rss?market=de",
