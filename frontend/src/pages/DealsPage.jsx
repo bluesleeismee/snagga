@@ -52,7 +52,7 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
             <div style={{ width: 11, height: 11, borderRadius: '50%', background: 'var(--red)', boxShadow: '0 0 0 4px var(--red-soft)' }} />
             <span style={{ fontFamily: 'Space Grotesk', fontWeight: 700, fontSize: 20, letterSpacing: '-.4px' }}>
-              DEAL<span style={{ color: 'var(--red)' }}>RADAR</span>
+              SNAG<span style={{ color: 'var(--red)' }}>GA</span>
             </span>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
