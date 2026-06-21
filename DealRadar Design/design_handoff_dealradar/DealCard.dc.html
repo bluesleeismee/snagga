@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div onClick="{{ deal.open }}" style="position:relative; background:var(--bg-elev); border:1px solid var(--border); border-radius:16px; padding:14px; display:flex; flex-direction:column; gap:13px; cursor:pointer; box-shadow:0 1px 2px var(--shadow); -webkit-tap-highlight-color:transparent;">
+
+  <sc-if value="{{ deal.isLow }}" hint-placeholder-val="{{ true }}">
+    <div style="position:absolute; top:0; left:16px; transform:translateY(-50%); background:var(--red); color:#fff; font-size:10px; font-weight:700; letter-spacing:.5px; padding:3px 9px; border-radius:7px; display:flex; align-items:center; gap:4px; box-shadow:0 3px 10px var(--red-glow);"><span style="font-size:10px;">🔥</span>ALLZEIT-TIEF</div>
+  </sc-if>
+
+  <div style="display:flex; gap:12px; align-items:flex-start;">
+    <div style="flex:none; width:84px; height:84px; border-radius:10px; border:1px solid var(--border); background:repeating-linear-gradient(135deg, var(--bg-elev2), var(--bg-elev2) 7px, transparent 7px, transparent 14px), var(--bg-elev2); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; text-align:center; padding:5px;">
+      <span style="font-family:'Space Grotesk', monospace; font-size:11px; font-weight:700; letter-spacing:.5px; color:var(--text); line-height:1;">{{ deal.imgLabel }}</span>
+      <span style="font-family:'Space Grotesk', monospace; font-size:7px; letter-spacing:1px; color:var(--muted);">PRODUKTFOTO</span>
+    </div>
+
+    <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:4px;">
+      <div style="display:flex; align-items:center; gap:7px;">
+        <span style="font-size:11px; font-weight:600; letter-spacing:.8px; text-transform:uppercase; color:var(--muted);">{{ deal.brand }}</span>
+        <sc-if value="{{ deal.prime }}" hint-placeholder-val="{{ true }}">
+          <span style="font-size:9px; font-weight:700; color:var(--cyan); background:var(--cyan-soft); padding:2px 6px; border-radius:5px; letter-spacing:.4px; text-transform:uppercase;">Prime</span>
+        </sc-if>
+      </div>
+      <div style="font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:14.5px; line-height:1.25; color:var(--text); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">{{ deal.name }}</div>
+      <div style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted);">
+        <span style="color:#F5A623;">★</span><span style="color:var(--text); font-weight:600;">{{ deal.ratingText }}</span><span>·</span><span>{{ deal.reviewsText }}</span>
+      </div>
+    </div>
+
+    <button onClick="{{ deal.toggleSave }}" aria-label="Merken" style="flex:none; width:34px; height:34px; border-radius:9px; border:1px solid var(--border); background:var(--bg-elev2); cursor:pointer; font-size:17px; line-height:1; display:flex; align-items:center; justify-content:center; padding:0;">
+      <sc-if value="{{ deal.saved }}" hint-placeholder-val="{{ true }}"><span style="color:#F5A623;">★</span></sc-if>
+      <sc-if value="{{ deal.notSaved }}" hint-placeholder-val="{{ true }}"><span style="color:var(--muted);">☆</span></sc-if>
+    </button>
+  </div>
+
+  <div style="display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;">
+    <span style="font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:29px; color:var(--text); letter-spacing:-.6px; line-height:1;">{{ deal.priceFmt }}</span>
+    <span style="font-size:14px; color:var(--muted); text-decoration:line-through;">{{ deal.origFmt }}</span>
+    <span style="font-size:12px; font-weight:700; color:#fff; background:var(--red); padding:3px 8px; border-radius:7px;">{{ deal.discountText }}</span>
+  </div>
+
+  <sc-if value="{{ expanded }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex; flex-direction:column; gap:9px;">
+      <svg viewBox="0 0 300 54" preserveAspectRatio="none" style="width:100%; height:50px; display:block;">
+        <path d="{{ deal.miniArea }}" fill="var(--cyan-soft)" stroke="none"></path>
+        <path d="{{ deal.miniLine }}" fill="none" stroke="var(--cyan)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+      </svg>
+      <div style="display:flex; justify-content:space-between; font-size:12px;">
+        <span style="color:var(--muted);">Ø 60 T&nbsp;&nbsp;<span style="color:var(--text); font-weight:600; font-family:'Space Grotesk';">{{ deal.avgFmt }}</span></span>
+        <span style="color:var(--muted);">Allzeit-Tief&nbsp;&nbsp;<span style="color:var(--cyan); font-weight:700; font-family:'Space Grotesk';">{{ deal.lowFmt }}</span></span>
+      </div>
+    </div>
+  </sc-if>
+
+  <div style="display:flex; flex-direction:column; gap:7px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px;">
+      <span style="color:var(--muted); text-transform:uppercase; letter-spacing:.7px; font-weight:600;">Preis-Score</span>
+      <span style="font-family:'Space Grotesk'; font-weight:700; font-size:14px; color:{{ deal.scoreColor }};">{{ deal.score }}<span style="color:var(--muted); font-weight:500; font-size:11px;">/100</span></span>
+    </div>
+    <div style="position:relative; height:7px; border-radius:99px; background:linear-gradient(90deg, #EF4444, #F59E0B 52%, #22C55E);">
+      <div style="position:absolute; top:50%; left:{{ deal.scorePct }}; width:15px; height:15px; border-radius:50%; background:#fff; border:2.5px solid var(--bg-elev); box-shadow:0 1px 4px rgba(0,0,0,.45); transform:translate(-50%,-50%);"></div>
+    </div>
+  </div>
+
+  <sc-if value="{{ expanded }}" hint-placeholder-val="{{ true }}">
+    <a href="{{ deal.amazonUrl }}" target="_blank" rel="noopener noreferrer" onClick="{{ deal.stopProp }}" style="display:flex; align-items:center; justify-content:center; gap:7px; text-decoration:none; background:var(--red); color:#fff; font-weight:700; font-size:14px; padding:12px; border-radius:10px; font-family:Inter;">Bei Amazon ansehen <span style="font-size:16px;">→</span></a>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:400,&quot;height&quot;:340},&quot;deal&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;object&quot;},&quot;expanded&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}"></script>
+</body>
+</html>

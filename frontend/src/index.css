@@ -1,0 +1,59 @@
+/* ── Reset & Base ───────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root {
+  height: 100%;
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  overscroll-behavior: none;
+}
+
+/* ── Tokens — Dark (default) ────────────────────────────────────── */
+:root {
+  --bg:        #0F0F12;
+  --bg-elev:   #1A1A1F;
+  --bg-elev2:  #24242A;
+  --border:    #2A2A32;
+  --text:      #F0F0F5;
+  --muted:     #6B6B7A;
+  --red:       #EF4444;
+  --red-soft:  rgba(239,68,68,.15);
+  --red-glow:  rgba(239,68,68,.30);
+  --cyan:      #22D3EE;
+  --cyan-soft: rgba(34,211,238,.12);
+  --shadow:    rgba(0,0,0,.30);
+  --green:     #22C55E;
+  --yellow:    #F59E0B;
+}
+
+/* ── Tokens — Light ─────────────────────────────────────────────── */
+[data-theme="light"] {
+  --bg:        #F4F4F7;
+  --bg-elev:   #FFFFFF;
+  --bg-elev2:  #EAEAEF;
+  --border:    #DCDCE6;
+  --text:      #111118;
+  --muted:     #7878A0;
+  --red:       #EF4444;
+  --red-soft:  rgba(239,68,68,.10);
+  --red-glow:  rgba(239,68,68,.20);
+  --cyan:      #0EA5E9;
+  --cyan-soft: rgba(14,165,233,.10);
+  --shadow:    rgba(0,0,0,.06);
+  --green:     #16A34A;
+  --yellow:    #D97706;
+}
+
+/* ── Scrollbar hide ─────────────────────────────────────────────── */
+.no-scroll { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scroll::-webkit-scrollbar { display: none; }
+
+/* ── Utility ────────────────────────────────────────────────────── */
+button { cursor: pointer; font-family: inherit; }
+a { color: inherit; }
+input { font-family: inherit; }

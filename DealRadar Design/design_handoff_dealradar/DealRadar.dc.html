@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    .dr-scroll { scrollbar-width: none; -ms-overflow-style: none; }
+    .dr-scroll::-webkit-scrollbar { width: 0; height: 0; display: none; }
+    .dr-chips { scrollbar-width: none; }
+    .dr-chips::-webkit-scrollbar { display: none; }
+    @keyframes dr-sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    @keyframes dr-fade { from { opacity: 0; } to { opacity: 1; } }
+  </style>
+</helmet>
+
+<div style="{{ rootStyle }}">
+  <div style="width:430px; max-width:100%; height:912px; max-height:96vh; position:relative; background:var(--bg); border-radius:40px; overflow:hidden; border:1px solid var(--border); box-shadow:0 40px 90px -20px rgba(0,0,0,.55); display:flex; flex-direction:column; font-family:Inter, sans-serif; color:var(--text);">
+
+    <div class="dr-scroll" style="flex:1; overflow-y:auto; overflow-x:hidden; position:relative;">
+
+      <!-- ===================== DEALS ===================== -->
+      <sc-if value="{{ isDeals }}" hint-placeholder-val="{{ true }}">
+        <div style="position:sticky; top:0; z-index:6; background:var(--bg); padding:18px 16px 12px; border-bottom:1px solid var(--border);">
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <div style="display:flex; align-items:center; gap:9px;">
+              <div style="width:11px; height:11px; border-radius:50%; background:var(--red); box-shadow:0 0 0 4px var(--red-soft);"></div>
+              <span style="font-family:'Space Grotesk'; font-weight:700; font-size:20px; letter-spacing:-.4px;">DEAL<span style="color:var(--red);">RADAR</span></span>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <div style="font-size:11px; font-weight:600; color:var(--red); background:var(--red-soft); padding:6px 9px; border-radius:8px; display:flex; gap:5px; align-items:center; white-space:nowrap;"><span style="font-size:11px;">🔥</span>{{ allLowText }}</div>
+              <button onClick="{{ toggleTheme }}" aria-label="Theme" style="width:36px; height:36px; border-radius:9px; border:1px solid var(--border); background:var(--bg-elev2); color:var(--text); cursor:pointer; font-size:15px; display:flex; align-items:center; justify-content:center; padding:0;">{{ themeIcon }}</button>
+            </div>
+          </div>
+          <div style="margin-top:13px; position:relative;">
+            <span style="position:absolute; left:13px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:16px; pointer-events:none;">⌕</span>
+            <input value="{{ search }}" onInput="{{ onSearch }}" placeholder="Produkt oder Marke suchen…" style="width:100%; padding:11px 12px 11px 36px; border-radius:11px; border:1px solid var(--border); background:var(--bg-elev2); color:var(--text); font-size:14px; font-family:Inter; outline:none;" />
+          </div>
+        </div>
+
+        <div class="dr-chips" style="display:flex; gap:8px; overflow-x:auto; padding:13px 16px 4px;">
+          <sc-for list="{{ categories }}" as="c" hint-placeholder-count="7">
+            <button onClick="{{ c.select }}" style="flex:none; padding:8px 15px; border-radius:10px; font-size:13px; font-weight:600; white-space:nowrap; cursor:pointer; font-family:Inter; border:1px solid {{ c.border }}; background:{{ c.bg }}; color:{{ c.color }};">{{ c.label }}</button>
+          </sc-for>
+        </div>
+
+        <div style="display:flex; gap:8px; padding:12px 16px 4px; align-items:center;">
+          <span style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; font-weight:600;">Sortieren</span>
+          <sc-for list="{{ sorts }}" as="s" hint-placeholder-count="3">
+            <button onClick="{{ s.select }}" style="padding:6px 11px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; font-family:Inter; border:1px solid {{ s.border }}; background:{{ s.bg }}; color:{{ s.color }};">{{ s.label }}</button>
+          </sc-for>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:18px; padding:16px 16px 28px;">
+          <sc-for list="{{ deals }}" as="d" hint-placeholder-count="4">
+            <dc-import name="DealCard" deal="{{ d }}" expanded="{{ true }}" hint-size="100%,330px"></dc-import>
+          </sc-for>
+          <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}">
+            <div style="text-align:center; padding:48px 20px; color:var(--muted); font-size:14px;">Keine Treffer. Andere Kategorie oder Suche probieren.</div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <!-- ===================== WATCHLIST ===================== -->
+      <sc-if value="{{ isWatch }}" hint-placeholder-val="{{ false }}">
+        <div style="position:sticky; top:0; z-index:6; background:var(--bg); padding:18px 16px 14px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
+          <span style="font-family:'Space Grotesk'; font-weight:700; font-size:21px; letter-spacing:-.3px;">Watchlist</span>
+          <button onClick="{{ toggleTheme }}" aria-label="Theme" style="width:36px; height:36px; border-radius:9px; border:1px solid var(--border); background:var(--bg-elev2); color:var(--text); cursor:pointer; font-size:15px; display:flex; align-items:center; justify-content:center; padding:0;">{{ themeIcon }}</button>
+        </div>
+        <sc-if value="{{ hasWatch }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex; flex-direction:column; gap:14px; padding:16px 16px 28px;">
+            <sc-for list="{{ watchDeals }}" as="d" hint-placeholder-count="2">
+              <dc-import name="DealCard" deal="{{ d }}" expanded="{{ false }}" hint-size="100%,180px"></dc-import>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{ noWatch }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:90px 36px; text-align:center;">
+            <div style="width:64px; height:64px; border-radius:18px; background:var(--bg-elev2); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:28px;">⭐</div>
+            <div style="font-family:'Space Grotesk'; font-weight:600; font-size:17px; color:var(--text);">Noch nichts gespeichert</div>
+            <div style="font-size:14px; color:var(--muted); line-height:1.5;">Tippe auf das ⭐ bei einem Deal, um ihn hier zu beobachten.</div>
+            <button onClick="{{ goDeals }}" style="margin-top:4px; background:var(--red); color:#fff; border:none; font-weight:700; font-size:14px; padding:11px 20px; border-radius:10px; cursor:pointer; font-family:Inter;">Deals entdecken</button>
+          </div>
+        </sc-if>
+      </sc-if>
+
+      <!-- ===================== ALERTS ===================== -->
+      <sc-if value="{{ isAlerts }}" hint-placeholder-val="{{ false }}">
+        <div style="position:sticky; top:0; z-index:6; background:var(--bg); padding:18px 16px 14px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
+          <span style="font-family:'Space Grotesk'; font-weight:700; font-size:21px; letter-spacing:-.3px;">Preis-Alerts</span>
+          <button onClick="{{ toggleTheme }}" aria-label="Theme" style="width:36px; height:36px; border-radius:9px; border:1px solid var(--border); background:var(--bg-elev2); color:var(--text); cursor:pointer; font-size:15px; display:flex; align-items:center; justify-content:center; padding:0;">{{ themeIcon }}</button>
+        </div>
+        <div style="padding:16px 16px 28px; display:flex; flex-direction:column; gap:12px;">
+          <button onClick="{{ openAddAlert }}" style="display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:13px; border-radius:12px; border:1.5px dashed var(--border); background:var(--bg-elev); color:var(--cyan); font-weight:700; font-size:14px; cursor:pointer; font-family:Inter;"><span style="font-size:17px;">+</span> Neuer Alert</button>
+
+          <sc-for list="{{ alerts }}" as="a" hint-placeholder-count="3">
+            <div style="background:var(--bg-elev); border:1px solid var(--border); border-radius:14px; padding:14px; display:flex; align-items:center; gap:12px;">
+              <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:6px;">
+                <div style="font-family:'Space Grotesk'; font-weight:600; font-size:14px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ a.name }}</div>
+                <div style="display:flex; gap:14px; font-size:12px;">
+                  <span style="color:var(--muted);">Zielpreis <span style="color:var(--cyan); font-weight:700; font-family:'Space Grotesk';">{{ a.targetFmt }}</span></span>
+                  <span style="color:var(--muted);">aktuell <span style="color:var(--text); font-weight:600; font-family:'Space Grotesk';">{{ a.currentFmt }}</span></span>
+                </div>
+                <div style="font-size:11px; font-weight:700; color:{{ a.statusColor }};">{{ a.statusText }}</div>
+              </div>
+              <button onClick="{{ a.toggle }}" aria-label="An/Aus" style="flex:none; width:44px; height:26px; border-radius:99px; border:none; cursor:pointer; padding:0; position:relative; background:{{ a.trackBg }}; transition:background .15s;">
+                <span style="position:absolute; top:3px; left:{{ a.knobX }}; width:20px; height:20px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.4); transition:left .15s;"></span>
+              </button>
+              <button onClick="{{ a.remove }}" aria-label="Löschen" style="flex:none; width:30px; height:30px; border-radius:8px; border:1px solid var(--border); background:var(--bg-elev2); color:var(--muted); cursor:pointer; font-size:16px; line-height:1; padding:0;">×</button>
+            </div>
+          </sc-for>
+
+          <sc-if value="{{ noAlerts }}" hint-placeholder-val="{{ false }}">
+            <div style="text-align:center; padding:50px 20px; color:var(--muted); font-size:14px;">Keine aktiven Alerts. Lege oben einen an.</div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <!-- ===================== SETTINGS ===================== -->
+      <sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+        <div style="position:sticky; top:0; z-index:6; background:var(--bg); padding:18px 16px 14px; border-bottom:1px solid var(--border);">
+          <span style="font-family:'Space Grotesk'; font-weight:700; font-size:21px; letter-spacing:-.3px;">Einstellungen</span>
+        </div>
+        <div style="padding:18px 16px 28px; display:flex; flex-direction:column; gap:24px;">
+
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <span style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.7px; font-weight:700;">Darstellung</span>
+            <div style="display:flex; gap:8px; background:var(--bg-elev2); padding:4px; border-radius:11px;">
+              <sc-for list="{{ themeSeg }}" as="t" hint-placeholder-count="2">
+                <button onClick="{{ t.select }}" style="flex:1; padding:9px; border-radius:8px; border:none; cursor:pointer; font-weight:700; font-size:13px; font-family:Inter; background:{{ t.bg }}; color:{{ t.color }};">{{ t.label }}</button>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <span style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.7px; font-weight:700;">Kategorien im Feed</span>
+            <div style="background:var(--bg-elev); border:1px solid var(--border); border-radius:14px; overflow:hidden;">
+              <sc-for list="{{ catToggles }}" as="c" hint-placeholder-count="6">
+                <div style="display:flex; align-items:center; justify-content:space-between; padding:13px 15px; border-bottom:1px solid var(--border);">
+                  <span style="font-size:14px; color:var(--text); font-weight:500;">{{ c.label }}</span>
+                  <button onClick="{{ c.toggle }}" aria-label="An/Aus" style="width:44px; height:26px; border-radius:99px; border:none; cursor:pointer; padding:0; position:relative; background:{{ c.trackBg }};">
+                    <span style="position:absolute; top:3px; left:{{ c.knobX }}; width:20px; height:20px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.4); transition:left .15s;"></span>
+                  </button>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <span style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.7px; font-weight:700;">Benachrichtigungen</span>
+            <div style="background:var(--bg-elev); border:1px solid var(--border); border-radius:14px; padding:13px 15px; display:flex; align-items:center; justify-content:space-between;">
+              <span style="font-size:14px; color:var(--text); font-weight:500;">Push bei Preis-Tiefs</span>
+              <button onClick="{{ toggleNotif }}" aria-label="An/Aus" style="width:44px; height:26px; border-radius:99px; border:none; cursor:pointer; padding:0; position:relative; background:{{ notifTrack }};">
+                <span style="position:absolute; top:3px; left:{{ notifKnob }}; width:20px; height:20px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.4); transition:left .15s;"></span>
+              </button>
+            </div>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <span style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.7px; font-weight:700;">Region</span>
+            <div style="display:flex; gap:8px; background:var(--bg-elev2); padding:4px; border-radius:11px;">
+              <sc-for list="{{ regionSeg }}" as="r" hint-placeholder-count="3">
+                <button onClick="{{ r.select }}" style="flex:1; padding:9px; border-radius:8px; border:none; cursor:pointer; font-weight:700; font-size:13px; font-family:'Space Grotesk'; background:{{ r.bg }}; color:{{ r.color }};">{{ r.label }}</button>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <span style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.7px; font-weight:700;">Über die App</span>
+            <div style="background:var(--bg-elev); border:1px solid var(--border); border-radius:14px; padding:15px; font-size:12.5px; line-height:1.6; color:var(--muted);">
+              DealRadar zeigt Amazon-Produkte mit objektivem Preis-Score auf Basis echter Preishistorie. Kein Community-Voting.<br><br>
+              <span style="color:var(--text); font-weight:600;">Affiliate-Hinweis:</span> Als Amazon-Partner verdienen wir an qualifizierten Käufen über die Links in dieser App.
+            </div>
+          </div>
+
+        </div>
+      </sc-if>
+
+    </div>
+
+    <!-- ===================== BOTTOM NAV ===================== -->
+    <nav style="flex:none; display:grid; grid-template-columns:repeat(4, 1fr); border-top:1px solid var(--border); background:var(--bg); padding:9px 6px max(10px, env(safe-area-inset-bottom));">
+      <sc-for list="{{ navItems }}" as="t" hint-placeholder-count="4">
+        <button onClick="{{ t.select }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; background:none; border:none; cursor:pointer; color:{{ t.color }}; font-family:Inter; padding:4px 0;">
+          <span style="font-size:19px; line-height:1; filter:{{ t.filter }};">{{ t.icon }}</span>
+          <span style="font-size:10px; font-weight:600; letter-spacing:.2px;">{{ t.label }}</span>
+        </button>
+      </sc-for>
+    </nav>
+
+    <!-- ===================== DETAIL MODAL ===================== -->
+    <sc-if value="{{ modalOpen }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ modal.close }}" style="position:absolute; inset:0; z-index:30; background:rgba(0,0,0,.55); backdrop-filter:blur(3px); display:flex; align-items:flex-end; animation:dr-fade .18s ease;">
+        <div onClick="{{ modal.stopProp }}" class="dr-scroll" style="width:100%; max-height:93%; overflow-y:auto; background:var(--bg); border-radius:26px 26px 0 0; border-top:1px solid var(--border); padding:10px 18px 26px; animation:dr-sheet-up .26s cubic-bezier(.22,1,.36,1);">
+          <div style="width:42px; height:5px; border-radius:99px; background:var(--border); margin:0 auto 14px;"></div>
+
+          <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:14px;">
+            <div style="flex:1; min-width:0;">
+              <div style="font-size:11px; font-weight:600; letter-spacing:.8px; text-transform:uppercase; color:var(--muted); margin-bottom:3px;">{{ modal.brand }}</div>
+              <div style="font-family:'Space Grotesk'; font-weight:700; font-size:18px; line-height:1.25; color:var(--text);">{{ modal.name }}</div>
+            </div>
+            <div style="display:flex; gap:8px; flex:none;">
+              <button onClick="{{ modal.toggleSave }}" aria-label="Merken" style="width:38px; height:38px; border-radius:10px; border:1px solid var(--border); background:var(--bg-elev2); cursor:pointer; font-size:18px; padding:0;">
+                <sc-if value="{{ modal.saved }}" hint-placeholder-val="{{ false }}"><span style="color:#F5A623;">★</span></sc-if>
+                <sc-if value="{{ modal.notSaved }}" hint-placeholder-val="{{ true }}"><span style="color:var(--muted);">☆</span></sc-if>
+              </button>
+              <button onClick="{{ modal.close }}" aria-label="Schliessen" style="width:38px; height:38px; border-radius:10px; border:1px solid var(--border); background:var(--bg-elev2); color:var(--text); cursor:pointer; font-size:19px; padding:0;">×</button>
+            </div>
+          </div>
+
+          <div style="position:relative; width:100%; height:180px; border-radius:16px; border:1px solid var(--border); background:repeating-linear-gradient(135deg, var(--bg-elev2), var(--bg-elev2) 9px, transparent 9px, transparent 18px), var(--bg-elev2); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; margin-bottom:16px;">
+            <span style="font-family:'Space Grotesk', monospace; font-size:22px; font-weight:700; letter-spacing:1px; color:var(--text);">{{ modal.imgLabel }}</span>
+            <span style="font-family:'Space Grotesk', monospace; font-size:9px; letter-spacing:2px; color:var(--muted);">PRODUKTFOTO</span>
+            <sc-if value="{{ modal.isLow }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute; top:12px; left:12px; background:var(--red); color:#fff; font-size:10px; font-weight:700; letter-spacing:.5px; padding:4px 9px; border-radius:7px; display:flex; align-items:center; gap:4px;"><span>🔥</span>ALLZEIT-TIEF</div>
+            </sc-if>
+          </div>
+
+          <div style="display:flex; align-items:baseline; gap:11px; flex-wrap:wrap; margin-bottom:16px;">
+            <span style="font-family:'Space Grotesk'; font-weight:700; font-size:38px; color:var(--text); letter-spacing:-1px; line-height:1;">{{ modal.priceFmt }}</span>
+            <span style="font-size:16px; color:var(--muted); text-decoration:line-through;">{{ modal.origFmt }}</span>
+            <span style="font-size:13px; font-weight:700; color:#fff; background:var(--red); padding:4px 9px; border-radius:8px;">{{ modal.discountText }}</span>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:18px;">
+            <div style="background:var(--bg-elev); border:1px solid var(--border); border-radius:13px; padding:13px;">
+              <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; font-weight:600; margin-bottom:5px;">Ersparnis</div>
+              <div style="font-family:'Space Grotesk'; font-weight:700; font-size:19px; color:#22C55E;">{{ modal.savingsFmt }}</div>
+            </div>
+            <div style="background:var(--bg-elev); border:1px solid var(--border); border-radius:13px; padding:13px;">
+              <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; font-weight:600; margin-bottom:5px;">Preis-Score</div>
+              <div style="font-family:'Space Grotesk'; font-weight:700; font-size:19px; color:{{ modal.scoreColor }};">{{ modal.score }}<span style="color:var(--muted); font-size:13px; font-weight:500;">/100</span></div>
+            </div>
+            <div style="background:var(--bg-elev); border:1px solid var(--border); border-radius:13px; padding:13px;">
+              <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; font-weight:600; margin-bottom:5px;">Allzeit-Tief</div>
+              <div style="font-family:'Space Grotesk'; font-weight:700; font-size:19px; color:var(--cyan);">{{ modal.lowFmt }}</div>
+            </div>
+            <div style="background:var(--bg-elev); border:1px solid var(--border); border-radius:13px; padding:13px;">
+              <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; font-weight:600; margin-bottom:5px;">Über Tief</div>
+              <div style="font-family:'Space Grotesk'; font-weight:700; font-size:19px; color:var(--text);">{{ modal.overLowText }}</div>
+            </div>
+          </div>
+
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+            <span style="font-size:13px; font-weight:700; font-family:'Space Grotesk'; color:var(--text);">Preisverlauf</span>
+            <span style="font-size:11px; color:var(--muted);">letzte 180 Tage</span>
+          </div>
+          <div style="position:relative;">
+            <svg ref="{{ chartRefBind }}" viewBox="0 0 360 150" onMouseMove="{{ modal.move }}" onMouseLeave="{{ leaveChart }}" onTouchStart="{{ modal.move }}" onTouchMove="{{ modal.move }}" style="width:100%; height:auto; display:block; touch-action:none; cursor:crosshair;">
+              <path d="{{ modal.fullArea }}" fill="var(--cyan-soft)"></path>
+              <path d="{{ modal.fullLine }}" fill="none" stroke="var(--cyan)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></path>
+              <circle cx="{{ modal.lowM.x }}" cy="{{ modal.lowM.y }}" r="4" fill="var(--cyan)" stroke="var(--bg)" stroke-width="1.5"></circle>
+              <sc-if value="{{ modal.hoverActive }}" hint-placeholder-val="{{ false }}">
+                <line x1="{{ modal.hover.lineX }}" y1="0" x2="{{ modal.hover.lineX }}" y2="150" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3"></line>
+                <circle cx="{{ modal.hover.x }}" cy="{{ modal.hover.y }}" r="4.5" fill="#fff" stroke="var(--cyan)" stroke-width="2.5"></circle>
+                <rect x="{{ modal.hover.labelX }}" y="2" width="60" height="27" rx="6" fill="var(--text)"></rect>
+                <text x="{{ modal.hover.labelTextX }}" y="13.5" fill="var(--bg)" font-size="9.5" font-weight="700" font-family="Space Grotesk" text-anchor="middle">{{ modal.hover.price }}</text>
+                <text x="{{ modal.hover.labelTextX }}" y="23.5" fill="var(--bg)" font-size="8" font-family="Inter" text-anchor="middle">{{ modal.hover.day }}</text>
+              </sc-if>
+            </svg>
+            <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--muted); margin-top:5px;">
+              <span>vor 180 Tagen</span><span>vor 90 Tagen</span><span>heute</span>
+            </div>
+          </div>
+
+          <a href="{{ modal.amazonUrl }}" target="_blank" rel="noopener noreferrer" style="display:flex; align-items:center; justify-content:center; gap:8px; text-decoration:none; background:var(--red); color:#fff; font-weight:700; font-size:15.5px; padding:15px; border-radius:13px; font-family:Inter; margin-top:20px; box-shadow:0 8px 22px -6px var(--red-glow);"><span style="font-size:17px;">🛒</span> Jetzt bei Amazon kaufen</a>
+          <div style="text-align:center; font-size:10.5px; color:var(--muted); margin-top:10px;">Affiliate-Link · Preis kann bei Amazon abweichen</div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ===================== ADD ALERT SHEET ===================== -->
+    <sc-if value="{{ addOpen }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ closeAdd }}" style="position:absolute; inset:0; z-index:40; background:rgba(0,0,0,.55); backdrop-filter:blur(3px); display:flex; align-items:flex-end; animation:dr-fade .18s ease;">
+        <div onClick="{{ modalStop }}" style="width:100%; background:var(--bg); border-radius:26px 26px 0 0; border-top:1px solid var(--border); padding:10px 18px 26px; animation:dr-sheet-up .26s cubic-bezier(.22,1,.36,1);">
+          <div style="width:42px; height:5px; border-radius:99px; background:var(--border); margin:0 auto 16px;"></div>
+          <div style="font-family:'Space Grotesk'; font-weight:700; font-size:19px; margin-bottom:18px;">Neuer Preis-Alert</div>
+
+          <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:18px;">
+            <span style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; font-weight:600;">Produkt</span>
+            <select value="{{ addInfo.asin }}" onChange="{{ addInfo.onProduct }}" style="width:100%; padding:12px; border-radius:11px; border:1px solid var(--border); background:var(--bg-elev2); color:var(--text); font-size:14px; font-family:Inter; outline:none;">
+              <sc-for list="{{ addOptions }}" as="o" hint-placeholder-count="6">
+                <option value="{{ o.value }}">{{ o.label }}</option>
+              </sc-for>
+            </select>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:24px;">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <span style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; font-weight:600;">Zielpreis</span>
+              <span style="font-family:'Space Grotesk'; font-weight:700; font-size:22px; color:var(--cyan);">{{ addInfo.targetFmt }}</span>
+            </div>
+            <input type="range" min="{{ addInfo.min }}" max="{{ addInfo.max }}" value="{{ addInfo.value }}" onInput="{{ addInfo.onTarget }}" style="width:100%; accent-color:var(--cyan); height:24px;" />
+            <div style="font-size:12px; color:var(--muted);">Aktueller Preis: <span style="color:var(--text); font-weight:600; font-family:'Space Grotesk';">{{ addInfo.currentFmt }}</span> · benachrichtigt sobald gleich oder günstiger.</div>
+          </div>
+
+          <button onClick="{{ addInfo.submit }}" style="width:100%; background:var(--red); color:#fff; border:none; font-weight:700; font-size:15px; padding:15px; border-radius:13px; cursor:pointer; font-family:Inter;">Alert anlegen</button>
+        </div>
+      </div>
+    </sc-if>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;accentRed&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#fb4d3d&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;accentCyan&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#22D3EE&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;defaultTab&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;deals&quot;,&quot;watch&quot;,&quot;alerts&quot;,&quot;settings&quot;],&quot;default&quot;:&quot;deals&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const P = [
+      { asin:'B09XS7JWHH', name:'WH-1000XM5 Noise Cancelling Kopfhörer', brand:'Sony', cat:'Elektronik', rating:4.6, reviews:18420, prime:true, price:279.00, orig:419.00, avg:329, low:268 },
+      { asin:'B0CHX3QBCH', name:'PlayStation 5 Slim Konsole', brand:'Sony', cat:'Gaming', rating:4.8, reviews:9210, prime:true, price:399.00, orig:549.99, avg:469, low:389 },
+      { asin:'B0BS5XNZQ4', name:'V15 Detect Absolute Akku-Staubsauger', brand:'Dyson', cat:'Haushalt', rating:4.5, reviews:6740, prime:false, price:529.00, orig:799.00, avg:649, low:519 },
+      { asin:'B08L5M9BTJ', name:'Magnifica Evo Kaffeevollautomat', brand:"De'Longhi", cat:'Küche', rating:4.4, reviews:12030, prime:true, price:349.99, orig:549.00, avg:429, low:339 },
+      { asin:'B0BDHWDR12', name:'MX Master 3S Wireless Maus', brand:'Logitech', cat:'Elektronik', rating:4.7, reviews:24500, prime:true, price:79.90, orig:119.00, avg:99, low:74 },
+      { asin:'B0C1JS9JK2', name:'Forerunner 265 GPS Laufuhr', brand:'Garmin', cat:'Sport', rating:4.6, reviews:3120, prime:true, price:399.00, orig:499.99, avg:449, low:389 },
+      { asin:'B0BVMM7WPF', name:'Series 9 Pro Elektrorasierer', brand:'Braun', cat:'Beauty', rating:4.5, reviews:8870, prime:true, price:229.99, orig:399.99, avg:289, low:219 },
+      { asin:'B07PGL2N7Q', name:'Ultraboost Light Laufschuhe', brand:'adidas', cat:'Sport', rating:4.4, reviews:5410, prime:true, price:99.95, orig:189.95, avg:139, low:94 },
+      { asin:'B09B8V1LZ3', name:'Foodi MAX Heissluftfritteuse 9,5L', brand:'Ninja', cat:'Küche', rating:4.7, reviews:31200, prime:true, price:159.99, orig:229.99, avg:189, low:149 },
+      { asin:'B0CGTYR4N8', name:'OLED evo 65" 4K Smart TV C4', brand:'LG', cat:'Elektronik', rating:4.7, reviews:2210, prime:false, price:1299.00, orig:2099.00, avg:1599, low:1289 },
+      { asin:'B0C7KFG2QH', name:'Sonicare DiamondClean Zahnbürste', brand:'Philips', cat:'Beauty', rating:4.6, reviews:14300, prime:true, price:89.99, orig:159.99, avg:119, low:84 },
+      { asin:'B0BL6GQ8R4', name:'Roomba Combo j7+ Saugroboter', brand:'iRobot', cat:'Haushalt', rating:4.3, reviews:4980, prime:true, price:599.00, orig:999.00, avg:749, low:589 },
+      { asin:'B07YFF3JCN', name:'501 Original Fit Jeans Herren', brand:"Levi's", cat:'Mode', rating:4.5, reviews:21400, prime:true, price:59.90, orig:99.90, avg:75, low:54 },
+      { asin:'B0BQ7M3K9P', name:'Resolve 2 Regenjacke', brand:'The North Face', cat:'Mode', rating:4.6, reviews:6730, prime:true, price:79.95, orig:130.00, avg:99, low:74 },
+      { asin:'B09NQYXM7T', name:'Pearl 360 i-Size Kindersitz', brand:'Maxi-Cosi', cat:'Kind & Baby', rating:4.7, reviews:3890, prime:false, price:219.00, orig:329.00, avg:269, low:209 },
+      { asin:'B08FC5L3RG', name:'Avent SCD923 Video-Babyphone', brand:'Philips', cat:'Kind & Baby', rating:4.4, reviews:7120, prime:true, price:99.99, orig:169.99, avg:129, low:94 },
+      { asin:'B07PQXLH5M', name:'CityMower 18V Akku-Rasenmäher', brand:'Bosch', cat:'Garten', rating:4.5, reviews:4310, prime:false, price:289.00, orig:419.00, avg:339, low:279 },
+      { asin:'B07Q9DTGML', name:'322GW Dashcam Full-HD', brand:'Nextbase', cat:'Auto', rating:4.4, reviews:5560, prime:true, price:89.99, orig:149.99, avg:119, low:84 }
+    ];
+    const mul = (a) => function() { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+    const gen = (seed, avg, orig, low, price, n) => {
+      const r = mul(seed); const arr = []; let v = orig * 0.96;
+      for (let i = 0; i < n; i++) {
+        v += (r() - 0.5) * orig * 0.05;
+        const drift = (avg - v) * 0.04; v += drift;
+        if (v > orig * 1.03) v = orig * 1.03;
+        if (v < low * 1.01) v = low * 1.01;
+        arr.push(v);
+      }
+      const di = 95 + Math.floor(r() * 75); arr[Math.min(di, n - 3)] = low;
+      arr[n - 1] = price; arr[n - 2] = (arr[n - 3] + price) / 2;
+      return arr;
+    };
+    P.forEach((p, i) => {
+      p.history = gen(i * 7 + 13, p.avg, p.orig, p.low, p.price, 180);
+      p.discount = Math.round((1 - p.price / p.orig) * 100);
+      p.score = Math.max(0, Math.min(100, Math.round((p.avg - p.price) / (p.avg - p.low) * 100)));
+      p.isLow = p.price <= p.low * 1.05;
+    });
+    this.products = P;
+    this.chartRef = React.createRef();
+    this.state = {
+      tab: ['deals','watch','alerts','settings'].indexOf(props.defaultTab) >= 0 ? props.defaultTab : 'deals',
+      theme: 'dark', search: '', cat: 'Alle', sort: 'best',
+      saved: {}, openAsin: null, hoverIndex: null, addOpen: false,
+      addAsin: P[0].asin, addTarget: Math.round(P[0].price * 0.95),
+      notif: true, region: 'DE',
+      enabledCats: { Elektronik:true, Haushalt:true, 'Küche':true, Gaming:true, Sport:true, Mode:true, 'Kind & Baby':true, Beauty:true, Garten:true, Auto:true },
+      alerts: [
+        { id:1, asin:'B09XS7JWHH', target:265, enabled:true },
+        { id:2, asin:'B0CHX3QBCH', target:379, enabled:true },
+        { id:3, asin:'B0BS5XNZQ4', target:499, enabled:false }
+      ]
+    };
+    this._aid = 4;
+  }
+
+  fmtEur(v) { const parts = Number(v).toFixed(2).split('.'); const a = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.'); return a + ',' + parts[1] + ' €'; }
+  fmtInt(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
+  scoreColor(s) { return s >= 80 ? '#22C55E' : s >= 60 ? '#F59E0B' : '#EF4444'; }
+  hexA(hex, a) { const h = hex.replace('#',''); const n = parseInt(h.length === 3 ? h.split('').map(c=>c+c).join('') : h, 16); return 'rgba(' + ((n>>16)&255) + ',' + ((n>>8)&255) + ',' + (n&255) + ',' + a + ')'; }
+
+  buildPath(values, w, h) {
+    const pad = 3; const min = Math.min.apply(null, values), max = Math.max.apply(null, values);
+    const span = (max - min) || 1; const n = values.length;
+    const X = i => pad + i / (n - 1) * (w - 2 * pad);
+    const Y = v => pad + (1 - (v - min) / span) * (h - 2 * pad);
+    let line = '';
+    for (let i = 0; i < n; i++) line += (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(values[i]).toFixed(1) + ' ';
+    const area = line + 'L' + X(n - 1).toFixed(1) + ' ' + (h - pad).toFixed(1) + ' L' + X(0).toFixed(1) + ' ' + (h - pad).toFixed(1) + ' Z';
+    return { line: line.trim(), area: area.trim(), X, Y, min, max, n };
+  }
+
+  deck(p) {
+    const mini = this.buildPath(p.history.slice(-60), 300, 54);
+    const saved = !!this.state.saved[p.asin];
+    return {
+      asin: p.asin, brand: p.brand, name: p.name, prime: p.prime,
+      imgLabel: p.brand.toUpperCase(),
+      ratingText: p.rating.toFixed(1).replace('.', ','),
+      reviewsText: this.fmtInt(p.reviews),
+      priceFmt: this.fmtEur(p.price), origFmt: this.fmtEur(p.orig),
+      discountText: '−' + p.discount + ' %',
+      avgFmt: this.fmtEur(p.avg), lowFmt: this.fmtEur(p.low),
+      score: p.score, scoreColor: this.scoreColor(p.score), scorePct: p.score + '%',
+      isLow: p.isLow, miniLine: mini.line, miniArea: mini.area,
+      saved, notSaved: !saved,
+      amazonUrl: 'https://www.amazon.de/dp/' + p.asin + '?tag=dealradar-21',
+      open: () => this.setState({ openAsin: p.asin, hoverIndex: null }),
+      toggleSave: (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.setState(s => ({ saved: Object.assign({}, s.saved, { [p.asin]: !s.saved[p.asin] }) })); },
+      stopProp: (e) => { if (e && e.stopPropagation) e.stopPropagation(); }
+    };
+  }
+
+  handleMove = (e) => {
+    const svg = this.chartRef.current; if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const cx = (e.touches && e.touches[0]) ? e.touches[0].clientX : e.clientX;
+    let r = (cx - rect.left) / rect.width; r = Math.max(0, Math.min(1, r));
+    const p = this.products.find(x => x.asin === this.state.openAsin); if (!p) return;
+    this.setState({ hoverIndex: Math.round(r * (p.history.length - 1)) });
+  };
+  leaveChart = () => this.setState({ hoverIndex: null });
+
+  renderVals() {
+    const theme = this.state.theme;
+    const red = this.props.accentRed || '#FB4D3D';
+    const cyan = this.props.accentCyan || '#22D3EE';
+    const base = theme === 'dark'
+      ? { '--page':'#060608', '--bg':'#0B0B12', '--bg-elev':'#15151F', '--bg-elev2':'#1F1F2C', '--border':'rgba(255,255,255,0.08)', '--text':'#ECECF2', '--muted':'#8A8AA2', '--shadow':'rgba(0,0,0,0.4)' }
+      : { '--page':'#E6E6EC', '--bg':'#F5F5F8', '--bg-elev':'#FFFFFF', '--bg-elev2':'#ECECF1', '--border':'rgba(15,15,40,0.10)', '--text':'#17171F', '--muted':'#6C6C80', '--shadow':'rgba(20,20,50,0.07)' };
+    const vars = Object.assign({}, base, {
+      '--red': red, '--red-soft': this.hexA(red, theme === 'dark' ? 0.16 : 0.10), '--red-glow': this.hexA(red, 0.45),
+      '--cyan': cyan, '--cyan-soft': this.hexA(cyan, theme === 'dark' ? 0.14 : 0.13)
+    });
+    const rootStyle = Object.assign({}, vars, { minHeight:'100vh', width:'100%', display:'flex', alignItems:'center', justifyContent:'center', padding:'20px 0', background:'var(--page)', fontFamily:'Inter, sans-serif' });
+
+    const tab = this.state.tab;
+    const seg = (active) => ({ bg: active ? 'var(--bg)' : 'transparent', color: active ? 'var(--text)' : 'var(--muted)' });
+
+    // deals
+    let list = this.products.filter(p => this.state.cat === 'Alle' ? this.state.enabledCats[p.cat] : p.cat === this.state.cat);
+    const q = this.state.search.trim().toLowerCase();
+    if (q) list = list.filter(p => (p.name + ' ' + p.brand).toLowerCase().indexOf(q) >= 0);
+    const sort = this.state.sort;
+    list = list.slice().sort((a, b) => sort === 'best' ? b.score - a.score : sort === 'discount' ? b.discount - a.discount : a.price - b.price);
+    const deals = list.map(p => this.deck(p));
+
+    const cats = ['Alle','Elektronik','Haushalt','Küche','Gaming','Sport','Mode','Kind & Baby','Beauty','Garten','Auto'];
+    const categories = cats.map(c => { const a = this.state.cat === c; return { label:c, border: a ? 'var(--text)' : 'var(--border)', bg: a ? 'var(--text)' : 'var(--bg-elev2)', color: a ? 'var(--bg)' : 'var(--muted)', select: () => this.setState({ cat: c }) }; });
+
+    const SORTS = [['best','Bester Deal'],['discount','% Rabatt'],['price','Preis']];
+    const sorts = SORTS.map(s => { const a = this.state.sort === s[0]; return { label:s[1], border: a ? 'var(--red)' : 'var(--border)', bg: a ? 'var(--red-soft)' : 'transparent', color: a ? 'var(--red)' : 'var(--muted)', select: () => this.setState({ sort: s[0] }) }; });
+
+    const NAV = [['deals','Deals','🔥'],['watch','Watchlist','⭐'],['alerts','Alerts','🔔'],['settings','Einstellungen','⚙️']];
+    const navItems = NAV.map(n => { const a = tab === n[0]; return { label:n[1], icon:n[2], color: a ? 'var(--red)' : 'var(--muted)', filter: a ? 'none' : 'saturate(0)', select: () => this.setState({ tab: n[0] }) }; });
+
+    const allLow = this.products.filter(p => p.isLow).length;
+
+    // watch
+    const watchDeals = this.products.filter(p => this.state.saved[p.asin]).map(p => this.deck(p));
+
+    // alerts
+    const alerts = this.state.alerts.map(a => {
+      const p = this.products.find(x => x.asin === a.asin) || {};
+      const reached = (p.price || Infinity) <= a.target;
+      return { id:a.id, name: p.name || '—', targetFmt: this.fmtEur(a.target), currentFmt: this.fmtEur(p.price || 0),
+        statusColor: reached ? '#22C55E' : 'var(--muted)', statusText: reached ? 'Ziel erreicht ✓' : 'aktiv · beobachtet',
+        trackBg: a.enabled ? 'var(--cyan)' : 'var(--bg-elev2)', knobX: a.enabled ? '21px' : '3px',
+        toggle: () => this.setState(s => ({ alerts: s.alerts.map(x => x.id === a.id ? Object.assign({}, x, { enabled: !x.enabled }) : x) })),
+        remove: () => this.setState(s => ({ alerts: s.alerts.filter(x => x.id !== a.id) })) };
+    });
+
+    // add alert
+    const addP = this.products.find(x => x.asin === this.state.addAsin) || this.products[0];
+    const addInfo = {
+      asin: this.state.addAsin, targetFmt: this.fmtEur(this.state.addTarget),
+      min: Math.round(addP.low * 0.8), max: Math.round(addP.orig), value: this.state.addTarget, currentFmt: this.fmtEur(addP.price),
+      onProduct: (e) => { const a = e.target.value; const pp = this.products.find(x => x.asin === a); this.setState({ addAsin: a, addTarget: Math.round(pp.price * 0.95) }); },
+      onTarget: (e) => this.setState({ addTarget: Number(e.target.value) }),
+      submit: () => this.setState(s => ({ alerts: s.alerts.concat([{ id: this._aid++, asin: s.addAsin, target: s.addTarget, enabled: true }]), addOpen: false, tab: 'alerts' }))
+    };
+    const addOptions = this.products.map(p => ({ value: p.asin, label: p.brand + ' · ' + p.name }));
+
+    // settings
+    const themeSeg = [['dark','Dunkel'],['light','Hell']].map(t => Object.assign({ label:t[1], select: () => this.setState({ theme: t[0] }) }, seg(theme === t[0])));
+    const catToggles = cats.slice(1).map(c => { const on = !!this.state.enabledCats[c]; return { label:c, trackBg: on ? 'var(--cyan)' : 'var(--bg-elev2)', knobX: on ? '21px' : '3px', toggle: () => this.setState(s => ({ enabledCats: Object.assign({}, s.enabledCats, { [c]: !s.enabledCats[c] }) })) }; });
+    const regionSeg = ['DE','AT','CH'].map(r => Object.assign({ label:r, select: () => this.setState({ region: r }) }, seg(this.state.region === r)));
+
+    // modal
+    let modal = null;
+    if (this.state.openAsin) {
+      const p = this.products.find(x => x.asin === this.state.openAsin);
+      if (p) {
+        const d = this.deck(p);
+        const full = this.buildPath(p.history, 360, 150);
+        const savings = p.orig - p.price;
+        const overLow = (p.price - p.low) / p.low * 100;
+        const lowVal = Math.min.apply(null, p.history);
+        const lowIdx = p.history.indexOf(lowVal);
+        let hover = null;
+        if (this.state.hoverIndex != null) {
+          const i = Math.max(0, Math.min(p.history.length - 1, this.state.hoverIndex));
+          const hx = full.X(i), hy = full.Y(p.history[i]);
+          const daysAgo = (p.history.length - 1) - i;
+          const labelX = Math.max(2, Math.min(360 - 62, hx - 30));
+          hover = { lineX: hx.toFixed(1), x: hx.toFixed(1), y: hy.toFixed(1), price: this.fmtEur(p.history[i]), day: daysAgo === 0 ? 'heute' : 'vor ' + daysAgo + ' T', labelX: labelX.toFixed(1), labelTextX: (labelX + 30).toFixed(1) };
+        }
+        modal = Object.assign({}, d, {
+          fullLine: full.line, fullArea: full.area,
+          lowM: { x: full.X(lowIdx).toFixed(1), y: full.Y(lowVal).toFixed(1) },
+          savingsFmt: '−' + this.fmtEur(savings),
+          overLowText: '+' + overLow.toFixed(1).replace('.', ',') + ' %',
+          hover, hoverActive: !!hover,
+          close: () => this.setState({ openAsin: null, hoverIndex: null }),
+          move: this.handleMove, stopProp: (e) => { if (e && e.stopPropagation) e.stopPropagation(); }
+        });
+      }
+    }
+
+    return {
+      rootStyle,
+      isDeals: tab === 'deals', isWatch: tab === 'watch', isAlerts: tab === 'alerts', isSettings: tab === 'settings',
+      themeIcon: theme === 'dark' ? '🌙' : '☀️', toggleTheme: () => this.setState({ theme: theme === 'dark' ? 'light' : 'dark' }),
+      search: this.state.search, onSearch: (e) => this.setState({ search: e.target.value }),
+      categories, sorts, deals, navItems,
+      noResults: tab === 'deals' && deals.length === 0,
+      allLowText: allLow + ' Allzeit-Tiefs',
+      watchDeals, hasWatch: watchDeals.length > 0, noWatch: watchDeals.length === 0,
+      goDeals: () => this.setState({ tab: 'deals' }),
+      alerts, noAlerts: alerts.length === 0,
+      openAddAlert: () => this.setState({ addOpen: true }), closeAdd: () => this.setState({ addOpen: false }),
+      addOpen: this.state.addOpen, addInfo, addOptions, modalStop: (e) => { if (e && e.stopPropagation) e.stopPropagation(); },
+      themeSeg, catToggles, regionSeg,
+      notifTrack: this.state.notif ? 'var(--cyan)' : 'var(--bg-elev2)', notifKnob: this.state.notif ? '21px' : '3px',
+      toggleNotif: () => this.setState(s => ({ notif: !s.notif })),
+      modal, modalOpen: !!modal, chartRefBind: this.chartRef, leaveChart: this.leaveChart
+    };
+  }
+}
+</script>
+</body>
+</html>

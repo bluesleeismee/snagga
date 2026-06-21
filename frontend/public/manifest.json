@@ -1,0 +1,13 @@
+{
+  "name": "Snagga",
+  "short_name": "Snagga",
+  "description": "Historisch günstige Amazon-Deals für D-A-CH",
+  "theme_color": "#EF4444",
+  "background_color": "#0F0F12",
+  "display": "standalone",
+  "orientation": "portrait",
+  "start_url": "/",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
