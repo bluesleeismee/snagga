@@ -204,7 +204,7 @@ async def refresh_deals():
     return {"message": f"{count} Produkte aktualisiert"}
 
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health():
     pool = await get_pool()
     async with pool.acquire() as conn:
