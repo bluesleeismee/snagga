@@ -39,9 +39,9 @@ export default function PriceChart({ prices, avgPrice, allTimeLow, asin = 'c' })
   return (
     <div style={{ marginBottom: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-        <span style={{ fontSize: 11.5, color: 'var(--text)' }}>Preis · 90 Tage</span>
+        <span style={{ fontSize: 10, color: 'var(--muted)' }}>Preis · 90 Tage</span>
         {status && (
-          <span style={{ fontSize: 11.5, fontWeight: 600, color: status.color }}>{status.text}</span>
+          <span style={{ fontSize: 10, fontWeight: 600, color: status.color }}>{status.text}</span>
         )}
       </div>
 
@@ -80,11 +80,8 @@ export default function PriceChart({ prices, avgPrice, allTimeLow, asin = 'c' })
         <circle cx={currentX} cy={currentY} r="3" fill="#E8500A" />
 
         {/* X-axis labels */}
-        <text x={PAD_L}       y={H - 2} textAnchor="start"  fontSize="10" fill="var(--text)" fontFamily="inherit">–90 Tage</text>
-        {avgPrice && (
-          <text x={W / 2}     y={H - 2} textAnchor="middle" fontSize="10" fill="var(--text)" fontFamily="inherit">Ø {fmtPriceShort(avgPrice)}</text>
-        )}
-        <text x={W - PAD_R}   y={H - 2} textAnchor="end"    fontSize="10" fill="var(--text)" fontFamily="inherit">heute</text>
+        <text x={PAD_L}     y={H - 2} textAnchor="start" fontSize="10" fill="var(--text)" fontFamily="inherit">–90 Tage</text>
+        <text x={W - PAD_R} y={H - 2} textAnchor="end"   fontSize="10" fill="var(--text)" fontFamily="inherit">heute</text>
       </svg>
     </div>
   )

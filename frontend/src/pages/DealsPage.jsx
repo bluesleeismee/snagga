@@ -71,8 +71,8 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
         zIndex: 100,
         flexShrink: 0,
       }}>
-        {/* Logo */}
-        <div style={{ flexShrink: 0, marginRight: 4 }}>
+        {/* Logo — fixe Breite = Sidebar-Breite minus Topbar-Padding → Suchfeld bündig mit Grid */}
+        <div style={{ flexShrink: 0, width: 208, marginRight: 0 }}>
           <span style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--text)', whiteSpace: 'nowrap' }}>
             snagga
           </span>
@@ -91,7 +91,7 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
             style={{
               width: '100%',
               padding: '9px 16px 9px 38px',
-              borderRadius: 999,
+              borderRadius: 9,
               border: '1.5px solid var(--border)',
               background: 'var(--bg-elev2)',
               color: 'var(--text)',
