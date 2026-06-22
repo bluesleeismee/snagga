@@ -6,7 +6,6 @@ import os
 from contextlib import asynccontextmanager
 from typing import Optional
 
-import aiosqlite
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,7 +13,7 @@ from pydantic import BaseModel
 
 load_dotenv()
 
-from database import DB_PATH, init_db
+from database import get_pool, init_db
 from scraper import fetch_and_update_deals, generate_history
 from scheduler import create_scheduler
 
@@ -53,9 +52,9 @@ async def lifespan(app: FastAPI):
     await init_db()
 
     # Beim ersten Start: DB befüllen wenn leer
-    async with aiosqlite.connect(DB_PATH) as db:
-        row = await (await db.execute("SELECT COUNT(*) FROM products")).fetchone()
-        count = row[0] if row else 0
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        count = await conn.fetchval("SELECT COUNT(*) FROM products")
 
     if count == 0:
         print("Datenbank leer — lade initiale Daten …")
@@ -89,22 +88,25 @@ app.add_middleware(
 # Hilfsfunktion: Zeile → Product
 # ---------------------------------------------------------------------------
 
-async def row_to_product(row, db: aiosqlite.Connection, history_limit: int = 30) -> Product:
-    asin = row[0]
-    rows = await (await db.execute(
-        "SELECT price FROM price_history WHERE asin=? ORDER BY timestamp DESC LIMIT ?",
-        (asin, history_limit),
-    )).fetchall()
-    prices = [r[0] for r in reversed(rows)]
+async def row_to_product(row, conn, history_limit: int = 30) -> Product:
+    asin = row["asin"]
+    ph_rows = await conn.fetch(
+        "SELECT price FROM price_history WHERE asin=$1 ORDER BY timestamp DESC LIMIT $2",
+        asin, history_limit,
+    )
+    prices = [r["price"] for r in reversed(ph_rows)]
     if not prices:
-        prices = generate_history(asin, row[5], row[8])
+        prices = generate_history(asin, row["current_price"], row["avg_price"])
         prices = [p for p, _ in prices[-30:]]
 
     return Product(
-        asin=row[0], name=row[1], brand=row[2], image_url=row[3], category=row[4],
-        current_price=row[5], original_price=row[6], all_time_low=row[7],
-        avg_price=row[8], deal_score=row[9], rating=row[10], reviews=row[11],
-        prime=bool(row[12]), last_updated=row[13], affiliate_url=row[14],
+        asin=row["asin"], name=row["name"], brand=row["brand"],
+        image_url=row["image_url"], category=row["category"],
+        current_price=row["current_price"], original_price=row["original_price"],
+        all_time_low=row["all_time_low"], avg_price=row["avg_price"],
+        deal_score=row["deal_score"], rating=row["rating"], reviews=row["reviews"],
+        prime=bool(row["prime"]), last_updated=row["last_updated"],
+        affiliate_url=row["affiliate_url"],
         price_history=prices,
     )
 
@@ -130,48 +132,50 @@ async def get_deals(
     }
     order = sort_map.get(sort_by, "deal_score DESC")
 
-    where_clauses = []
+    where_clauses: list[str] = []
     params: list = []
+    idx = 1
 
     if category and category != "Alle":
-        where_clauses.append("category = ?")
+        where_clauses.append(f"category = ${idx}")
         params.append(category)
+        idx += 1
 
     if search:
-        where_clauses.append("(LOWER(name) LIKE ? OR LOWER(brand) LIKE ?)")
+        where_clauses.append(f"(LOWER(name) LIKE ${idx} OR LOWER(brand) LIKE ${idx+1})")
         s = f"%{search.lower()}%"
         params.extend([s, s])
+        idx += 2
 
     where = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
     params.append(limit)
 
-    async with aiosqlite.connect(DB_PATH) as db:
-        rows = await (await db.execute(
-            f"SELECT * FROM products {where} ORDER BY {order} LIMIT ?", params
-        )).fetchall()
-        return [await row_to_product(r, db) for r in rows]
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"SELECT * FROM products {where} ORDER BY {order} LIMIT ${idx}", *params
+        )
+        return [await row_to_product(r, conn) for r in rows]
 
 
 @app.get("/product/{asin}", response_model=Product)
 async def get_product(asin: str):
     """Gibt ein einzelnes Produkt mit voller Preishistorie zurück."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        row = await (await db.execute(
-            "SELECT * FROM products WHERE asin=?", (asin,)
-        )).fetchone()
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT * FROM products WHERE asin=$1", asin)
         if not row:
             raise HTTPException(status_code=404, detail="Produkt nicht gefunden")
-        return await row_to_product(row, db, history_limit=180)
+        return await row_to_product(row, conn, history_limit=180)
 
 
 @app.get("/categories", response_model=list[str])
 async def get_categories():
     """Gibt alle vorhandenen Kategorien zurück."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        rows = await (await db.execute(
-            "SELECT DISTINCT category FROM products ORDER BY category"
-        )).fetchall()
-    cats = [r[0] for r in rows if r[0]]
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("SELECT DISTINCT category FROM products ORDER BY category")
+    cats = [r["category"] for r in rows if r["category"]]
     return ["Alle"] + cats
 
 
@@ -184,6 +188,7 @@ async def refresh_deals():
 
 @app.get("/health")
 async def health():
-    async with aiosqlite.connect(DB_PATH) as db:
-        row = await (await db.execute("SELECT COUNT(*) FROM products")).fetchone()
-    return {"status": "ok", "products": row[0] if row else 0}
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        count = await conn.fetchval("SELECT COUNT(*) FROM products")
+    return {"status": "ok", "products": count or 0}

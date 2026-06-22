@@ -1,16 +1,15 @@
 """
 CamelCamelCamel RSS Parser + Deal Scoring
-Läuft täglich um 03:00 Uhr und befüllt die SQLite-Datenbank.
+Läuft täglich um 03:00 Uhr und befüllt die PostgreSQL-Datenbank.
 """
 import re
 import random
 import hashlib
 import httpx
 import feedparser
-import aiosqlite
 from datetime import datetime, timedelta
 
-from database import DB_PATH
+from database import get_pool
 
 # ---------------------------------------------------------------------------
 # Konfiguration
@@ -239,40 +238,54 @@ async def fetch_and_update_deals():
         print("  RSS nicht erreichbar — nutze Seed-Daten")
         products = get_seed_data()
 
-    # In DB schreiben
-    async with aiosqlite.connect(DB_PATH) as db:
+    # In PostgreSQL schreiben
+    db = await get_pool()
+    async with db.acquire() as conn:
         for p in products:
-            await db.execute("""
-                INSERT OR REPLACE INTO products
+            await conn.execute("""
+                INSERT INTO products
                 (asin, name, brand, image_url, category, current_price, original_price,
                  all_time_low, avg_price, deal_score, rating, reviews, prime,
                  last_updated, affiliate_url)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            """, (
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+                ON CONFLICT (asin) DO UPDATE SET
+                    name          = EXCLUDED.name,
+                    brand         = EXCLUDED.brand,
+                    image_url     = EXCLUDED.image_url,
+                    category      = EXCLUDED.category,
+                    current_price = EXCLUDED.current_price,
+                    original_price= EXCLUDED.original_price,
+                    all_time_low  = EXCLUDED.all_time_low,
+                    avg_price     = EXCLUDED.avg_price,
+                    deal_score    = EXCLUDED.deal_score,
+                    rating        = EXCLUDED.rating,
+                    reviews       = EXCLUDED.reviews,
+                    prime         = EXCLUDED.prime,
+                    last_updated  = EXCLUDED.last_updated,
+                    affiliate_url = EXCLUDED.affiliate_url
+            """,
                 p["asin"], p["name"], p["brand"], p["image_url"], p["category"],
                 p["current_price"], p["original_price"], p["all_time_low"], p["avg_price"],
                 p["deal_score"], p["rating"], p["reviews"], p["prime"],
                 p["last_updated"], p["affiliate_url"],
-            ))
-
-            # Preispunkt hinzufügen
-            await db.execute(
-                "INSERT INTO price_history (asin, price, timestamp) VALUES (?,?,?)",
-                (p["asin"], p["current_price"], p["last_updated"]),
             )
 
-            # Simulierte Historie für neue Produkte anlegen (nur wenn noch keine vorhanden)
-            row = await (await db.execute(
-                "SELECT COUNT(*) FROM price_history WHERE asin=?", (p["asin"],)
-            )).fetchone()
-            if row and row[0] <= 1:
+            # Aktuellen Preispunkt hinzufügen
+            await conn.execute(
+                "INSERT INTO price_history (asin, price, timestamp) VALUES ($1, $2, $3)",
+                p["asin"], p["current_price"], p["last_updated"],
+            )
+
+            # Simulierte Historie nur für neue Produkte
+            count = await conn.fetchval(
+                "SELECT COUNT(*) FROM price_history WHERE asin=$1", p["asin"]
+            )
+            if count <= 1:
                 history = generate_history(p["asin"], p["current_price"], p["avg_price"])
-                await db.executemany(
-                    "INSERT INTO price_history (asin, price, timestamp) VALUES (?,?,?)",
+                await conn.executemany(
+                    "INSERT INTO price_history (asin, price, timestamp) VALUES ($1, $2, $3)",
                     [(p["asin"], price, ts) for price, ts in history],
                 )
-
-        await db.commit()
 
     print(f"  Fertig: {len(products)} Produkte gespeichert.")
     return len(products)
