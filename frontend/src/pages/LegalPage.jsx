@@ -41,9 +41,9 @@ export default function LegalPage({ onBack }) {
         <Section title="Impressum">
           <div style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.8 }}>
             <p style={{ margin: 0 }}>
-              <strong>Betreiber:</strong> [Dein Name]<br />
-              <strong>Adresse:</strong> [Strasse, PLZ Ort, Schweiz]<br />
-              <strong>E-Mail:</strong> <a href="mailto:davidpauli@gmx.ch" style={{ color: 'var(--cyan)' }}>davidpauli@gmx.ch</a>
+              <strong>Betreiber:</strong> David P.<br />
+              <strong>Land:</strong> Schweiz<br />
+              <strong>Kontakt:</strong> <a href="mailto:contact@snagga.de" style={{ color: 'var(--cyan)' }}>contact@snagga.de</a>
             </p>
             <p style={{ marginTop: 12, color: 'var(--muted)', fontSize: 13 }}>
               Diese Website ist ein privates Projekt und wird nicht kommerziell betrieben.
