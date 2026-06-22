@@ -3,7 +3,7 @@ import { api } from '../api.js'
 
 const ALL_CATS = ['Elektronik', 'Gaming', 'Haushalt', 'Kueche', 'Sport', 'Beauty']
 
-export default function SettingsPage({ theme, onSetTheme, hiddenCats, onToggleCat }) {
+export default function SettingsPage({ theme, onSetTheme, hiddenCats, onToggleCat, onShowLegal }) {
   const [refreshing, setRefreshing] = useState(false)
   const [refreshMsg, setRefreshMsg] = useState('')
 
@@ -113,6 +113,21 @@ export default function SettingsPage({ theme, onSetTheme, hiddenCats, onToggleCa
               </div>
             ))}
           </div>
+        </Section>
+
+        <Section title="Rechtliches">
+          <button
+            onClick={onShowLegal}
+            style={{
+              width: '100%', padding: '12px 15px', borderRadius: 10,
+              border: '1px solid var(--border)', background: 'var(--bg-elev)',
+              color: 'var(--text)', fontWeight: 600, fontSize: 14,
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            }}
+          >
+            <span>Impressum & Datenschutz</span>
+            <span style={{ color: 'var(--muted)' }}>→</span>
+          </button>
         </Section>
 
       </div>

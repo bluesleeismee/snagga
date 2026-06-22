@@ -4,6 +4,7 @@ import DealsPage from './pages/DealsPage.jsx'
 import WatchlistPage from './pages/WatchlistPage.jsx'
 import AlertsPage from './pages/AlertsPage.jsx'
 import SettingsPage from './pages/SettingsPage.jsx'
+import LegalPage from './pages/LegalPage.jsx'
 
 // ── localStorage helpers ─────────────────────────────────────────────────────
 const LS = {
@@ -52,6 +53,8 @@ export default function App() {
 
   const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark')
 
+  const [showLegal, setShowLegal] = useState(false)
+
   const sharedProps = { theme, onToggleTheme: toggleTheme }
 
   return (
@@ -62,14 +65,17 @@ export default function App() {
     }}>
       {/* Page */}
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        {tab === 'deals' && (
+        {showLegal && (
+          <LegalPage onBack={() => setShowLegal(false)} />
+        )}
+        {!showLegal && tab === 'deals' && (
           <DealsPage
             {...sharedProps}
             watchlist={watchlist}
             onToggleWatch={toggleWatch}
           />
         )}
-        {tab === 'watchlist' && (
+        {!showLegal && tab === 'watchlist' && (
           <WatchlistPage
             {...sharedProps}
             watchlist={watchlist}
@@ -77,7 +83,7 @@ export default function App() {
             onGoDeals={() => setTab('deals')}
           />
         )}
-        {tab === 'alerts' && (
+        {!showLegal && tab === 'alerts' && (
           <AlertsPage
             {...sharedProps}
             alerts={alerts}
@@ -86,12 +92,13 @@ export default function App() {
             onToggleAlert={toggleAlert}
           />
         )}
-        {tab === 'settings' && (
+        {!showLegal && tab === 'settings' && (
           <SettingsPage
             {...sharedProps}
             onSetTheme={setTheme}
             hiddenCats={hiddenCats}
             onToggleCat={toggleCat}
+            onShowLegal={() => setShowLegal(true)}
           />
         )}
       </div>

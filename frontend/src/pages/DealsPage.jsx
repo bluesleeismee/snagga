@@ -169,6 +169,13 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
             onSave={onToggleWatch}
           />
         ))}
+
+        {/* Affiliate-Pflichthinweis */}
+        {!loading && deals.length > 0 && (
+          <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', padding: '8px 0 4px', lineHeight: 1.5 }}>
+            * Als Amazon-Partner verdiene ich an qualifizierten Käufen.
+          </div>
+        )}
       </div>
     </div>
   )
