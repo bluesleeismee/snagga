@@ -46,8 +46,8 @@ export default function LegalPage({ onBack }) {
               <strong>Kontakt:</strong> <a href="mailto:contact@snagga.de" style={{ color: 'var(--cyan)' }}>contact@snagga.de</a>
             </p>
             <p style={{ marginTop: 12, color: 'var(--muted)', fontSize: 13 }}>
-              Diese Website ist ein privates Projekt und wird nicht kommerziell betrieben.
-              Snagga ist kein offizieller Amazon-Partner oder verbundenes Unternehmen.
+              Snagga ist ein unabhängiges Projekt und steht in keiner direkten Verbindung
+              zu Amazon. Wir sind Teilnehmer am Amazon Partnerprogramm (snagga-21).
             </p>
           </div>
         </Section>
