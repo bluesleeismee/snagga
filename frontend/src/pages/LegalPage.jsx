@@ -65,8 +65,11 @@ export default function LegalPage({ onBack }) {
               Dort gelten die Datenschutzbestimmungen von Amazon.
             </p>
             <p style={{ margin: 0 }}>
-              <strong>Hosting:</strong> Diese Website wird über Vercel (Frontend) und
-              Render (Backend) gehostet. Es gelten deren Datenschutzrichtlinien.
+              <strong>Hosting & Server-Logs:</strong> Diese Website wird über Vercel (Frontend) und
+              Render (Backend) gehostet. Beim Aufruf der Website werden technisch bedingt
+              IP-Adressen in Server-Logs gespeichert. Diese Logs werden nicht ausgewertet
+              und nach kurzer Zeit automatisch gelöscht. Es gelten die Datenschutzrichtlinien
+              von Vercel und Render.
             </p>
             <p style={{ margin: 0 }}>
               <strong>Preisdaten:</strong> Preise werden von CamelCamelCamel RSS-Feeds
