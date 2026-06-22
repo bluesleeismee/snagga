@@ -19,6 +19,11 @@ from scheduler import create_scheduler
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
+# Rate-Limiting für /refresh
+import time
+_last_refresh: float = 0
+REFRESH_COOLDOWN = 300  # 5 Minuten
+
 
 # ---------------------------------------------------------------------------
 # Pydantic-Modelle
@@ -78,8 +83,14 @@ app = FastAPI(title="Snagga API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL, "http://localhost:3000", "http://localhost:5173", "*"],
-    allow_methods=["*"],
+    allow_origins=[
+        "https://snagga.de",
+        "https://www.snagga.de",
+        "http://localhost:5173",
+        "http://localhost:3000",
+        FRONTEND_URL,
+    ],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
@@ -181,7 +192,14 @@ async def get_categories():
 
 @app.post("/refresh")
 async def refresh_deals():
-    """Manuelles Refresh der Deal-Daten (für Testing)."""
+    """Manuelles Refresh der Deal-Daten — max. alle 5 Minuten."""
+    global _last_refresh
+    now = time.time()
+    if now - _last_refresh < REFRESH_COOLDOWN:
+        wait = int(REFRESH_COOLDOWN - (now - _last_refresh))
+        from fastapi import HTTPException
+        raise HTTPException(status_code=429, detail=f"Bitte {wait}s warten.")
+    _last_refresh = now
     count = await fetch_and_update_deals()
     return {"message": f"{count} Produkte aktualisiert"}
 
