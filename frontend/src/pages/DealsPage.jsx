@@ -72,18 +72,17 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
         flexShrink: 0,
       }}>
         {/* Logo */}
-        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, marginRight: 4 }}>
-          <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#E8500A', flexShrink: 0 }} />
-          <span style={{ fontSize: 21, fontWeight: 800, letterSpacing: '-0.8px', color: 'var(--text)', whiteSpace: 'nowrap' }}>
-            SNAG<span style={{ color: '#E8500A' }}>GA</span>
+        <div style={{ flexShrink: 0, marginRight: 4 }}>
+          <span style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--text)', whiteSpace: 'nowrap' }}>
+            snagga
           </span>
         </div>
 
         {/* Suchfeld */}
         <div style={{ flex: 1, maxWidth: 520, position: 'relative' }}>
           <span style={{
-            position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)',
-            color: 'var(--muted)', fontSize: 14, pointerEvents: 'none',
+            position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)',
+            fontSize: 15, pointerEvents: 'none',
           }}>🔍</span>
           <input
             value={search}
@@ -91,8 +90,8 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
             placeholder="Produkt, Marke oder Kategorie suchen…"
             style={{
               width: '100%',
-              padding: '8px 14px 8px 34px',
-              borderRadius: 9,
+              padding: '9px 16px 9px 38px',
+              borderRadius: 999,
               border: '1.5px solid var(--border)',
               background: 'var(--bg-elev2)',
               color: 'var(--text)',
