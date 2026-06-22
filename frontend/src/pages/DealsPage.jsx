@@ -1,33 +1,40 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import DealCard from '../components/DealCard.jsx'
+import Sidebar from '../components/Sidebar.jsx'
 import { api } from '../api.js'
 
-const SORTS = [
-  { id: 'score',      label: 'Bester Deal' },
-  { id: 'discount',   label: 'Rabatt' },
-  { id: 'price_asc',  label: 'Günstigste' },
-  { id: 'newest',     label: 'Neu' },
+const QUALITY_FILTERS = [
+  { id: 'all',  label: 'Alle' },
+  { id: 'atl',  label: 'Allzeit-Tief',        dot: '#111111', minScore: 90 },
+  { id: 'rare', label: 'Seltene Gelegenheit',  dot: '#E8500A', minScore: 75 },
+  { id: 'great',label: 'Sehr guter Deal',      dot: '#1E7A3C', minScore: 55 },
+  { id: 'good', label: 'Guter Deal',           dot: '#888888', minScore: 30 },
 ]
 
-export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWatch }) {
+const SORTS = [
+  { id: 'score',    label: 'Bester Deal' },
+  { id: 'discount', label: 'Grösster Rabatt' },
+  { id: 'price_asc',label: 'Günstigste' },
+]
+
+export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWatch, onShowLegal }) {
   const [categories, setCategories] = useState(['Alle'])
   const [selectedCat, setSelectedCat] = useState('Alle')
+  const [qualityFilter, setQualityFilter] = useState('all')
   const [sortBy, setSortBy] = useState('score')
   const [search, setSearch] = useState('')
   const [deals, setDeals] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  // Kategorien laden
   useEffect(() => {
     api.categories().then(setCategories).catch(() => {})
   }, [])
 
-  // Deals laden
   const loadDeals = useCallback(() => {
     setLoading(true)
     setError(null)
-    api.deals({ category: selectedCat, sort_by: sortBy, search: search || undefined })
+    api.deals({ category: selectedCat, sort_by: sortBy, search: search || undefined, limit: 100 })
       .then(data => { setDeals(data); setLoading(false) })
       .catch(e => { setError(e.message); setLoading(false) })
   }, [selectedCat, sortBy, search])
@@ -37,145 +44,208 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
     return () => clearTimeout(t)
   }, [loadDeals])
 
-  // Allzeit-Tief Zähler
-  const allTimeLows = deals.filter(d => d.deal_score >= 85).length
+  // Qualitäts-Filter auf Client-Seite anwenden
+  const filteredDeals = deals.filter(d => {
+    const qf = QUALITY_FILTERS.find(f => f.id === qualityFilter)
+    if (!qf || qf.id === 'all') return true
+    // Find next filter to get upper bound
+    const idx = QUALITY_FILTERS.indexOf(qf)
+    const upper = idx > 0 ? QUALITY_FILTERS[idx - 1]?.minScore : 101
+    return d.deal_score >= qf.minScore && d.deal_score < (upper ?? 101)
+  })
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Header */}
+
+      {/* TOPBAR */}
       <div style={{
-        position: 'sticky', top: 0, zIndex: 6,
-        background: 'var(--bg)', padding: '18px 16px 12px',
+        background: 'var(--bg-elev)',
         borderBottom: '1px solid var(--border)',
+        height: 58,
+        display: 'flex',
+        alignItems: 'center',
+        padding: '0 24px',
+        gap: 16,
+        position: 'sticky',
+        top: 0,
+        zIndex: 100,
+        flexShrink: 0,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <div style={{ width: 11, height: 11, borderRadius: '50%', background: 'var(--red)', boxShadow: '0 0 0 4px var(--red-soft)' }} />
-            <span style={{ fontFamily: 'Space Grotesk', fontWeight: 700, fontSize: 20, letterSpacing: '-.4px' }}>
-              SNAG<span style={{ color: 'var(--red)' }}>GA</span>
-            </span>
-          </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {allTimeLows > 0 && (
-              <div style={{
-                fontSize: 11, fontWeight: 600, color: 'var(--red)',
-                background: 'var(--red-soft)', padding: '6px 9px',
-                borderRadius: 8, display: 'flex', gap: 5, alignItems: 'center', whiteSpace: 'nowrap',
-              }}>
-                🔥 {allTimeLows} Allzeit-Tief{allTimeLows > 1 ? 's' : ''}
-              </div>
-            )}
-            <button
-              onClick={onToggleTheme}
-              style={{
-                width: 36, height: 36, borderRadius: 9,
-                border: '1px solid var(--border)', background: 'var(--bg-elev2)',
-                color: 'var(--text)', fontSize: 15,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
-              }}
-            >
-              {theme === 'dark' ? '☀️' : '🌙'}
-            </button>
-          </div>
+        {/* Logo */}
+        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, marginRight: 4 }}>
+          <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#E8500A', flexShrink: 0 }} />
+          <span style={{ fontSize: 21, fontWeight: 800, letterSpacing: '-0.8px', color: 'var(--text)', whiteSpace: 'nowrap' }}>
+            SNAG<span style={{ color: '#E8500A' }}>GA</span>
+          </span>
         </div>
 
-        {/* Suche */}
-        <div style={{ marginTop: 13, position: 'relative' }}>
-          <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', fontSize: 16, pointerEvents: 'none' }}>⌕</span>
+        {/* Suchfeld */}
+        <div style={{ flex: 1, maxWidth: 520, position: 'relative' }}>
+          <span style={{
+            position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)',
+            color: 'var(--muted)', fontSize: 14, pointerEvents: 'none',
+          }}>🔍</span>
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Produkt oder Marke suchen…"
+            placeholder="Produkt, Marke oder Kategorie suchen…"
             style={{
-              width: '100%', padding: '11px 12px 11px 36px',
-              borderRadius: 11, border: '1px solid var(--border)',
-              background: 'var(--bg-elev2)', color: 'var(--text)',
-              fontSize: 14, outline: 'none',
+              width: '100%',
+              padding: '8px 14px 8px 34px',
+              borderRadius: 9,
+              border: '1.5px solid var(--border)',
+              background: 'var(--bg-elev2)',
+              color: 'var(--text)',
+              fontSize: 14,
+              outline: 'none',
+              transition: 'border-color 0.15s, background 0.15s',
             }}
+            onFocus={e => { e.target.style.borderColor = '#E8500A'; e.target.style.background = 'var(--bg-elev)' }}
+            onBlur={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.background = 'var(--bg-elev2)' }}
           />
         </div>
+
+        {/* Dark Mode Toggle */}
+        <button
+          onClick={onToggleTheme}
+          style={{
+            marginLeft: 'auto',
+            width: 34, height: 34, borderRadius: 8,
+            border: '1.5px solid var(--border)',
+            background: 'var(--bg-elev2)',
+            color: 'var(--text)', fontSize: 15,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          title={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+        >
+          {theme === 'dark' ? '☀️' : '🌙'}
+        </button>
       </div>
 
-      {/* Kategorie-Chips */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '13px 16px 4px', flexShrink: 0 }}>
-        {categories.map(cat => {
-          const active = cat === selectedCat
-          return (
-            <button
-              key={cat}
-              onClick={() => setSelectedCat(cat)}
-              style={{
-                padding: '8px 15px', borderRadius: 10,
-                fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap',
-                border: `1px solid ${active ? 'var(--red)' : 'var(--border)'}`,
-                background: active ? 'var(--red-soft)' : 'var(--bg-elev2)',
-                color: active ? 'var(--red)' : 'var(--muted)',
-                transition: 'all .15s',
-              }}
-            >
-              {cat}
-            </button>
-          )
-        })}
-      </div>
+      {/* LAYOUT: Sidebar + Main */}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
-      {/* Sort-Buttons */}
-      <div style={{ display: 'flex', gap: 8, padding: '10px 16px 4px', alignItems: 'center', flexShrink: 0 }}>
-        <span style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.6px', fontWeight: 600 }}>Sortieren</span>
-        {SORTS.map(s => {
-          const active = s.id === sortBy
-          return (
-            <button
-              key={s.id}
-              onClick={() => setSortBy(s.id)}
-              style={{
-                padding: '6px 11px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-                border: `1px solid ${active ? 'var(--red)' : 'var(--border)'}`,
-                background: active ? 'var(--red-soft)' : 'var(--bg-elev2)',
-                color: active ? 'var(--red)' : 'var(--muted)',
-                transition: 'all .15s',
-              }}
-            >
-              {s.label}
-            </button>
-          )
-        })}
-      </div>
+        {/* Sidebar */}
+        <Sidebar
+          categories={categories}
+          selectedCat={selectedCat}
+          onSelectCat={setSelectedCat}
+          deals={deals}
+        />
 
-      {/* Feed */}
-      <div className="no-scroll" style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
-        {loading && (
-          <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--muted)', fontSize: 14 }}>
-            Deals laden…
-          </div>
-        )}
-        {error && (
-          <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--red)', fontSize: 14 }}>
-            Verbindung zum Backend fehlgeschlagen.<br />
-            <span style={{ color: 'var(--muted)', fontSize: 12 }}>Läuft das Backend? → python -m uvicorn main:app</span>
-          </div>
-        )}
-        {!loading && !error && deals.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--muted)', fontSize: 14 }}>
-            Keine Deals gefunden. Andere Kategorie oder Suche probieren.
-          </div>
-        )}
-        {!loading && deals.map(deal => (
-          <DealCard
-            key={deal.asin}
-            deal={deal}
-            expanded
-            saved={watchlist.has(deal.asin)}
-            onSave={onToggleWatch}
-          />
-        ))}
+        {/* Main Content */}
+        <div className="no-scroll" style={{ flex: 1, overflowY: 'auto', minWidth: 0 }}>
+          <div style={{ padding: '18px 22px 40px' }}>
 
-        {/* Affiliate-Pflichthinweis */}
-        {!loading && deals.length > 0 && (
-          <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', padding: '8px 0 4px', lineHeight: 1.5 }}>
-            * Als Amazon-Partner verdiene ich an qualifizierten Käufen.
+            {/* Filter-Bar */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--muted)', marginRight: 2 }}>Qualität</span>
+              {QUALITY_FILTERS.map(f => {
+                const active = f.id === qualityFilter
+                return (
+                  <button
+                    key={f.id}
+                    onClick={() => setQualityFilter(f.id)}
+                    style={{
+                      padding: '6px 13px',
+                      borderRadius: 8,
+                      border: `1.5px solid ${active ? 'var(--text)' : 'var(--border)'}`,
+                      background: active ? 'var(--text)' : 'var(--bg-elev)',
+                      color: active ? 'var(--bg-elev)' : 'var(--text)',
+                      fontSize: 13, fontWeight: 500,
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      whiteSpace: 'nowrap',
+                      transition: 'all 0.12s',
+                    }}
+                  >
+                    {f.dot && (
+                      <div style={{ width: 7, height: 7, borderRadius: '50%', background: active ? 'var(--bg-elev)' : f.dot, flexShrink: 0 }} />
+                    )}
+                    {f.label}
+                  </button>
+                )
+              })}
+
+              <div style={{ width: 1, height: 22, background: 'var(--border)', margin: '0 4px' }} />
+
+              <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--muted)', marginRight: 2 }}>Sortieren</span>
+              {SORTS.map(s => {
+                const active = s.id === sortBy
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => setSortBy(s.id)}
+                    style={{
+                      padding: '6px 13px',
+                      borderRadius: 8,
+                      border: `1.5px solid ${active ? 'var(--text)' : 'var(--border)'}`,
+                      background: active ? 'var(--text)' : 'var(--bg-elev)',
+                      color: active ? 'var(--bg-elev)' : 'var(--text)',
+                      fontSize: 13, fontWeight: 500,
+                      whiteSpace: 'nowrap',
+                      transition: 'all 0.12s',
+                    }}
+                  >
+                    {s.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Title row */}
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 14 }}>
+              <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>
+                {selectedCat === 'Alle' ? 'Alle Deals' : selectedCat}
+              </span>
+              <span style={{ fontSize: 13, color: 'var(--muted)', marginLeft: 8 }}>
+                {filteredDeals.length} Produkte
+              </span>
+            </div>
+
+            {/* States */}
+            {loading && (
+              <div style={{ textAlign: 'center', padding: '80px 20px', color: 'var(--muted)', fontSize: 14 }}>
+                Deals laden…
+              </div>
+            )}
+            {error && (
+              <div style={{ textAlign: 'center', padding: '80px 20px', color: 'var(--orange)', fontSize: 14 }}>
+                Backend nicht erreichbar.<br />
+                <span style={{ color: 'var(--muted)', fontSize: 12 }}>Läuft das Backend?</span>
+              </div>
+            )}
+            {!loading && !error && filteredDeals.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '80px 20px', color: 'var(--muted)', fontSize: 14 }}>
+                Keine Deals gefunden.
+              </div>
+            )}
+
+            {/* 4-Spalten Grid */}
+            {!loading && !error && filteredDeals.length > 0 && (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, 1fr)',
+                gap: 12,
+              }}>
+                {filteredDeals.map(deal => (
+                  <DealCard
+                    key={deal.asin}
+                    deal={deal}
+                    saved={watchlist?.has(deal.asin)}
+                    onSave={onToggleWatch}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Affiliate-Hinweis */}
+            {!loading && filteredDeals.length > 0 && (
+              <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', paddingTop: 24, lineHeight: 1.5 }}>
+                * Als Amazon-Partner verdiene ich an qualifizierten Käufen.
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   )

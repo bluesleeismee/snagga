@@ -1,7 +1,14 @@
-/** Preis → "€ 249,90" */
+/** Preis → "248 €" */
 export function fmtPrice(p) {
   if (p == null) return '—'
-  return '€ ' + p.toFixed(2).replace('.', ',')
+  return p.toFixed(2).replace('.', ',') + ' €'
+}
+
+/** Preis kurz → "248€" (für Chart-Labels) */
+export function fmtPriceShort(p) {
+  if (p == null) return '—'
+  if (p >= 1000) return (p / 1000).toFixed(1).replace('.', ',') + 'k€'
+  return Math.round(p) + '€'
 }
 
 /** Rabatt in % */
@@ -10,43 +17,46 @@ export function discount(current, original) {
   return Math.round((1 - current / original) * 100)
 }
 
-/** Score → Farbe */
-export function scoreColor(score) {
-  if (score >= 85) return 'var(--red)'
-  if (score >= 60) return 'var(--yellow)'
-  return 'var(--green)'
+/** Score → Deal-Label { text, bg, color, border? } */
+export function dealLabel(score) {
+  if (score >= 90) return { text: 'Allzeit-Tief',        bg: '#111111', color: '#fff' }
+  if (score >= 75) return { text: 'Seltene Gelegenheit', bg: '#E8500A', color: '#fff' }
+  if (score >= 55) return { text: 'Sehr guter Deal',     bg: '#1E7A3C', color: '#fff' }
+  if (score >= 30) return { text: 'Guter Deal',          bg: '#F0F0EB', color: '#555555', border: '1px solid #DDDDD8' }
+  return null
 }
 
-/** Score → Badge-Text */
-export function scoreBadge(score) {
-  if (score >= 85) return '🔥 Allzeit-Tief'
-  if (score >= 60) return '⚡ Sehr gut'
-  return '✓ Gut'
-}
-
-/** SVG-Pfad aus Preisarray generieren (viewBox 0 0 300 54) */
-export function miniChart(prices, W = 300, H = 54) {
-  if (!prices || prices.length < 2) return { line: '', area: '' }
-  const min = Math.min(...prices)
-  const max = Math.max(...prices)
-  const range = max - min || 1
-  const pad = 4
-  const pts = prices.map((p, i) => ({
-    x: (i / (prices.length - 1)) * W,
-    y: H - pad - ((p - min) / range) * (H - pad * 2),
-  }))
-  const line = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
-  const area = `${line} L${W},${H} L0,${H} Z`
-  return { line, area }
-}
-
-/** Sterne rendern */
-export function stars(rating) {
-  return '★'.repeat(Math.round(rating)) + '☆'.repeat(5 - Math.round(rating))
+/** Score → Chart-Status { text, color } */
+export function chartStatus(prices, avgPrice, allTimeLow) {
+  if (!prices || prices.length === 0) return null
+  const current = prices[prices.length - 1]
+  if (allTimeLow && current <= allTimeLow * 1.02) return { text: '▼ Günstigster je',  color: '#1E7A3C' }
+  if (avgPrice && current < avgPrice * 0.85)        return { text: '▼ Selten so tief',  color: '#E8500A' }
+  if (avgPrice && current < avgPrice * 0.95)        return { text: '▼ Deutlich unter Ø', color: '#1E7A3C' }
+  return                                                   { text: '▼ Leicht unter Ø',  color: '#888888' }
 }
 
 /** Anzahl Reviews formatieren */
 export function fmtReviews(n) {
   if (n >= 1000) return (n / 1000).toFixed(1).replace('.', ',') + 'k'
   return String(n)
+}
+
+/** Score → Farbe (legacy, für nicht-redesignte Pages) */
+export function scoreColor(score) {
+  if (score >= 85) return 'var(--orange)'
+  if (score >= 60) return 'var(--yellow)'
+  return 'var(--green)'
+}
+
+/** Anzahl Reviews formatieren (legacy alias) */
+export function scoreBadge(score) {
+  if (score >= 85) return '🔥 Allzeit-Tief'
+  if (score >= 60) return '⚡ Sehr gut'
+  return '✓ Gut'
+}
+
+/** stars (legacy) */
+export function stars(rating) {
+  return '★'.repeat(Math.round(rating)) + '☆'.repeat(5 - Math.round(rating))
 }

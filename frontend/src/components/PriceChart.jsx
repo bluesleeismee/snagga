@@ -1,40 +1,91 @@
 import React from 'react'
-import { miniChart, fmtPrice } from '../utils.js'
+import { fmtPriceShort, chartStatus } from '../utils.js'
 
-export default function PriceChart({ prices, avgPrice, allTimeLow }) {
-  const { line, area } = miniChart(prices)
+export default function PriceChart({ prices, avgPrice, allTimeLow, asin = 'c' }) {
+  if (!prices || prices.length < 2) return null
+
+  const W = 300, H = 78
+  const PAD_L = 38, PAD_R = 4, PAD_T = 6, PAD_B = 18
+  const chartW = W - PAD_L - PAD_R
+  const chartH = H - PAD_T - PAD_B
+
+  const minVal = Math.min(...prices)
+  const maxVal = Math.max(...prices)
+  const padding = (maxVal - minVal) * 0.08 || maxVal * 0.05
+  const yMin = Math.max(0, minVal - padding)
+  const yMax = maxVal + padding
+  const range = yMax - yMin || 1
+
+  const toX = i => PAD_L + (i / (prices.length - 1)) * chartW
+  const toY = p => PAD_T + chartH - ((p - yMin) / range) * chartH
+
+  const pts = prices.map((p, i) => ({ x: toX(i), y: toY(p) }))
+  const pathD = pts.map((pt, i) => `${i === 0 ? 'M' : 'L'}${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' ')
+  const fillD = pathD
+    + ` L${pts[pts.length - 1].x.toFixed(1)},${(PAD_T + chartH).toFixed(1)}`
+    + ` L${PAD_L},${(PAD_T + chartH).toFixed(1)} Z`
+
+  const currentX = pts[pts.length - 1].x
+  const currentY = pts[pts.length - 1].y
+  const avgY = avgPrice ? toY(Math.min(Math.max(avgPrice, yMin), yMax)) : null
+
+  const yLabelTop = yMax
+  const yLabelMid = (yMax + yMin) / 2
+  const yLabelBot = yMin
+
+  const gradId = `cf_${asin}`
+  const status = chartStatus(prices, avgPrice, allTimeLow)
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-      <svg
-        viewBox="0 0 300 54"
-        preserveAspectRatio="none"
-        style={{ width: '100%', height: 50, display: 'block' }}
-      >
-        <path d={area} fill="var(--cyan-soft)" stroke="none" />
-        <path
-          d={line}
-          fill="none"
-          stroke="var(--cyan)"
-          strokeWidth="2"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-          vectorEffect="non-scaling-stroke"
-        />
-      </svg>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-        <span style={{ color: 'var(--muted)' }}>
-          Ø 60 T&nbsp;&nbsp;
-          <span style={{ color: 'var(--text)', fontWeight: 600, fontFamily: 'Space Grotesk' }}>
-            {fmtPrice(avgPrice)}
-          </span>
-        </span>
-        <span style={{ color: 'var(--muted)' }}>
-          Allzeit-Tief&nbsp;&nbsp;
-          <span style={{ color: 'var(--cyan)', fontWeight: 700, fontFamily: 'Space Grotesk' }}>
-            {fmtPrice(allTimeLow)}
-          </span>
-        </span>
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <span style={{ fontSize: 11.5, color: 'var(--text)' }}>Preis · 90 Tage</span>
+        {status && (
+          <span style={{ fontSize: 11.5, fontWeight: 600, color: status.color }}>{status.text}</span>
+        )}
       </div>
+
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', overflow: 'visible' }}>
+        <defs>
+          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#E8500A" stopOpacity="0.13" />
+            <stop offset="100%" stopColor="#E8500A" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
+        {/* Grid lines */}
+        <line x1={PAD_L} y1={PAD_T}              x2={W - PAD_R} y2={PAD_T}              stroke="var(--border)" strokeWidth="0.8" />
+        <line x1={PAD_L} y1={PAD_T + chartH / 2} x2={W - PAD_R} y2={PAD_T + chartH / 2} stroke="var(--border)" strokeWidth="0.8" />
+        <line x1={PAD_L} y1={PAD_T + chartH}     x2={W - PAD_R} y2={PAD_T + chartH}     stroke="var(--border)" strokeWidth="0.8" />
+
+        {/* Y-axis labels */}
+        <text x={PAD_L - 4} y={PAD_T + 4}              textAnchor="end" fontSize="10" fill="var(--text)" fontFamily="inherit">{fmtPriceShort(yLabelTop)}</text>
+        <text x={PAD_L - 4} y={PAD_T + chartH / 2 + 4} textAnchor="end" fontSize="10" fill="var(--text)" fontFamily="inherit">{fmtPriceShort(yLabelMid)}</text>
+        <text x={PAD_L - 4} y={PAD_T + chartH + 4}     textAnchor="end" fontSize="10" fill="var(--text)" fontFamily="inherit">{fmtPriceShort(yLabelBot)}</text>
+
+        {/* Average dashed line */}
+        {avgY !== null && (
+          <line x1={PAD_L} y1={avgY} x2={W - PAD_R} y2={avgY}
+            stroke="var(--border)" strokeWidth="1.2" strokeDasharray="4,3" />
+        )}
+
+        {/* Fill */}
+        <path d={fillD} fill={`url(#${gradId})`} />
+
+        {/* Price line */}
+        <path d={pathD} fill="none" stroke="#E8500A" strokeWidth="1.8"
+          strokeLinejoin="round" strokeLinecap="round" />
+
+        {/* Current price dot */}
+        <circle cx={currentX} cy={currentY} r="3" fill="#E8500A" />
+
+        {/* X-axis labels */}
+        <text x={PAD_L}       y={H - 2} textAnchor="start"  fontSize="10" fill="var(--text)" fontFamily="inherit">–90 Tage</text>
+        {avgPrice && (
+          <text x={W / 2}     y={H - 2} textAnchor="middle" fontSize="10" fill="var(--text)" fontFamily="inherit">Ø {fmtPriceShort(avgPrice)}</text>
+        )}
+        <text x={W - PAD_R}   y={H - 2} textAnchor="end"    fontSize="10" fill="var(--text)" fontFamily="inherit">heute</text>
+      </svg>
     </div>
   )
 }
