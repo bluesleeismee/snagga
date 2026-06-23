@@ -89,7 +89,7 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
   if (!deal) return null
 
   const currentImg = images[slide] || null
-  const imgHeight  = isMobile ? 320 : isTablet ? 420 : 'auto'
+  const imgHeight  = isMobile ? 320 : isTablet ? 500 : 'auto'
 
   /* ── Lightbox ── */
   const LightboxEl = lightboxOpen && (
@@ -373,7 +373,7 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
                     <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
                     <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
                   </svg>
-                  {!isVertical && 'In den Warenkorb'}
+                  {!isMobile && 'In den Warenkorb'}
                 </a>
 
                 {/* Zum Produkt */}

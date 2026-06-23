@@ -1,6 +1,6 @@
 import React from 'react'
 
-export default function Sidebar({ categories, selectedCat, onSelectCat, deals }) {
+export default function Sidebar({ categories, selectedCat, onSelectCat, deals, onCollapse }) {
   // Anzahl Deals pro Kategorie
   const counts = {}
   deals.forEach(d => {
@@ -22,16 +22,22 @@ export default function Sidebar({ categories, selectedCat, onSelectCat, deals })
       display: 'flex',
       flexDirection: 'column',
     }}>
-      <span style={{
-        fontSize: 13,
-        fontWeight: 500,
-        color: 'var(--muted)',
-        padding: '0 18px 8px',
-        marginTop: 4,
-        display: 'block',
-      }}>
-        Kategorien
-      </span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 14px 8px 18px' }}>
+        <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--muted)' }}>Kategorien</span>
+        {onCollapse && (
+          <button
+            onClick={onCollapse}
+            title="Einklappen"
+            style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: '3px 5px', borderRadius: 5, display: 'flex', alignItems: 'center' }}
+            onMouseEnter={e => e.currentTarget.style.color = 'var(--text)'}
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--muted)'}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15,18 9,12 15,6"/>
+            </svg>
+          </button>
+        )}
+      </div>
 
       {categories.map(cat => {
         const active = cat === selectedCat

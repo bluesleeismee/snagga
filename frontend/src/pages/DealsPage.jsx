@@ -20,17 +20,18 @@ const SORTS = [
 
 export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWatch, onShowLegal }) {
   const { isMobile, isTablet } = useBreakpoint()
-  const [categories, setCategories]       = useState(['Alle'])
-  const [selectedCat, setSelectedCat]     = useState('Alle')
-  const [activeFilters, setActiveFilters] = useState(new Set())
-  const [sortBy, setSortBy]               = useState('score')
-  const [search, setSearch]               = useState('')
-  const [deals, setDeals]                 = useState([])
-  const [loading, setLoading]             = useState(true)
-  const [error, setError]                 = useState(null)
-  const [view, setView]                   = useState('grid')
-  const [selectedDeal, setSelectedDeal]   = useState(null)
-  const [sidebarOpen, setSidebarOpen]     = useState(false)
+  const [categories, setCategories]         = useState(['Alle'])
+  const [selectedCat, setSelectedCat]       = useState('Alle')
+  const [activeFilters, setActiveFilters]   = useState(new Set())
+  const [sortBy, setSortBy]                 = useState('score')
+  const [search, setSearch]                 = useState('')
+  const [deals, setDeals]                   = useState([])
+  const [loading, setLoading]               = useState(true)
+  const [error, setError]                   = useState(null)
+  const [view, setView]                     = useState('grid')
+  const [selectedDeal, setSelectedDeal]     = useState(null)
+  const [sidebarOpen, setSidebarOpen]       = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   useEffect(() => { api.categories().then(setCategories).catch(() => {}) }, [])
 
@@ -70,7 +71,7 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
   const gridCols = isMobile ? 'repeat(2, 1fr)' : isTablet ? 'repeat(3, 1fr)' : 'repeat(4, 1fr)'
   const pad      = showBottomNav ? (isMobile ? '12px 12px 96px' : '16px 22px 96px') : '16px 22px 40px'
 
-  /* ── Filter chip helper ── */
+  /* ── Filter chip ── */
   function FilterChip({ label, active, dot, onClick }) {
     return (
       <button onClick={onClick}
@@ -81,6 +82,14 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
       </button>
     )
   }
+
+  /* ── Row label (fixed width so chips align) ── */
+  const RowLabel = ({ children }) => (
+    <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--muted)', flexShrink: 0,
+      letterSpacing: 0.5, width: 48, minWidth: 48 }}>
+      {children}
+    </span>
+  )
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -103,7 +112,7 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
               <button onClick={() => setSidebarOpen(false)} style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--muted)', lineHeight: 1 }}>×</button>
             </div>
             <Sidebar categories={categories} selectedCat={selectedCat}
-              onSelectCat={cat => { setSelectedCat(cat); setSidebarOpen(false) }} deals={deals} embedded />
+              onSelectCat={cat => { setSelectedCat(cat); setSidebarOpen(false) }} deals={deals} />
           </div>
         </div>
       )}
@@ -113,11 +122,11 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
         background: 'var(--bg-elev)', borderBottom: '1px solid var(--border)',
         height: 54, display: 'flex', alignItems: 'center',
         padding: isMobile ? '0 14px' : '0 24px',
-        gap: isMobile ? 10 : 16,
+        gap: isMobile ? 10 : 0,
         position: 'sticky', top: 0, zIndex: 100, flexShrink: 0,
       }}>
         {isMobile && (
-          <button onClick={() => setSidebarOpen(true)} style={{ background: 'none', border: 'none', padding: 4, color: 'var(--text)', display: 'flex', alignItems: 'center' }}>
+          <button onClick={() => setSidebarOpen(true)} style={{ background: 'none', border: 'none', padding: 4, color: 'var(--text)', display: 'flex', alignItems: 'center', marginRight: 6 }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <line x1="3" y1="6"  x2="21" y2="6"/>
               <line x1="3" y1="12" x2="21" y2="12"/>
@@ -125,10 +134,14 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
             </svg>
           </button>
         )}
-        <div style={{ flexShrink: 0, width: isMobile ? 'auto' : 192 }}>
+
+        {/* Logo — Breite = Sidebar-Breite damit Suchfeld bündig ist */}
+        <div style={{ flexShrink: 0, width: isMobile ? 'auto' : 208, paddingLeft: isMobile ? 0 : 0 }}>
           <span style={{ fontSize: isMobile ? 19 : 22, fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--text)', whiteSpace: 'nowrap' }}>snagga</span>
         </div>
-        <div style={{ flex: 1, position: 'relative', maxWidth: isMobile ? '100%' : 520 }}>
+
+        {/* Suchfeld */}
+        <div style={{ flex: 1, position: 'relative', maxWidth: isMobile ? '100%' : 520, marginLeft: isMobile ? 0 : 16 }}>
           <span style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', fontSize: 14, pointerEvents: 'none' }}>🔍</span>
           <input
             value={search} onChange={e => setSearch(e.target.value)}
@@ -138,8 +151,10 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
             onBlur={e  => { e.target.style.borderColor = 'var(--border)'; e.target.style.background = 'var(--bg-elev2)' }}
           />
         </div>
+
+        {/* Dark Mode */}
         <button onClick={onToggleTheme}
-          style={{ marginLeft: isMobile ? 0 : 'auto', width: 34, height: 34, borderRadius: 8, border: '1.5px solid var(--border)', background: 'var(--bg-elev2)', color: 'var(--text)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+          style={{ marginLeft: 'auto', width: 34, height: 34, borderRadius: 8, border: '1.5px solid var(--border)', background: 'var(--bg-elev2)', color: 'var(--text)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
           title={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
         >
           {theme === 'dark' ? (
@@ -160,36 +175,66 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
 
       {/* LAYOUT */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+
+        {/* Sidebar — Desktop/Tablet */}
         {!isMobile && (
-          <Sidebar categories={categories} selectedCat={selectedCat}
-            onSelectCat={setSelectedCat} deals={deals} />
+          <>
+            {!sidebarCollapsed ? (
+              <Sidebar
+                categories={categories}
+                selectedCat={selectedCat}
+                onSelectCat={setSelectedCat}
+                deals={deals}
+                onCollapse={() => setSidebarCollapsed(true)}
+              />
+            ) : (
+              /* Schmaler Expand-Streifen */
+              <div style={{
+                width: 36, flexShrink: 0,
+                background: 'var(--bg-elev)', borderRight: '1px solid var(--border)',
+                position: 'sticky', top: 54, height: 'calc(100vh - 54px)',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 14,
+              }}>
+                <button
+                  onClick={() => setSidebarCollapsed(false)}
+                  title="Kategorien einblenden"
+                  style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 6, borderRadius: 6 }}
+                  onMouseEnter={e => e.currentTarget.style.color = 'var(--text)'}
+                  onMouseLeave={e => e.currentTarget.style.color = 'var(--muted)'}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="9,18 15,12 9,6"/>
+                  </svg>
+                </button>
+              </div>
+            )}
+          </>
         )}
 
+        {/* Main */}
         <div className="no-scroll" style={{ flex: 1, overflowY: 'auto', minWidth: 0 }}>
 
           {/* Sticky Filter-Bar */}
           <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'var(--bg)', borderBottom: '1px solid var(--border)', padding: (isMobile || isTablet) ? '9px 12px 7px' : '14px 22px 12px' }}>
 
             {(isMobile || isTablet) ? (
-              /* ── Mobile/Tablet: zwei Zeilen ── */
               <>
                 {/* Zeile 1: Filter */}
-                <div className="no-scroll" style={{ display: 'flex', alignItems: 'center', gap: 5, overflowX: 'auto', flexWrap: 'nowrap', paddingBottom: 1, marginBottom: 6 }}>
-                  <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--muted)', flexShrink: 0, letterSpacing: 0.3 }}>FILTER</span>
+                <div className="no-scroll" style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', flexWrap: 'nowrap', paddingBottom: 1, marginBottom: 6 }}>
+                  <RowLabel>FILTER</RowLabel>
                   {QUALITY_FILTERS.map(f => (
                     <FilterChip key={f.id} label={f.label} dot={f.dot} active={activeFilters.has(f.id)} onClick={() => toggleFilter(f.id)} />
                   ))}
                 </div>
-                {/* Zeile 2: Sortieren */}
-                <div className="no-scroll" style={{ display: 'flex', alignItems: 'center', gap: 5, overflowX: 'auto', flexWrap: 'nowrap', paddingBottom: 1, marginBottom: 6 }}>
-                  <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--muted)', flexShrink: 0, letterSpacing: 0.3 }}>SORT</span>
+                {/* Zeile 2: Sort */}
+                <div className="no-scroll" style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', flexWrap: 'nowrap', paddingBottom: 1, marginBottom: 6 }}>
+                  <RowLabel>SORT</RowLabel>
                   {SORTS.map(s => (
                     <FilterChip key={s.id} label={s.label} active={s.id === sortBy} onClick={() => setSortBy(s.id)} />
                   ))}
                 </div>
               </>
             ) : (
-              /* ── Desktop: eine Zeile ── */
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--muted)', marginRight: 2, flexShrink: 0 }}>Filter</span>
                 {QUALITY_FILTERS.map(f => (

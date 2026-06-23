@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import PriceChart from './PriceChart.jsx'
 import { fmtPrice, discount, dealLabel } from '../utils.js'
+import { useBreakpoint } from '../hooks/useBreakpoint.js'
 
 const AFFILIATE_TAG = 'snagga-21'
 
@@ -70,12 +71,66 @@ function GridCard({ deal, saved, onSave, onClick, disc, label, imgError, setImgE
 
 /* ── List Card ─────────────────────────────────────────────────── */
 function ListCard({ deal, saved, onSave, onClick, disc, label, imgError, setImgError }) {
+  const { isTablet } = useBreakpoint()
+
+  const hoverOn  = e => { e.currentTarget.style.boxShadow = '0 6px 24px var(--shadow-hover)'; e.currentTarget.style.borderColor = 'var(--border-hover)'; e.currentTarget.style.transform = 'translateY(-2px)' }
+  const hoverOff = e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.transform = 'translateY(0)' }
+
+  /* ── Tablet: Foto links, Infos gestapelt rechts ── */
+  if (isTablet) {
+    return (
+      <div onClick={onClick}
+        style={{ background: 'var(--bg-card)', border: '1.5px solid var(--border)', borderRadius: 11, overflow: 'hidden', display: 'flex', flexDirection: 'row', transition: 'box-shadow 0.2s, border-color 0.2s, transform 0.2s', cursor: 'pointer', minHeight: 150 }}
+        onMouseEnter={hoverOn} onMouseLeave={hoverOff}
+      >
+        {/* Foto */}
+        <div style={{ width: 130, flexShrink: 0, background: 'var(--bg-elev2)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+          {deal.image_url && !imgError
+            ? <img src={deal.image_url} alt={deal.name} onError={() => setImgError(true)} style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 10 }} />
+            : <div style={{ fontSize: 32, color: 'var(--border)' }}>📦</div>}
+          <SaveBtn saved={saved} onSave={e => { e.stopPropagation(); onSave?.(deal.asin) }} />
+        </div>
+
+        {/* Info-Spalte */}
+        <div style={{ flex: 1, padding: '11px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minWidth: 0 }}>
+          {/* Oben: Marke + Name */}
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 500, marginBottom: 2 }}>{deal.brand}</div>
+            <div style={{ fontSize: 13.5, color: 'var(--text)', fontWeight: 500, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+              {deal.name}
+            </div>
+          </div>
+
+          {/* Mitte: Preis */}
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, margin: '6px 0 4px' }}>
+            <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.5px' }}>{fmtPrice(deal.current_price)}</span>
+            {deal.original_price > deal.current_price && (
+              <span style={{ fontSize: 12, color: 'var(--muted)', textDecoration: 'line-through' }}>{fmtPrice(deal.original_price)}</span>
+            )}
+            {disc > 0 && (
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--orange)', background: 'var(--orange-soft)', padding: '2px 5px', borderRadius: 4 }}>–{disc}%</span>
+            )}
+          </div>
+
+          {/* Prime + Label */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 7 }}>
+            {deal.prime && <span style={{ fontSize: 10, color: 'var(--blue)', fontWeight: 700 }}>✦ Prime</span>}
+            {label && <div style={{ fontSize: 9.5, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: label.bg, color: label.color, border: label.border || 'none' }}>{label.text}</div>}
+          </div>
+
+          {/* Unten: Buttons */}
+          <ActionButtons deal={deal} compact />
+        </div>
+      </div>
+    )
+  }
+
+  /* ── Desktop: vollständiges 4-Spalten-Layout ── */
   return (
     <div
       onClick={onClick}
       style={{ background: 'var(--bg-card)', border: '1.5px solid var(--border)', borderRadius: 11, overflow: 'hidden', display: 'flex', flexDirection: 'row', transition: 'box-shadow 0.2s, border-color 0.2s, transform 0.2s', cursor: 'pointer', minHeight: 160 }}
-      onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 6px 24px var(--shadow-hover)'; e.currentTarget.style.borderColor = 'var(--border-hover)'; e.currentTarget.style.transform = 'translateY(-2px)' }}
-      onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.transform = 'translateY(0)' }}
+      onMouseEnter={hoverOn} onMouseLeave={hoverOff}
     >
       {/* Bild */}
       <div style={{ width: 180, flexShrink: 0, background: 'var(--bg-elev2)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
