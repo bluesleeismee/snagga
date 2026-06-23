@@ -73,30 +73,36 @@ function ListCard({ deal, saved, onSave, onClick, disc, label, imgError, setImgE
   return (
     <div
       onClick={onClick}
-      style={{ background: 'var(--bg-card)', border: '1.5px solid var(--border)', borderRadius: 11, overflow: 'hidden', display: 'flex', flexDirection: 'row', transition: 'box-shadow 0.18s, border-color 0.18s', cursor: 'pointer', minHeight: 140 }}
+      style={{ background: 'var(--bg-card)', border: '1.5px solid var(--border)', borderRadius: 11, overflow: 'hidden', display: 'flex', flexDirection: 'row', transition: 'box-shadow 0.18s, border-color 0.18s', cursor: 'pointer', minHeight: 160 }}
       onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 3px 16px var(--shadow-hover)'; e.currentTarget.style.borderColor = 'var(--border-hover)' }}
       onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = 'var(--border)' }}
     >
       {/* Bild */}
-      <div style={{ width: 160, flexShrink: 0, background: 'var(--bg-elev2)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+      <div style={{ width: 180, flexShrink: 0, background: 'var(--bg-elev2)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
         {deal.image_url && !imgError
           ? <img src={deal.image_url} alt={deal.name} onError={() => setImgError(true)} style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 10 }} />
           : <div style={{ fontSize: 36, color: 'var(--border)' }}>📦</div>}
-        {label && <BadgeOverlay label={label} />}
       </div>
 
       {/* Info */}
-      <div style={{ flex: 1, padding: '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 0, borderRight: '1px solid var(--border)' }}>
-        <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 500, marginBottom: 2 }}>{deal.brand}</div>
-        <div style={{ fontSize: 14, color: 'var(--text)', fontWeight: 500, lineHeight: 1.4, marginBottom: 4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-          {deal.name}
+      <div style={{ flex: 1, padding: '14px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minWidth: 0, borderRight: '1px solid var(--border)' }}>
+        <div>
+          <div style={{ fontSize: 11.5, color: 'var(--muted)', fontWeight: 500, marginBottom: 3 }}>{deal.brand}</div>
+          <div style={{ fontSize: 15, color: 'var(--text)', fontWeight: 500, lineHeight: 1.45, marginBottom: 5, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+            {deal.name}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 0 }}>{deal.category}</div>
         </div>
-        <div style={{ fontSize: 11, color: 'var(--text)', marginBottom: 4 }}>{deal.category}</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {deal.prime && <span style={{ fontSize: 10, color: 'var(--blue)', fontWeight: 700 }}>✦ Prime</span>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+          {deal.prime && <span style={{ fontSize: 10.5, color: 'var(--blue)', fontWeight: 700 }}>✦ Prime</span>}
+          {label && (
+            <div style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4, background: label.bg, color: label.color, border: label.border || 'none', lineHeight: 1.5 }}>
+              {label.text}
+            </div>
+          )}
           {deal.rating && (
             <a href={reviewUrl(deal.asin)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
-              style={{ fontSize: 10, color: 'var(--muted)', textDecoration: 'none' }}>
+              style={{ fontSize: 10.5, color: 'var(--muted)', textDecoration: 'none', marginLeft: 'auto' }}>
               ★ {Number(deal.rating).toFixed(1)} ({deal.reviews?.toLocaleString('de')})
             </a>
           )}
@@ -104,14 +110,14 @@ function ListCard({ deal, saved, onSave, onClick, disc, label, imgError, setImgE
       </div>
 
       {/* Chart */}
-      <div style={{ width: 220, flexShrink: 0, padding: '12px 14px', display: 'flex', alignItems: 'center', borderRight: '1px solid var(--border)' }}>
+      <div style={{ width: 280, flexShrink: 0, padding: '14px 16px', display: 'flex', alignItems: 'center', borderRight: '1px solid var(--border)' }}>
         {deal.price_history?.length > 1
           ? <div style={{ width: '100%' }}><PriceChart prices={deal.price_history} avgPrice={deal.avg_price} allTimeLow={deal.all_time_low} asin={deal.asin} /></div>
           : <div style={{ color: 'var(--muted)', fontSize: 12 }}>—</div>}
       </div>
 
       {/* Preis + Buttons */}
-      <div style={{ width: 176, flexShrink: 0, padding: '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 8 }}>
+      <div style={{ width: 210, flexShrink: 0, padding: '14px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <PriceRow current={deal.current_price} original={deal.original_price} disc={disc} vertical />
           <SaveBtn saved={saved} onSave={e => { e.stopPropagation(); onSave?.(deal.asin) }} style={{ position: 'relative', top: 'auto', right: 'auto', flexShrink: 0 }} />
