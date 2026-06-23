@@ -138,7 +138,7 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
 
             {/* Filter-Bar */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--muted)', marginRight: 2 }}>Qualität</span>
+              <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--muted)', marginRight: 2 }}>Filter</span>
               {QUALITY_FILTERS.map(f => {
                 const active = f.id === qualityFilter
                 return (

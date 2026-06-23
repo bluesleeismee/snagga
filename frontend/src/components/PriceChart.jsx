@@ -39,9 +39,9 @@ export default function PriceChart({ prices, avgPrice, allTimeLow, asin = 'c' })
   return (
     <div style={{ marginBottom: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-        <span style={{ fontSize: 10, color: 'var(--muted)' }}>Preis · 90 Tage</span>
+        <span style={{ fontSize: 9, color: 'var(--muted)' }}>Preis · 90 Tage</span>
         {status && (
-          <span style={{ fontSize: 10, fontWeight: 600, color: status.color }}>{status.text}</span>
+          <span style={{ fontSize: 9, fontWeight: 600, color: status.color }}>{status.text}</span>
         )}
       </div>
 
@@ -59,9 +59,9 @@ export default function PriceChart({ prices, avgPrice, allTimeLow, asin = 'c' })
         <line x1={PAD_L} y1={PAD_T + chartH}     x2={W - PAD_R} y2={PAD_T + chartH}     stroke="var(--border)" strokeWidth="0.8" />
 
         {/* Y-axis labels */}
-        <text x={PAD_L - 4} y={PAD_T + 4}              textAnchor="end" fontSize="10" fill="var(--text)" fontFamily="inherit">{fmtPriceShort(yLabelTop)}</text>
-        <text x={PAD_L - 4} y={PAD_T + chartH / 2 + 4} textAnchor="end" fontSize="10" fill="var(--text)" fontFamily="inherit">{fmtPriceShort(yLabelMid)}</text>
-        <text x={PAD_L - 4} y={PAD_T + chartH + 4}     textAnchor="end" fontSize="10" fill="var(--text)" fontFamily="inherit">{fmtPriceShort(yLabelBot)}</text>
+        <text x={PAD_L - 4} y={PAD_T + 4}              textAnchor="end" fontSize="9" fill="var(--text)" fontFamily="inherit">{fmtPriceShort(yLabelTop)}</text>
+        <text x={PAD_L - 4} y={PAD_T + chartH / 2 + 4} textAnchor="end" fontSize="9" fill="var(--text)" fontFamily="inherit">{fmtPriceShort(yLabelMid)}</text>
+        <text x={PAD_L - 4} y={PAD_T + chartH + 4}     textAnchor="end" fontSize="9" fill="var(--text)" fontFamily="inherit">{fmtPriceShort(yLabelBot)}</text>
 
         {/* Average dashed line */}
         {avgY !== null && (
@@ -80,8 +80,8 @@ export default function PriceChart({ prices, avgPrice, allTimeLow, asin = 'c' })
         <circle cx={currentX} cy={currentY} r="3" fill="#E8500A" />
 
         {/* X-axis labels */}
-        <text x={PAD_L}     y={H - 2} textAnchor="start" fontSize="10" fill="var(--text)" fontFamily="inherit">–90 Tage</text>
-        <text x={W - PAD_R} y={H - 2} textAnchor="end"   fontSize="10" fill="var(--text)" fontFamily="inherit">heute</text>
+        <text x={PAD_L}     y={H - 2} textAnchor="start" fontSize="9" fill="var(--text)" fontFamily="inherit">–90 Tage</text>
+        <text x={W - PAD_R} y={H - 2} textAnchor="end"   fontSize="9" fill="var(--text)" fontFamily="inherit">heute</text>
       </svg>
     </div>
   )
