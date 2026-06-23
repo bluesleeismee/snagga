@@ -76,7 +76,7 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
           background: 'var(--bg-card)',
           border: '1.5px solid var(--border)',
           borderRadius: 14,
-          width: '100%', maxWidth: 1060,
+          width: '100%', maxWidth: 1220,
           maxHeight: '90vh',
           display: 'flex', flexDirection: 'row',
           overflow: 'hidden',
@@ -99,7 +99,7 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
 
         {/* Linke Seite: Bild + Slideshow */}
         <div style={{
-          width: 500, flexShrink: 0,
+          width: 600, flexShrink: 0,
           background: 'var(--bg-elev2)',
           display: 'flex', flexDirection: 'column',
           position: 'relative',
@@ -107,7 +107,7 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
           {/* Hauptbild */}
           <div style={{
             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            minHeight: 360, padding: 28, position: 'relative',
+            minHeight: 420, padding: 32, position: 'relative',
           }}>
             {label && (
               <div style={{
@@ -122,7 +122,7 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
               <img
                 src={currentImg}
                 alt={deal.name}
-                style={{ maxWidth: '100%', maxHeight: 360, objectFit: 'contain' }}
+                style={{ maxWidth: '100%', maxHeight: 420, objectFit: 'contain' }}
               />
             ) : (
               <div style={{ fontSize: 56, color: 'var(--border)' }}>📦</div>
