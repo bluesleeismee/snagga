@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import PriceChart from './PriceChart.jsx'
 import { fmtPrice, discount, dealLabel } from '../utils.js'
 
@@ -34,7 +34,23 @@ function useProductImages(asin, primaryUrl) {
 
 export default function ProductModal({ deal, onClose, saved, onSave }) {
   const [slide, setSlide] = useState(0)
+  const [copied, setCopied] = useState(false)
   const images = useProductImages(deal?.asin, deal?.image_url)
+
+  const shareUrl = deal ? `https://snagga.de/?asin=${deal.asin}` : ''
+  const cartUrl  = deal ? `https://www.amazon.de/gp/aws/cart/add.html?ASIN.1=${deal.asin}&Quantity.1=1&tag=snagga-21` : ''
+  const reviewUrl = deal ? `https://www.amazon.de/product-reviews/${deal.asin}` : ''
+
+  function handleShare() {
+    if (navigator.share) {
+      navigator.share({ title: deal.name, url: shareUrl }).catch(() => {})
+    } else {
+      navigator.clipboard.writeText(shareUrl).then(() => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      })
+    }
+  }
   const disc = deal ? discount(deal.current_price, deal.original_price) : 0
   const label = deal ? dealLabel(deal.deal_score) : null
 
@@ -244,28 +260,85 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
 
           {/* Kennzahlen */}
           <div style={{ display: 'flex', gap: 20, marginBottom: 24 }}>
-            {deal.rating && <Stat label="Bewertung" value={`★ ${Number(deal.rating).toFixed(1)}`} />}
-            {deal.reviews && <Stat label="Reviews" value={deal.reviews.toLocaleString('de')} />}
+            {deal.rating && (
+              <a href={reviewUrl} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+                <Stat label="Bewertung" value={`★ ${Number(deal.rating).toFixed(1)}`} clickable />
+              </a>
+            )}
+            {deal.reviews && (
+              <a href={reviewUrl} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+                <Stat label="Reviews" value={deal.reviews.toLocaleString('de')} clickable />
+              </a>
+            )}
           </div>
 
-          {/* CTA */}
-          <a
-            href={deal.affiliate_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              display: 'block', textAlign: 'center',
-              background: 'var(--text)', color: 'var(--bg-card)',
-              borderRadius: 10, padding: '12px 20px',
-              fontSize: 14, fontWeight: 700,
-              marginTop: 'auto',
-              transition: 'opacity 0.15s',
-            }}
-            onMouseEnter={e => e.currentTarget.style.opacity = '0.82'}
-            onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-          >
-            Zum Deal auf Amazon →
-          </a>
+          {/* Buttons */}
+          <div style={{ display: 'flex', gap: 8, marginTop: 'auto' }}>
+            {/* In den Warenkorb */}
+            <a
+              href={cartUrl}
+              target="_blank" rel="noopener noreferrer"
+              style={{
+                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                background: 'var(--orange)', color: '#fff',
+                borderRadius: 10, padding: '12px 16px',
+                fontSize: 13.5, fontWeight: 700,
+                transition: 'opacity 0.15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
+              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+              </svg>
+              In den Warenkorb
+            </a>
+
+            {/* Zum Deal */}
+            <a
+              href={deal.affiliate_url}
+              target="_blank" rel="noopener noreferrer"
+              style={{
+                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'var(--text)', color: 'var(--bg-card)',
+                borderRadius: 10, padding: '12px 16px',
+                fontSize: 13.5, fontWeight: 700,
+                transition: 'opacity 0.15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.opacity = '0.82'}
+              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+            >
+              Zum Deal →
+            </a>
+
+            {/* Teilen */}
+            <button
+              onClick={handleShare}
+              title={copied ? 'Link kopiert!' : 'Deal teilen'}
+              style={{
+                width: 46, flexShrink: 0,
+                borderRadius: 10, padding: '12px',
+                border: '1.5px solid var(--border)',
+                background: copied ? 'var(--orange-soft)' : 'var(--bg-elev2)',
+                color: copied ? 'var(--orange)' : 'var(--text)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'all 0.15s',
+              }}
+            >
+              {copied ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20,6 9,17 4,12"/>
+                </svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                </svg>
+              )}
+            </button>
+          </div>
 
           <p style={{ fontSize: 10.5, color: 'var(--muted)', textAlign: 'center', marginTop: 10, lineHeight: 1.4 }}>
             * Als Amazon-Partner verdiene ich an qualifizierten Käufen.
@@ -277,11 +350,15 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
   )
 }
 
-function Stat({ label, value, align = 'left' }) {
+function Stat({ label, value, align = 'left', clickable = false }) {
   return (
     <div style={{ textAlign: align }}>
       <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 500, marginBottom: 2 }}>{label}</div>
-      <div style={{ fontSize: 13, color: 'var(--text)', fontWeight: 600 }}>{value}</div>
+      <div style={{
+        fontSize: 13, color: clickable ? 'var(--orange)' : 'var(--text)', fontWeight: 600,
+        textDecoration: clickable ? 'underline' : 'none', textDecorationColor: 'var(--orange-border)',
+        cursor: clickable ? 'pointer' : 'default',
+      }}>{value}</div>
     </div>
   )
 }
