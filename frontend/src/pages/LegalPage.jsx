@@ -31,54 +31,95 @@ export default function LegalPage({ onBack }) {
         {/* Affiliate-Hinweis */}
         <Section title="Affiliate-Hinweis">
           <p style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.6, margin: 0 }}>
-            Diese Website enthält Affiliate-Links zu Amazon.de. Als Amazon-Partner verdiene ich an
-            qualifizierten Käufen eine kleine Provision — für dich entstehen dabei keine Mehrkosten.
-            Die Preise und Verfügbarkeiten werden regelmässig aktualisiert, können aber abweichen.
+            Snagga ist Teilnehmer am Partnerprogramm von Amazon Europe S.à r.l. und Partner des
+            Werbeprogramms, das zur Bereitstellung eines Mediums für Websites konzipiert wurde,
+            mittels dessen durch die Platzierung von Werbeanzeigen und Links zu amazon.de
+            Werbekostenerstattungen verdient werden können. Als Amazon-Partner verdiene ich an
+            qualifizierten Käufen eine Provision — für dich entstehen keine Mehrkosten.
+            Affiliate-Tag: <strong>snagga-21</strong>
           </p>
         </Section>
 
         {/* Impressum */}
         <Section title="Impressum">
-          <div style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.8 }}>
+          <div style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.9 }}>
             <p style={{ margin: 0 }}>
-              <strong>Betreiber:</strong> David P.<br />
-              <strong>Land:</strong> Schweiz<br />
-              <strong>Kontakt:</strong> <a href="mailto:contact@snagga.de" style={{ color: 'var(--cyan)' }}>contact@snagga.de</a>
+              <strong>Verantwortlich für den Inhalt:</strong><br />
+              David Pauli<br />
+              Hohfurenstrasse 1<br />
+              8610 Uster<br />
+              Schweiz<br />
+              <a href="mailto:contact@snagga.de" style={{ color: 'var(--blue)' }}>contact@snagga.de</a>
             </p>
-            <p style={{ marginTop: 12, color: 'var(--muted)', fontSize: 13 }}>
-              Snagga ist ein unabhängiges Projekt und steht in keiner direkten Verbindung
-              zu Amazon. Wir sind Teilnehmer am Amazon Partnerprogramm (snagga-21).
+            <p style={{ marginTop: 12, color: 'var(--muted)', fontSize: 13, lineHeight: 1.6 }}>
+              Snagga ist ein unabhängiges Privatprojekt und steht in keiner direkten Verbindung
+              zu Amazon. Wir sind Teilnehmer am Amazon Partnerprogramm (Partner-Tag: snagga-21).
             </p>
           </div>
         </Section>
 
         {/* Datenschutz */}
-        <Section title="Datenschutz">
-          <div style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <p style={{ margin: 0 }}>
-              <strong>Keine persönlichen Daten:</strong> Snagga speichert keine Nutzerdaten.
-              Deine Einstellungen (Watchlist, Theme, Kategorien) werden ausschliesslich lokal
-              auf deinem Gerät gespeichert (localStorage) und nie an Server übertragen.
-            </p>
-            <p style={{ margin: 0 }}>
-              <strong>Externe Links:</strong> Affiliate-Links führen zu Amazon.de.
-              Dort gelten die Datenschutzbestimmungen von Amazon.
-            </p>
-            <p style={{ margin: 0 }}>
-              <strong>Hosting & Server-Logs:</strong> Diese Website wird über Vercel (Frontend) und
-              Render (Backend) gehostet. Beim Aufruf der Website werden technisch bedingt
-              IP-Adressen in Server-Logs gespeichert. Diese Logs werden nicht ausgewertet
-              und nach kurzer Zeit automatisch gelöscht. Es gelten die Datenschutzrichtlinien
-              von Vercel und Render.
-            </p>
-            <p style={{ margin: 0 }}>
-              <strong>Preisdaten:</strong> Preise werden von CamelCamelCamel RSS-Feeds
-              bezogen. Es werden keine Nutzerdaten an Dritte weitergegeben.
+        <Section title="Datenschutzerklärung">
+          <div style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+            <div>
+              <strong>Verantwortlicher</strong><br />
+              David Pauli, Hohfurenstrasse 1, 8610 Uster, Schweiz<br />
+              <a href="mailto:contact@snagga.de" style={{ color: 'var(--blue)' }}>contact@snagga.de</a>
+            </div>
+
+            <div>
+              <strong>Keine Erhebung persönlicher Daten</strong><br />
+              Snagga erhebt und speichert keine personenbezogenen Daten. Deine Einstellungen
+              (Watchlist, Theme) werden ausschliesslich lokal auf deinem Gerät gespeichert
+              (localStorage) und nie an Server übertragen.
+            </div>
+
+            <div>
+              <strong>Hosting & Server-Logs</strong><br />
+              Diese Website wird über Vercel (Frontend) und Render (Backend, USA) gehostet.
+              Beim Aufruf werden technisch bedingt IP-Adressen kurzzeitig in Server-Logs
+              gespeichert und danach automatisch gelöscht. Es gelten die Datenschutzrichtlinien
+              von <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--blue)' }}>Vercel</a> und{' '}
+              <a href="https://render.com/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--blue)' }}>Render</a>.
+              Beide Anbieter sind nach EU-Standardvertragsklauseln (SCCs) zertifiziert.
+            </div>
+
+            <div>
+              <strong>Preisdaten</strong><br />
+              Preisdaten werden von CamelCamelCamel-RSS-Feeds und der Amazon Product
+              Advertising API bezogen. Es werden keine Nutzerdaten an Dritte weitergegeben.
+            </div>
+
+            <div>
+              <strong>Affiliate-Links</strong><br />
+              Affiliate-Links führen zu Amazon.de. Dort gelten die{' '}
+              <a href="https://www.amazon.de/gp/help/customer/display.html?nodeId=GX7NJQ4ZB8MHFRNJ" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--blue)' }}>Datenschutzbestimmungen von Amazon</a>.
+              Amazon setzt ggf. Cookies zur Nachverfolgung von Affiliate-Verkäufen.
+            </div>
+
+            <div>
+              <strong>Deine Rechte</strong><br />
+              Du hast das Recht auf Auskunft, Berichtigung, Löschung und Widerspruch
+              (Art. 15–21 DSGVO; Art. 25, 28 DSG CH). Da wir keine personenbezogenen
+              Daten speichern, ist eine Ausübung dieser Rechte typischerweise nicht
+              erforderlich. Bei Fragen wende dich an{' '}
+              <a href="mailto:contact@snagga.de" style={{ color: 'var(--blue)' }}>contact@snagga.de</a>.
+            </div>
+
+            <div>
+              <strong>Aufsichtsbehörden</strong><br />
+              Schweiz: <a href="https://www.edoeb.admin.ch" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--blue)' }}>EDÖB</a> — Eidgenössischer Datenschutz- und Öffentlichkeitsbeauftragter<br />
+              Deutschland: <a href="https://www.bfdi.bund.de" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--blue)' }}>BfDI</a> — Bundesbeauftragte für den Datenschutz und die Informationsfreiheit
+            </div>
+
+            <p style={{ margin: 0, fontSize: 12, color: 'var(--muted)' }}>
+              Stand: Juni 2026 · Es gilt das Schweizer DSG sowie die DSGVO (EU) 2016/679.
             </p>
           </div>
         </Section>
 
-        {/* Amazon Disclaimer */}
+        {/* Preisangaben */}
         <Section title="Preisangaben">
           <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, margin: 0 }}>
             Alle Preise sind unverbindliche Richtwerte und können sich jederzeit ändern.

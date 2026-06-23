@@ -214,6 +214,7 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
                 onSelectCat={setSelectedCat}
                 deals={deals}
                 onCollapse={() => setSidebarCollapsed(true)}
+                onShowLegal={onShowLegal}
               />
             ) : (
               /* Schmaler Expand-Streifen */
@@ -319,8 +320,9 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
             )}
 
             {!loading && filteredDeals.length > 0 && (
-              <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', paddingTop: 24, lineHeight: 1.5 }}>
-                * Als Amazon-Partner verdiene ich an qualifizierten Käufen.
+              <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', paddingTop: 24, lineHeight: 1.6 }}>
+                Als Amazon-Partner verdiene ich an qualifizierten Käufen eine Provision — für dich entstehen keine Mehrkosten.{' '}
+                <span style={{ cursor: 'pointer', color: 'var(--blue)', textDecoration: 'underline' }} onClick={onShowLegal}>Mehr erfahren</span>
               </div>
             )}
           </div>
@@ -338,16 +340,16 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
         }}>
           <MobileNavBtn icon="🏷️" label="Deals" active />
           <MobileNavBtn icon="☆" label="Watchlist" />
-          <MobileNavBtn icon="⚙️" label="Einstellungen" />
+          <MobileNavBtn icon="⚙️" label="Einstellungen" onClick={onShowLegal} />
         </div>
       )}
     </div>
   )
 }
 
-function MobileNavBtn({ icon, label, active = false }) {
+function MobileNavBtn({ icon, label, active = false, onClick }) {
   return (
-    <button style={{
+    <button onClick={onClick} style={{
       flex: 1,
       background: 'none', border: 'none',
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',

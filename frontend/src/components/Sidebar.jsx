@@ -1,6 +1,6 @@
 import React from 'react'
 
-export default function Sidebar({ categories, selectedCat, onSelectCat, deals, onCollapse }) {
+export default function Sidebar({ categories, selectedCat, onSelectCat, deals, onCollapse, onShowLegal }) {
   // Anzahl Deals pro Kategorie
   const counts = {}
   deals.forEach(d => {
@@ -76,7 +76,7 @@ export default function Sidebar({ categories, selectedCat, onSelectCat, deals, o
         <div style={{ fontSize: 12, color: 'var(--muted)', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <span style={{ cursor: 'pointer' }} onClick={() => {}}>★ Watchlist</span>
           <span style={{ cursor: 'pointer' }} onClick={() => {}}>⚙ Einstellungen</span>
-          <span style={{ cursor: 'pointer', fontSize: 11 }}>Impressum · Datenschutz</span>
+          <span style={{ cursor: 'pointer', fontSize: 11, color: 'var(--blue)' }} onClick={onShowLegal}>Impressum · Datenschutz</span>
         </div>
       </div>
     </div>
