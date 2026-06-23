@@ -37,6 +37,15 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
   const [slide, setSlide]           = useState(0)
   const [copied, setCopied]         = useState(false)
   const [lightboxOpen, setLightbox] = useState(false)
+
+  const openLightbox = () => {
+    setLightbox(true)
+    window.history.pushState({ snagga: 'lightbox' }, '')
+  }
+  const closeLightbox = () => {
+    if (window.history.state?.snagga === 'lightbox') window.history.back()
+    else setLightbox(false)
+  }
   const { isMobile, isTablet, isDesktop } = useBreakpoint()
   const isVertical = !isDesktop   // Mobile + Tablet: column-Layout
   const images     = useProductImages(deal?.asin, deal?.image_url)
@@ -74,7 +83,7 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
   const label = deal ? dealLabel(deal.deal_score) : null
 
   const handleKey = useCallback(e => {
-    if (e.key === 'Escape') { if (lightboxOpen) setLightbox(false); else onClose() }
+    if (e.key === 'Escape') { if (lightboxOpen) closeLightbox(); else onClose() }
     if (e.key === 'ArrowRight') setSlide(s => (s + 1) % Math.max(images.length, 1))
     if (e.key === 'ArrowLeft')  setSlide(s => (s - 1 + Math.max(images.length, 1)) % Math.max(images.length, 1))
   }, [onClose, images.length, lightboxOpen])
@@ -83,6 +92,13 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
     document.addEventListener('keydown', handleKey)
     return () => document.removeEventListener('keydown', handleKey)
   }, [handleKey])
+
+  // Swipe-Back schliesst Lightbox zuerst, dann den Modal (über DealsPage-Handler)
+  useEffect(() => {
+    const onPop = () => { if (lightboxOpen) setLightbox(false) }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [lightboxOpen])
 
   useEffect(() => { setSlide(0); setLightbox(false) }, [deal?.asin])
 
@@ -94,7 +110,7 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
   /* ── Lightbox ── */
   const LightboxEl = lightboxOpen && (
     <div
-      onClick={() => setLightbox(false)}
+      onClick={() => closeLightbox()}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(0,0,0,0.96)',
@@ -108,7 +124,7 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
         </div>
       )}
       {/* Close */}
-      <button onClick={e => { e.stopPropagation(); setLightbox(false) }}
+      <button onClick={e => { e.stopPropagation(); closeLightbox() }}
         style={{ position: 'absolute', top: 16, right: 16, width: 36, height: 36, borderRadius: '50%',
           border: '1.5px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)',
           color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -211,7 +227,7 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
               {/* Hauptbild — Klick öffnet Lightbox */}
               <div
                 ref={imgAreaRef}
-                onClick={() => currentImg && setLightbox(true)}
+                onClick={() => currentImg && openLightbox()}
                 onTouchStart={handleTouchStart}
                 onTouchEnd={handleTouchEnd}
                 style={{

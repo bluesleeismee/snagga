@@ -47,6 +47,26 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
     return () => clearTimeout(t)
   }, [loadDeals])
 
+  /* ── History-basierte Modal-Navigation (Swipe-Back schliesst Modal) ── */
+  const openDeal = useCallback((deal) => {
+    setSelectedDeal(deal)
+    window.history.pushState({ snagga: 'modal', asin: deal.asin }, '')
+  }, [])
+
+  const closeModal = useCallback(() => {
+    if (window.history.state?.snagga === 'modal') {
+      window.history.back()   // löst popstate aus → setSelectedDeal(null)
+    } else {
+      setSelectedDeal(null)
+    }
+  }, [])
+
+  useEffect(() => {
+    const onPop = () => setSelectedDeal(null)
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+
   function toggleFilter(id) {
     setActiveFilters(prev => {
       const next = new Set(prev)
@@ -96,7 +116,7 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
       {selectedDeal && (
         <ProductModal
           deal={selectedDeal}
-          onClose={() => setSelectedDeal(null)}
+          onClose={closeModal}
           saved={watchlist?.has(selectedDeal.asin)}
           onSave={onToggleWatch}
         />
@@ -284,7 +304,7 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
                     view={isMobile ? 'grid' : view}
                     saved={watchlist?.has(deal.asin)}
                     onSave={onToggleWatch}
-                    onClick={() => setSelectedDeal(deal)}
+                    onClick={() => openDeal(deal)}
                   />
                 ))}
               </div>
