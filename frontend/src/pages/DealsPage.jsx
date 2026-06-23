@@ -163,10 +163,15 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
 
         {/* Main Content */}
         <div className="no-scroll" style={{ flex: 1, overflowY: 'auto', minWidth: 0 }}>
-          <div style={{ padding: '18px 22px 40px' }}>
-
+          {/* Sticky Header: Filter + Titelzeile */}
+          <div style={{
+            position: 'sticky', top: 0, zIndex: 50,
+            background: 'var(--bg)',
+            borderBottom: '1px solid var(--border)',
+            padding: '14px 22px 12px',
+          }}>
             {/* Filter-Bar */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--muted)', marginRight: 2 }}>Filter</span>
               {QUALITY_FILTERS.map(f => {
                 const active = f.id === qualityFilter
@@ -221,9 +226,9 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
             </div>
 
             {/* Title row */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>
+                <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>
                   {selectedCat === 'Alle' ? 'Alle Deals' : selectedCat}
                 </span>
                 <span style={{ fontSize: 13, color: 'var(--muted)', marginLeft: 8 }}>
@@ -239,7 +244,9 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
                 ))}
               </div>
             </div>
+          </div>
 
+          <div style={{ padding: '16px 22px 40px' }}>
             {/* States */}
             {loading && (
               <div style={{ textAlign: 'center', padding: '80px 20px', color: 'var(--muted)', fontSize: 14 }}>
