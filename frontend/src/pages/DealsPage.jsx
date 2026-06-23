@@ -68,7 +68,19 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
 
   const showBottomNav = isMobile || isTablet
   const gridCols = isMobile ? 'repeat(2, 1fr)' : isTablet ? 'repeat(3, 1fr)' : 'repeat(4, 1fr)'
-  const pad      = isMobile ? '12px 12px 88px' : showBottomNav ? '16px 22px 88px' : '16px 22px 40px'
+  const pad      = showBottomNav ? (isMobile ? '12px 12px 96px' : '16px 22px 96px') : '16px 22px 40px'
+
+  /* ── Filter chip helper ── */
+  function FilterChip({ label, active, dot, onClick }) {
+    return (
+      <button onClick={onClick}
+        style={{ padding: isMobile ? '5px 10px' : '6px 13px', borderRadius: 8, border: `1.5px solid ${active ? 'var(--text)' : 'var(--border)'}`, background: active ? 'var(--text)' : 'var(--bg-elev)', color: active ? 'var(--bg-elev)' : 'var(--text)', fontSize: isMobile ? 11.5 : 12.5, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap', flexShrink: 0, transition: 'all 0.12s' }}
+      >
+        {dot && <div style={{ width: 6, height: 6, borderRadius: '50%', background: active ? 'var(--bg-elev)' : dot, flexShrink: 0 }} />}
+        {label}
+      </button>
+    )
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -104,7 +116,6 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
         gap: isMobile ? 10 : 16,
         position: 'sticky', top: 0, zIndex: 100, flexShrink: 0,
       }}>
-        {/* Mobile: Hamburger */}
         {isMobile && (
           <button onClick={() => setSidebarOpen(true)} style={{ background: 'none', border: 'none', padding: 4, color: 'var(--text)', display: 'flex', alignItems: 'center' }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -114,32 +125,19 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
             </svg>
           </button>
         )}
-
-        {/* Logo */}
         <div style={{ flexShrink: 0, width: isMobile ? 'auto' : 192 }}>
-          <span style={{ fontSize: isMobile ? 19 : 22, fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--text)', whiteSpace: 'nowrap' }}>
-            snagga
-          </span>
+          <span style={{ fontSize: isMobile ? 19 : 22, fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--text)', whiteSpace: 'nowrap' }}>snagga</span>
         </div>
-
-        {/* Suchfeld */}
         <div style={{ flex: 1, position: 'relative', maxWidth: isMobile ? '100%' : 520 }}>
           <span style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', fontSize: 14, pointerEvents: 'none' }}>🔍</span>
           <input
             value={search} onChange={e => setSearch(e.target.value)}
             placeholder={isMobile ? 'Suchen…' : 'Produkt, Marke oder Kategorie suchen…'}
-            style={{
-              width: '100%', padding: '8px 12px 8px 34px',
-              borderRadius: 9, border: '1.5px solid var(--border)',
-              background: 'var(--bg-elev2)', color: 'var(--text)',
-              fontSize: 14, outline: 'none',
-            }}
+            style={{ width: '100%', padding: '8px 12px 8px 34px', borderRadius: 9, border: '1.5px solid var(--border)', background: 'var(--bg-elev2)', color: 'var(--text)', fontSize: 14, outline: 'none' }}
             onFocus={e => { e.target.style.borderColor = '#E8500A'; e.target.style.background = 'var(--bg-elev)' }}
             onBlur={e  => { e.target.style.borderColor = 'var(--border)'; e.target.style.background = 'var(--bg-elev2)' }}
           />
         </div>
-
-        {/* Dark Mode Toggle */}
         <button onClick={onToggleTheme}
           style={{ marginLeft: isMobile ? 0 : 'auto', width: 34, height: 34, borderRadius: 8, border: '1.5px solid var(--border)', background: 'var(--bg-elev2)', color: 'var(--text)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
           title={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
@@ -162,67 +160,57 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
 
       {/* LAYOUT */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-
-        {/* Sidebar — nur Desktop/Tablet */}
         {!isMobile && (
           <Sidebar categories={categories} selectedCat={selectedCat}
             onSelectCat={setSelectedCat} deals={deals} />
         )}
 
-        {/* Main */}
         <div className="no-scroll" style={{ flex: 1, overflowY: 'auto', minWidth: 0 }}>
 
           {/* Sticky Filter-Bar */}
-          <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'var(--bg)', borderBottom: '1px solid var(--border)', padding: isMobile ? '9px 12px 8px' : '14px 22px 12px' }}>
+          <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'var(--bg)', borderBottom: '1px solid var(--border)', padding: (isMobile || isTablet) ? '9px 12px 7px' : '14px 22px 12px' }}>
 
-            {/* Filter + Sort — eine scrollbare Zeile auf Mobile */}
-            <div className="no-scroll" style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 7, overflowX: isMobile ? 'auto' : 'visible', flexWrap: isMobile ? 'nowrap' : 'wrap', paddingBottom: isMobile ? 2 : 0 }}>
-
-              {!isMobile && <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--muted)', marginRight: 2, flexShrink: 0 }}>Filter</span>}
-
-              {QUALITY_FILTERS.map(f => {
-                const active = activeFilters.has(f.id)
-                return (
-                  <button key={f.id} onClick={() => toggleFilter(f.id)}
-                    style={{ padding: isMobile ? '5px 10px' : '6px 13px', borderRadius: 8, border: `1.5px solid ${active ? 'var(--text)' : 'var(--border)'}`, background: active ? 'var(--text)' : 'var(--bg-elev)', color: active ? 'var(--bg-elev)' : 'var(--text)', fontSize: isMobile ? 11.5 : 13, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap', flexShrink: 0, transition: 'all 0.12s' }}
-                  >
-                    {f.dot && <div style={{ width: 6, height: 6, borderRadius: '50%', background: active ? 'var(--bg-elev)' : f.dot, flexShrink: 0 }} />}
-                    {f.label}
-                  </button>
-                )
-              })}
-
-              {/* Separator */}
-              <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 3px', flexShrink: 0 }} />
-
-              {!isMobile && <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--muted)', marginRight: 2, flexShrink: 0 }}>Sortieren</span>}
-              {isMobile && <span style={{ fontSize: 10.5, fontWeight: 500, color: 'var(--muted)', flexShrink: 0 }}>↕</span>}
-
-              {SORTS.map(s => {
-                const active = s.id === sortBy
-                return (
-                  <button key={s.id} onClick={() => setSortBy(s.id)}
-                    style={{ padding: isMobile ? '5px 10px' : '6px 13px', borderRadius: 8, border: `1.5px solid ${active ? 'var(--text)' : 'var(--border)'}`, background: active ? 'var(--text)' : 'var(--bg-elev)', color: active ? 'var(--bg-elev)' : 'var(--text)', fontSize: isMobile ? 11.5 : 13, fontWeight: 500, whiteSpace: 'nowrap', flexShrink: 0, transition: 'all 0.12s' }}
-                  >
-                    {s.label}
-                  </button>
-                )
-              })}
-            </div>
+            {(isMobile || isTablet) ? (
+              /* ── Mobile/Tablet: zwei Zeilen ── */
+              <>
+                {/* Zeile 1: Filter */}
+                <div className="no-scroll" style={{ display: 'flex', alignItems: 'center', gap: 5, overflowX: 'auto', flexWrap: 'nowrap', paddingBottom: 1, marginBottom: 6 }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--muted)', flexShrink: 0, letterSpacing: 0.3 }}>FILTER</span>
+                  {QUALITY_FILTERS.map(f => (
+                    <FilterChip key={f.id} label={f.label} dot={f.dot} active={activeFilters.has(f.id)} onClick={() => toggleFilter(f.id)} />
+                  ))}
+                </div>
+                {/* Zeile 2: Sortieren */}
+                <div className="no-scroll" style={{ display: 'flex', alignItems: 'center', gap: 5, overflowX: 'auto', flexWrap: 'nowrap', paddingBottom: 1, marginBottom: 6 }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--muted)', flexShrink: 0, letterSpacing: 0.3 }}>SORT</span>
+                  {SORTS.map(s => (
+                    <FilterChip key={s.id} label={s.label} active={s.id === sortBy} onClick={() => setSortBy(s.id)} />
+                  ))}
+                </div>
+              </>
+            ) : (
+              /* ── Desktop: eine Zeile ── */
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--muted)', marginRight: 2, flexShrink: 0 }}>Filter</span>
+                {QUALITY_FILTERS.map(f => (
+                  <FilterChip key={f.id} label={f.label} dot={f.dot} active={activeFilters.has(f.id)} onClick={() => toggleFilter(f.id)} />
+                ))}
+                <div style={{ width: 1, height: 22, background: 'var(--border)', margin: '0 2px', flexShrink: 0 }} />
+                <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--muted)', marginRight: 2, flexShrink: 0 }}>Sortieren</span>
+                {SORTS.map(s => (
+                  <FilterChip key={s.id} label={s.label} active={s.id === sortBy} onClick={() => setSortBy(s.id)} />
+                ))}
+              </div>
+            )}
 
             {/* Anzahl + View Toggle */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 {selectedCat !== 'Alle' && (
-                  <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginRight: 7 }}>
-                    {selectedCat}
-                  </span>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginRight: 7 }}>{selectedCat}</span>
                 )}
-                <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-                  {filteredDeals.length} Produkte
-                </span>
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>{filteredDeals.length} Produkte</span>
               </div>
-              {/* View Toggle — nur ab Tablet */}
               {!isMobile && (
                 <div style={{ display: 'flex', gap: 4 }}>
                   {[{ id: 'grid', icon: '⊞' }, { id: 'list', icon: '☰' }].map(v => (
@@ -270,8 +258,9 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
       {showBottomNav && (
         <div style={{
           position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 150,
-          height: 68, background: 'var(--bg-card)', borderTop: '1px solid var(--border)',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-around',
+          height: 80,
+          background: 'var(--bg-card)', borderTop: '1px solid var(--border)',
+          display: 'flex', alignItems: 'stretch',
           paddingBottom: 'env(safe-area-inset-bottom)',
         }}>
           <MobileNavBtn icon="🏷️" label="Deals" active />
@@ -285,7 +274,14 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
 
 function MobileNavBtn({ icon, label, active = false }) {
   return (
-    <button style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, color: active ? 'var(--orange)' : 'var(--muted)', fontSize: 10.5, fontWeight: active ? 600 : 400, padding: '8px 20px' }}>
+    <button style={{
+      flex: 1,
+      background: 'none', border: 'none',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      gap: 4,
+      color: active ? 'var(--orange)' : 'var(--muted)',
+      fontSize: 11, fontWeight: active ? 700 : 400,
+    }}>
       <span style={{ fontSize: 22, lineHeight: 1 }}>{icon}</span>
       {label}
     </button>

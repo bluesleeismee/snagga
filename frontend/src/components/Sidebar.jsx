@@ -10,7 +10,7 @@ export default function Sidebar({ categories, selectedCat, onSelectCat, deals })
 
   return (
     <div style={{
-      width: 232,
+      width: 208,
       flexShrink: 0,
       background: 'var(--bg-elev)',
       borderRight: '1px solid var(--border)',
