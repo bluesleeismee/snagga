@@ -27,7 +27,8 @@ body {
   --orange-soft:  rgba(232, 80, 10, 0.10);
   --orange-border:rgba(232, 80, 10, 0.30);
   --green:        #1E7A3C;
-  --blue:         #0097D5;
+  --blue:         #0082BC;
+  --blue-soft:    rgba(0,130,188,0.12);
   --shadow:       rgba(0, 0, 0, 0.05);
   --shadow-hover: rgba(0, 0, 0, 0.09);
   /* keep legacy names for pages not yet redesigned */
@@ -54,7 +55,8 @@ body {
   --orange-soft:  rgba(232, 80, 10, 0.15);
   --orange-border:rgba(232, 80, 10, 0.35);
   --green:        #22C55E;
-  --blue:         #22D3EE;
+  --blue:         #1ABFD8;
+  --blue-soft:    rgba(26,191,216,0.14);
   --shadow:       rgba(0, 0, 0, 0.30);
   --shadow-hover: rgba(0, 0, 0, 0.45);
   --red:          #E8500A;

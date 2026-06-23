@@ -38,6 +38,7 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
   const [copied, setCopied] = useState(false)
   const { isMobile } = useBreakpoint()
   const images = useProductImages(deal?.asin, deal?.image_url)
+  const imgAreaRef = useRef(null)
 
   const shareUrl = deal ? `https://snagga.de/?asin=${deal.asin}` : ''
   const cartUrl  = deal ? `https://www.amazon.de/gp/aws/cart/add.html?ASIN.1=${deal.asin}&Quantity.1=1&tag=snagga-21` : ''
@@ -124,7 +125,7 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
           position: 'relative',
         }}>
           {/* Hauptbild */}
-          <div style={{
+          <div ref={imgAreaRef} style={{
             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
             minHeight: isMobile ? 0 : 420, padding: isMobile ? 16 : 32, position: 'relative',
           }}>
@@ -156,7 +157,7 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
               {images.map((url, i) => (
                 <button
                   key={i}
-                  onClick={() => setSlide(i)}
+                  onClick={() => { setSlide(i); imgAreaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }) }}
                   style={{
                     width: 46, height: 46, borderRadius: 6, padding: 3,
                     border: `2px solid ${i === slide ? 'var(--orange)' : 'var(--border)'}`,
@@ -279,9 +280,10 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
               href={cartUrl}
               target="_blank" rel="noopener noreferrer"
               style={{
-                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                flex: isMobile ? 0 : 1,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
                 background: 'var(--orange)', color: '#fff',
-                borderRadius: 10, padding: '12px 16px',
+                borderRadius: 10, padding: isMobile ? '12px 14px' : '12px 16px',
                 fontSize: 13.5, fontWeight: 700,
                 transition: 'opacity 0.15s',
               }}
@@ -292,7 +294,7 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
                 <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
                 <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
               </svg>
-              In den Warenkorb
+              {!isMobile && 'In den Warenkorb'}
             </a>
 
             {/* Zum Deal */}
@@ -309,7 +311,7 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
               onMouseEnter={e => e.currentTarget.style.opacity = '0.82'}
               onMouseLeave={e => e.currentTarget.style.opacity = '1'}
             >
-              Zum Produkt →
+              Zum Produkt
             </a>
 
             {/* Teilen */}
@@ -319,8 +321,8 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
               style={{
                 width: 46, flexShrink: 0,
                 borderRadius: 10, padding: '12px',
-                border: `1.5px solid ${copied ? 'var(--orange)' : 'var(--blue)'}`,
-                background: copied ? 'var(--orange-soft)' : 'rgba(0,151,213,0.08)',
+                border: copied ? '1.5px solid var(--orange)' : 'none',
+                background: copied ? 'var(--orange-soft)' : 'var(--blue-soft)',
                 color: copied ? 'var(--orange)' : 'var(--blue)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 transition: 'all 0.15s',

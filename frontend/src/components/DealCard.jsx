@@ -166,12 +166,12 @@ function ActionButtons({ deal, compact = false }) {
         onMouseEnter={e => e.currentTarget.style.opacity = '0.82'}
         onMouseLeave={e => e.currentTarget.style.opacity = '1'}
       >
-        Zum Produkt →
+        Zum Produkt
       </a>
 
       {/* Teilen */}
       <button onClick={handleShare} title={copied ? 'Kopiert!' : 'Teilen'}
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderRadius: 7, padding: '7px 8px', border: `1.5px solid ${copied ? 'var(--orange)' : 'var(--blue)'}`, background: copied ? 'var(--orange-soft)' : 'rgba(0,151,213,0.08)', color: copied ? 'var(--orange)' : 'var(--blue)', transition: 'all 0.15s' }}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderRadius: 7, padding: '7px 8px', border: copied ? '1.5px solid var(--orange)' : 'none', background: copied ? 'var(--orange-soft)' : 'var(--blue-soft)', color: copied ? 'var(--orange)' : 'var(--blue)', transition: 'all 0.15s' }}
       >
         {copied
           ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20,6 9,17 4,12"/></svg>
