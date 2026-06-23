@@ -207,7 +207,7 @@ def get_seed_data() -> list[dict]:
         score, low, avg = calculate_score(current, original, asin)
         products.append({
             "asin": asin, "name": name, "brand": brand,
-            "image_url": f"https://images-na.ssl-images-amazon.com/images/P/{asin}.01.L.jpg",
+            "image_url": f"https://ws-eu.amazon-adsystem.com/widgets/q?_encoding=UTF8&ASIN={asin}&Format=_SL500_&ID=AsinImage&MarketPlace=DE&ServiceVersion=20070822&WS=1&tag={AFFILIATE_TAG}",
             "category": cat,
             "current_price": current, "original_price": original,
             "all_time_low": low, "avg_price": avg,
@@ -262,7 +262,7 @@ async def fetch_and_update_deals():
 
                     products.append({
                         "asin": asin, "name": name, "brand": "",
-                        "image_url": f"https://images-na.ssl-images-amazon.com/images/P/{asin}.01.L.jpg",
+                        "image_url": f"https://ws-eu.amazon-adsystem.com/widgets/q?_encoding=UTF8&ASIN={asin}&Format=_SL500_&ID=AsinImage&MarketPlace=DE&ServiceVersion=20070822&WS=1&tag={AFFILIATE_TAG}",
                         "category": classify_category(name),
                         "current_price": current, "original_price": original,
                         "all_time_low": low, "avg_price": avg,
