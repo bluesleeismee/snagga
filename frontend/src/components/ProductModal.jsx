@@ -360,10 +360,10 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
                 {/* Warenkorb */}
                 <a href={cartUrl} target="_blank" rel="noopener noreferrer"
                   style={{
-                    flex: isVertical ? 0 : 1,
+                    flex: isMobile ? '0 0 auto' : '1 1 0',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
                     background: 'var(--orange)', color: '#fff',
-                    borderRadius: 10, padding: isVertical ? '12px 14px' : '12px 16px',
+                    borderRadius: 10, padding: isMobile ? '12px 14px' : '12px 16px',
                     fontSize: 13.5, fontWeight: 700, transition: 'opacity 0.15s',
                   }}
                   onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
@@ -379,7 +379,7 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
                 {/* Zum Produkt */}
                 <a href={deal.affiliate_url} target="_blank" rel="noopener noreferrer"
                   style={{
-                    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flex: '1 1 0', display: 'flex', alignItems: 'center', justifyContent: 'center',
                     background: 'var(--text)', color: 'var(--bg-card)',
                     borderRadius: 10, padding: '12px 16px',
                     fontSize: 13.5, fontWeight: 700, transition: 'opacity 0.15s',

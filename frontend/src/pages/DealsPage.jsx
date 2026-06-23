@@ -121,7 +121,7 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
       <div style={{
         background: 'var(--bg-elev)', borderBottom: '1px solid var(--border)',
         height: 54, display: 'flex', alignItems: 'center',
-        padding: isMobile ? '0 14px' : '0 24px',
+        padding: isMobile ? '0 14px' : '0 24px 0 0',
         gap: isMobile ? 10 : 0,
         position: 'sticky', top: 0, zIndex: 100, flexShrink: 0,
       }}>
@@ -135,13 +135,13 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
           </button>
         )}
 
-        {/* Logo — Breite = Sidebar-Breite damit Suchfeld bündig ist */}
-        <div style={{ flexShrink: 0, width: isMobile ? 'auto' : 208, paddingLeft: isMobile ? 0 : 0 }}>
+        {/* Logo — nimmt exakt Sidebar-Breite ein (inkl. linkem Padding) */}
+        <div style={{ flexShrink: 0, width: isMobile ? 'auto' : 208, paddingLeft: isMobile ? 0 : 24, display: 'flex', alignItems: 'center' }}>
           <span style={{ fontSize: isMobile ? 19 : 22, fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--text)', whiteSpace: 'nowrap' }}>snagga</span>
         </div>
 
-        {/* Suchfeld */}
-        <div style={{ flex: 1, position: 'relative', maxWidth: isMobile ? '100%' : 520, marginLeft: isMobile ? 0 : 16 }}>
+        {/* Suchfeld — linke Kante bündig mit Inhaltbereich */}
+        <div style={{ flex: 1, position: 'relative', maxWidth: isMobile ? '100%' : 520, marginLeft: 0 }}>
           <span style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', fontSize: 14, pointerEvents: 'none' }}>🔍</span>
           <input
             value={search} onChange={e => setSearch(e.target.value)}
