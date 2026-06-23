@@ -161,33 +161,37 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
           flex: 1, padding: '28px 28px 24px',
           display: 'flex', flexDirection: 'column',
           overflowY: 'auto',
+          position: 'relative',
         }}>
+          {/* Favourite — absolut, Oberkante auf Oberkante der Marke */}
+          <button
+            onClick={() => onSave?.(deal.asin)}
+            style={{
+              position: 'absolute', top: 28, right: 28,
+              width: 34, height: 34, borderRadius: 8,
+              border: `1.5px solid ${saved ? 'var(--orange)' : 'var(--border)'}`,
+              background: saved ? 'var(--orange-soft)' : 'var(--bg-elev2)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'all 0.15s',
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24"
+              fill={saved ? 'var(--orange)' : 'none'}
+              stroke={saved ? 'var(--orange)' : 'var(--muted)'}
+              strokeWidth="1.8" strokeLinejoin="round">
+              <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
+            </svg>
+          </button>
+
           {/* Brand */}
-          <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500, marginBottom: 6, display: 'block' }}>
+          <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500, marginBottom: 6, display: 'block', paddingRight: 44 }}>
             {deal.brand || deal.category}
           </span>
 
-          {/* Name + Save */}
-          {/* Button-Höhe ≈ erste Titelzeile: lineHeight 1.4 × 17px ≈ 24px → alignItems: flex-end richtet Unterkanten aus */}
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginBottom: 6 }}>
-            <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)', lineHeight: 1.4, margin: 0, flex: 1 }}>
-              {deal.name}
-            </h2>
-            <button
-              onClick={() => onSave?.(deal.asin)}
-              style={{
-                flexShrink: 0,
-                width: 32, height: 32, borderRadius: 8,
-                border: `1.5px solid ${saved ? 'var(--orange)' : 'var(--border)'}`,
-                background: saved ? 'var(--orange-soft)' : 'var(--bg-elev)',
-                fontSize: 17,
-                color: saved ? 'var(--orange)' : '#aaa',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                marginBottom: 2,
-                transition: 'all 0.15s',
-              }}
-            >{saved ? '★' : '☆'}</button>
-          </div>
+          {/* Name */}
+          <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)', lineHeight: 1.4, margin: '0 0 6px', paddingRight: 44 }}>
+            {deal.name}
+          </h2>
 
           <span style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 18, display: 'block' }}>{deal.category}</span>
 
@@ -208,19 +212,20 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
             )}
           </div>
 
-          {deal.prime && (
-            <span style={{ fontSize: 11, color: 'var(--blue)', fontWeight: 700, letterSpacing: 0.5, marginBottom: 14, display: 'block' }}>
-              ✦ Prime
+          {/* Prime + Allzeit-Tief nebeneinander, Unterkante bündig */}
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 14 }}>
+            <span style={{ fontSize: 11, color: 'var(--blue)', fontWeight: 700, letterSpacing: 0.5 }}>
+              {deal.prime ? '✦ Prime' : ''}
             </span>
-          )}
+            <Stat label="Allzeit-Tief" value={fmtPrice(deal.all_time_low)} align="right" />
+          </div>
 
           {/* Divider */}
-          <div style={{ height: 1, background: 'var(--border)', margin: '4px 0 14px' }} />
+          <div style={{ height: 1, background: 'var(--border)', margin: '0 0 14px' }} />
 
           {/* Deal-Label + Chart */}
           {deal.price_history?.length > 1 && (
             <div style={{ marginBottom: 18 }}>
-              {/* Label über dem Chart */}
               {label && (
                 <div style={{
                   display: 'inline-block',
@@ -242,9 +247,8 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
 
           {/* Kennzahlen */}
           <div style={{ display: 'flex', gap: 20, marginBottom: 24 }}>
-            <Stat label="Allzeit-Tief" value={fmtPrice(deal.all_time_low)} />
             <Stat label="Ø Preis" value={fmtPrice(deal.avg_price)} />
-            {deal.rating && <Stat label="Bewertung" value={`★ ${deal.rating}`} />}
+            {deal.rating && <Stat label="Bewertung" value={`★ ${Number(deal.rating).toFixed(1)}`} />}
             {deal.reviews && <Stat label="Reviews" value={deal.reviews.toLocaleString('de')} />}
           </div>
 
@@ -277,9 +281,9 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
   )
 }
 
-function Stat({ label, value }) {
+function Stat({ label, value, align = 'left' }) {
   return (
-    <div>
+    <div style={{ textAlign: align }}>
       <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 500, marginBottom: 2 }}>{label}</div>
       <div style={{ fontSize: 13, color: 'var(--text)', fontWeight: 600 }}>{value}</div>
     </div>
