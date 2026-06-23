@@ -26,6 +26,7 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
   const [deals, setDeals] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [view, setView] = useState('grid')
 
   useEffect(() => {
     api.categories().then(setCategories).catch(() => {})
@@ -192,13 +193,23 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
             </div>
 
             {/* Title row */}
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 14 }}>
-              <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>
-                {selectedCat === 'Alle' ? 'Alle Deals' : selectedCat}
-              </span>
-              <span style={{ fontSize: 13, color: 'var(--muted)', marginLeft: 8 }}>
-                {filteredDeals.length} Produkte
-              </span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <div>
+                <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>
+                  {selectedCat === 'Alle' ? 'Alle Deals' : selectedCat}
+                </span>
+                <span style={{ fontSize: 13, color: 'var(--muted)', marginLeft: 8 }}>
+                  {filteredDeals.length} Produkte
+                </span>
+              </div>
+              {/* View Toggle */}
+              <div style={{ display: 'flex', gap: 4 }}>
+                {[{ id: 'grid', icon: '⊞' }, { id: 'list', icon: '☰' }].map(v => (
+                  <button key={v.id} onClick={() => setView(v.id)} style={{ padding: '5px 11px', borderRadius: 7, border: `1.5px solid ${view === v.id ? 'var(--text)' : 'var(--border)'}`, background: view === v.id ? 'var(--text)' : 'var(--bg-elev)', color: view === v.id ? 'var(--bg-elev)' : 'var(--text)', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+                    {v.icon}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* States */}
@@ -219,17 +230,22 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
               </div>
             )}
 
-            {/* 4-Spalten Grid */}
+            {/* Grid / Liste */}
             {!loading && !error && filteredDeals.length > 0 && (
-              <div style={{
+              <div style={view === 'grid' ? {
                 display: 'grid',
                 gridTemplateColumns: 'repeat(4, 1fr)',
                 gap: 12,
+              } : {
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
               }}>
                 {filteredDeals.map(deal => (
                   <DealCard
                     key={deal.asin}
                     deal={deal}
+                    view={view}
                     saved={watchlist?.has(deal.asin)}
                     onSave={onToggleWatch}
                   />
