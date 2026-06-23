@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import PriceChart from './PriceChart.jsx'
 import { fmtPrice, discount, dealLabel } from '../utils.js'
+import { useBreakpoint } from '../hooks/useBreakpoint.js'
 
 /* Versucht bis zu 5 Bilder pro ASIN zu laden (Amazon .01–.05) */
 function useProductImages(asin, primaryUrl) {
@@ -35,6 +36,7 @@ function useProductImages(asin, primaryUrl) {
 export default function ProductModal({ deal, onClose, saved, onSave }) {
   const [slide, setSlide] = useState(0)
   const [copied, setCopied] = useState(false)
+  const { isMobile } = useBreakpoint()
   const images = useProductImages(deal?.asin, deal?.image_url)
 
   const shareUrl = deal ? `https://snagga.de/?asin=${deal.asin}` : ''
@@ -76,49 +78,47 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
       onClick={onClose}
       style={{
         position: 'fixed', inset: 0, zIndex: 1000,
-        background: 'rgba(0,0,0,0.55)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: 24,
-        backdropFilter: 'blur(3px)',
+        background: isMobile ? 'var(--bg-card)' : 'rgba(0,0,0,0.55)',
+        display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'center',
+        padding: isMobile ? 0 : 24,
+        backdropFilter: isMobile ? 'none' : 'blur(3px)',
       }}
     >
-      {/* Wrapper für Modal + Close-Button */}
-      <div style={{ position: 'relative', width: '100%', maxWidth: 1220 }} onClick={e => e.stopPropagation()}>
+      {/* Wrapper */}
+      <div style={{ position: 'relative', width: '100%', maxWidth: isMobile ? '100%' : 1220 }} onClick={e => e.stopPropagation()}>
 
-        {/* Close — Kreis, ausserhalb oben rechts */}
-        <button
-          onClick={onClose}
-          style={{
-            position: 'absolute', top: -14, right: -14, zIndex: 20,
-            width: 28, height: 28, borderRadius: '50%',
-            border: '1.5px solid rgba(255,255,255,0.25)',
-            background: 'rgba(30,30,30,0.85)',
-            color: '#fff', padding: 0,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-          }}
-        >
+        {/* Close */}
+        <button onClick={onClose} style={{
+          position: 'absolute', top: isMobile ? 12 : -14, right: isMobile ? 12 : -14, zIndex: 20,
+          width: 32, height: 32, borderRadius: '50%',
+          border: '1.5px solid rgba(255,255,255,0.25)',
+          background: 'rgba(30,30,30,0.85)',
+          color: '#fff', padding: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+        }}>
           <svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
             <line x1="1" y1="1" x2="9" y2="9"/><line x1="9" y1="1" x2="1" y2="9"/>
           </svg>
         </button>
 
         {/* Modal */}
-        <div
-          style={{
-            background: 'var(--bg-card)',
-            border: '1.5px solid var(--border)',
-            borderRadius: 14,
-            width: '100%',
-            maxHeight: '90vh',
-            display: 'flex', flexDirection: 'row',
-            overflow: 'hidden',
-          }}
-        >
-
-        {/* Linke Seite: Bild + Slideshow */}
         <div style={{
-          width: 600, flexShrink: 0,
+          background: 'var(--bg-card)',
+          border: isMobile ? 'none' : '1.5px solid var(--border)',
+          borderRadius: isMobile ? 0 : 14,
+          width: '100%',
+          height: isMobile ? '100dvh' : 'auto',
+          maxHeight: isMobile ? '100dvh' : '90vh',
+          display: 'flex', flexDirection: isMobile ? 'column' : 'row',
+          overflow: 'hidden',
+        }}>
+
+        {/* Bild-Seite */}
+        <div style={{
+          width: isMobile ? '100%' : 600,
+          height: isMobile ? 260 : 'auto',
+          flexShrink: 0,
           background: 'var(--bg-elev2)',
           display: 'flex', flexDirection: 'column',
           position: 'relative',
@@ -126,13 +126,13 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
           {/* Hauptbild */}
           <div style={{
             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            minHeight: 420, padding: 32, position: 'relative',
+            minHeight: isMobile ? 0 : 420, padding: isMobile ? 16 : 32, position: 'relative',
           }}>
             {currentImg ? (
               <img
                 src={currentImg}
                 alt={deal.name}
-                style={{ maxWidth: '100%', maxHeight: 420, objectFit: 'contain' }}
+                style={{ maxWidth: '100%', maxHeight: isMobile ? 220 : 420, objectFit: 'contain' }}
               />
             ) : (
               <div style={{ fontSize: 56, color: 'var(--border)' }}>📦</div>
