@@ -319,9 +319,9 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
               style={{
                 width: 46, flexShrink: 0,
                 borderRadius: 10, padding: '12px',
-                border: '1.5px solid var(--border)',
-                background: copied ? 'var(--orange-soft)' : 'var(--bg-elev2)',
-                color: copied ? 'var(--orange)' : 'var(--text)',
+                border: `1.5px solid ${copied ? 'var(--orange)' : 'var(--blue)'}`,
+                background: copied ? 'var(--orange-soft)' : 'rgba(0,151,213,0.08)',
+                color: copied ? 'var(--orange)' : 'var(--blue)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 transition: 'all 0.15s',
               }}
