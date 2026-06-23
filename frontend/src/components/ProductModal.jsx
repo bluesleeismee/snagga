@@ -73,16 +73,19 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
         <button
           onClick={onClose}
           style={{
-            position: 'absolute', top: -18, right: -18, zIndex: 20,
-            width: 36, height: 36, borderRadius: '50%',
+            position: 'absolute', top: -14, right: -14, zIndex: 20,
+            width: 28, height: 28, borderRadius: '50%',
             border: '1.5px solid rgba(255,255,255,0.25)',
             background: 'rgba(30,30,30,0.85)',
-            color: '#fff', fontSize: 20,
+            color: '#fff', padding: 0,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            lineHeight: 1,
             boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
           }}
-        >×</button>
+        >
+          <svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+            <line x1="1" y1="1" x2="9" y2="9"/><line x1="9" y1="1" x2="1" y2="9"/>
+          </svg>
+        </button>
 
         {/* Modal */}
         <div
@@ -165,7 +168,8 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
           </span>
 
           {/* Name + Save */}
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 6 }}>
+          {/* Button-Höhe ≈ erste Titelzeile: lineHeight 1.4 × 17px ≈ 24px → alignItems: flex-end richtet Unterkanten aus */}
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginBottom: 6 }}>
             <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)', lineHeight: 1.4, margin: 0, flex: 1 }}>
               {deal.name}
             </h2>
@@ -174,11 +178,13 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
               style={{
                 flexShrink: 0,
                 width: 32, height: 32, borderRadius: 8,
-                border: '1.5px solid var(--border)',
-                background: 'var(--bg-elev)',
-                fontSize: 16, color: saved ? 'var(--orange)' : 'var(--muted)',
+                border: `1.5px solid ${saved ? 'var(--orange)' : 'var(--border)'}`,
+                background: saved ? 'var(--orange-soft)' : 'var(--bg-elev)',
+                fontSize: 17,
+                color: saved ? 'var(--orange)' : '#aaa',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                marginTop: 2,
+                marginBottom: 2,
+                transition: 'all 0.15s',
               }}
             >{saved ? '★' : '☆'}</button>
           </div>
