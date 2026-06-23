@@ -5,6 +5,7 @@ Läuft täglich um 03:00 Uhr und befüllt die PostgreSQL-Datenbank.
 import re
 import random
 import hashlib
+import asyncio
 import httpx
 import feedparser
 from datetime import datetime, timedelta
@@ -138,6 +139,52 @@ def generate_history(asin: str, current: float, avg: float, days: int = 60) -> l
 
 
 # ---------------------------------------------------------------------------
+# Amazon Produktbild via og:image
+# ---------------------------------------------------------------------------
+
+AMAZON_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept-Language": "de-DE,de;q=0.9",
+    "Accept": "text/html,application/xhtml+xml,application/xhtml+xml;q=0.9,*/*;q=0.8",
+}
+
+FALLBACK_IMG_PATTERN = re.compile(r"images-na\.ssl-images-amazon\.com/images/P/")
+
+async def fetch_amazon_image(asin: str, client: httpx.AsyncClient) -> str:
+    """Holt die og:image URL von der Amazon-Produktseite."""
+    try:
+        url = f"https://www.amazon.de/dp/{asin}"
+        resp = await client.get(url, headers=AMAZON_HEADERS, follow_redirects=True, timeout=10)
+        if resp.status_code != 200:
+            return ""
+        # og:image extrahieren
+        m = re.search(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\'](https://[^"\']+)["\']', resp.text)
+        if m:
+            return m.group(1)
+        # Fallback: data-old-hires oder landingImage
+        m = re.search(r'"large":"(https://m\.media-amazon\.com/images/I/[^"]+)"', resp.text)
+        if m:
+            return m.group(1)
+    except Exception as e:
+        print(f"  Bild für {asin} nicht ladbar: {e}")
+    return ""
+
+
+async def enrich_images(products: list[dict], client: httpx.AsyncClient) -> None:
+    """Ergänzt fehlende oder Fallback-Bild-URLs für alle Produkte."""
+    needs_image = [p for p in products if not p["image_url"] or FALLBACK_IMG_PATTERN.search(p["image_url"])]
+    if not needs_image:
+        return
+    print(f"  Hole Bilder für {len(needs_image)} Produkte …")
+    for p in needs_image:
+        img = await fetch_amazon_image(p["asin"], client)
+        if img:
+            p["image_url"] = img
+            print(f"    ✓ {p['asin']}: {img[:60]}…")
+        await asyncio.sleep(1.2)  # Rate-Limiting — 1 Request/Sekunde
+
+
+# ---------------------------------------------------------------------------
 # Seed-Daten (Fallback wenn RSS nicht erreichbar)
 # ---------------------------------------------------------------------------
 
@@ -237,6 +284,10 @@ async def fetch_and_update_deals():
     if not products:
         print("  RSS nicht erreichbar — nutze Seed-Daten")
         products = get_seed_data()
+
+    # Produktbilder ergänzen (og:image von Amazon)
+    async with httpx.AsyncClient(timeout=15) as img_client:
+        await enrich_images(products, img_client)
 
     # In PostgreSQL schreiben
     db = await get_pool()
