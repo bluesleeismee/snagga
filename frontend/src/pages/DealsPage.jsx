@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import DealCard from '../components/DealCard.jsx'
 import Sidebar from '../components/Sidebar.jsx'
+import ProductModal from '../components/ProductModal.jsx'
 import { api } from '../api.js'
 
 const QUALITY_FILTERS = [
@@ -27,6 +28,7 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [view, setView] = useState('grid')
+  const [selectedDeal, setSelectedDeal] = useState(null)
 
   useEffect(() => {
     api.categories().then(setCategories).catch(() => {})
@@ -57,6 +59,14 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {selectedDeal && (
+        <ProductModal
+          deal={selectedDeal}
+          onClose={() => setSelectedDeal(null)}
+          saved={watchlist?.has(selectedDeal.asin)}
+          onSave={onToggleWatch}
+        />
+      )}
 
       {/* TOPBAR */}
       <div style={{
@@ -118,7 +128,25 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
           }}
           title={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
         >
-          {theme === 'dark' ? '☀️' : '🌙'}
+          {theme === 'dark' ? (
+            /* Sun icon */
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <circle cx="8" cy="8" r="3"/>
+              <line x1="8" y1="1" x2="8" y2="2.5"/>
+              <line x1="8" y1="13.5" x2="8" y2="15"/>
+              <line x1="1" y1="8" x2="2.5" y2="8"/>
+              <line x1="13.5" y1="8" x2="15" y2="8"/>
+              <line x1="2.9" y1="2.9" x2="4" y2="4"/>
+              <line x1="12" y1="12" x2="13.1" y2="13.1"/>
+              <line x1="13.1" y1="2.9" x2="12" y2="4"/>
+              <line x1="4" y1="12" x2="2.9" y2="13.1"/>
+            </svg>
+          ) : (
+            /* Moon icon */
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <path d="M13 10A6 6 0 0 1 6 3a6 6 0 1 0 7 7z"/>
+            </svg>
+          )}
         </button>
       </div>
 
@@ -248,6 +276,7 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
                     view={view}
                     saved={watchlist?.has(deal.asin)}
                     onSave={onToggleWatch}
+                    onClick={() => setSelectedDeal(deal)}
                   />
                 ))}
               </div>

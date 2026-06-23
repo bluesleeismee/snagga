@@ -2,22 +2,23 @@ import React, { useState } from 'react'
 import PriceChart from './PriceChart.jsx'
 import { fmtPrice, discount, dealLabel } from '../utils.js'
 
-export default function DealCard({ deal, saved, onSave, view = 'grid' }) {
+export default function DealCard({ deal, saved, onSave, onClick, view = 'grid' }) {
   const [imgError, setImgError] = useState(false)
   const disc = discount(deal.current_price, deal.original_price)
   const label = dealLabel(deal.deal_score)
 
   if (view === 'list') {
-    return <ListCard deal={deal} saved={saved} onSave={onSave} disc={disc} label={label} imgError={imgError} setImgError={setImgError} />
+    return <ListCard deal={deal} saved={saved} onSave={onSave} onClick={onClick} disc={disc} label={label} imgError={imgError} setImgError={setImgError} />
   }
 
-  return <GridCard deal={deal} saved={saved} onSave={onSave} disc={disc} label={label} imgError={imgError} setImgError={setImgError} />
+  return <GridCard deal={deal} saved={saved} onSave={onSave} onClick={onClick} disc={disc} label={label} imgError={imgError} setImgError={setImgError} />
 }
 
 /* ── Grid Card ─────────────────────────────────────────────────── */
-function GridCard({ deal, saved, onSave, disc, label, imgError, setImgError }) {
+function GridCard({ deal, saved, onSave, onClick, disc, label, imgError, setImgError }) {
   return (
     <div
+      onClick={onClick}
       style={{
         background: 'var(--bg-card)', border: '1.5px solid var(--border)',
         borderRadius: 11, overflow: 'hidden',
@@ -35,7 +36,7 @@ function GridCard({ deal, saved, onSave, disc, label, imgError, setImgError }) {
           <div style={{ fontSize: 40, color: 'var(--border)' }}>📦</div>
         )}
         {label && <BadgeOverlay label={label} />}
-        <SaveBtn saved={saved} onSave={() => onSave?.(deal.asin)} />
+        <SaveBtn saved={saved} onSave={e => { e.stopPropagation(); onSave?.(deal.asin) }} />
       </div>
 
       {/* Body */}
@@ -61,9 +62,10 @@ function GridCard({ deal, saved, onSave, disc, label, imgError, setImgError }) {
 }
 
 /* ── List Card ─────────────────────────────────────────────────── */
-function ListCard({ deal, saved, onSave, disc, label, imgError, setImgError }) {
+function ListCard({ deal, saved, onSave, onClick, disc, label, imgError, setImgError }) {
   return (
     <div
+      onClick={onClick}
       style={{
         background: 'var(--bg-card)', border: '1.5px solid var(--border)',
         borderRadius: 11, overflow: 'hidden',
@@ -107,7 +109,7 @@ function ListCard({ deal, saved, onSave, disc, label, imgError, setImgError }) {
 
       {/* Preis + CTA — rechts */}
       <div style={{ width: 160, flexShrink: 0, padding: '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 10, alignItems: 'flex-start' }}>
-        <SaveBtn saved={saved} onSave={() => onSave?.(deal.asin)} style={{ alignSelf: 'flex-end' }} />
+        <SaveBtn saved={saved} onSave={e => { e.stopPropagation(); onSave?.(deal.asin) }} style={{ alignSelf: 'flex-end', position: 'relative', top: 'auto', right: 'auto' }} />
         <PriceRow current={deal.current_price} original={deal.original_price} disc={disc} vertical />
         <CtaButton url={deal.affiliate_url} />
       </div>
@@ -128,7 +130,7 @@ function BadgeOverlay({ label }) {
 function SaveBtn({ saved, onSave, style = {} }) {
   return (
     <button
-      onClick={e => { e.stopPropagation(); onSave?.() }}
+      onClick={onSave}
       style={{ position: 'absolute', top: 8, right: 8, width: 30, height: 30, borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg-card)', fontSize: 15, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: saved ? '#E8500A' : 'var(--muted)', transition: 'color 0.15s', ...style }}
     >
       {saved ? '★' : '☆'}
