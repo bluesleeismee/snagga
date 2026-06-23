@@ -169,15 +169,15 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
             style={{
               position: 'absolute', top: 28, right: 28,
               width: 34, height: 34, borderRadius: 8,
-              border: `1.5px solid ${saved ? 'var(--orange)' : 'var(--border)'}`,
+              border: `1.5px solid ${saved ? 'var(--star-saved)' : 'var(--border)'}`,
               background: saved ? 'var(--orange-soft)' : 'var(--bg-elev2)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               transition: 'all 0.15s',
             }}
           >
             <svg width="18" height="18" viewBox="0 0 24 24"
-              fill={saved ? 'var(--orange)' : 'none'}
-              stroke={saved ? 'var(--orange)' : 'var(--muted)'}
+              fill={saved ? 'var(--star-saved)' : 'none'}
+              stroke={saved ? 'var(--star-saved)' : 'var(--muted)'}
               strokeWidth="1.8" strokeLinejoin="round">
               <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
             </svg>
@@ -212,30 +212,27 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
             )}
           </div>
 
-          {/* Prime + Allzeit-Tief nebeneinander, Unterkante bündig */}
-          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 14 }}>
-            <span style={{ fontSize: 11, color: 'var(--blue)', fontWeight: 700, letterSpacing: 0.5 }}>
-              {deal.prime ? '✦ Prime' : ''}
-            </span>
-            <Stat label="Allzeit-Tief" value={fmtPrice(deal.all_time_low)} align="right" />
+          {/* Prime + Deal-Label nebeneinander, Unterkante bündig */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+            {deal.prime && (
+              <span style={{ fontSize: 11, color: 'var(--blue)', fontWeight: 700, letterSpacing: 0.5 }}>✦ Prime</span>
+            )}
+            {label && (
+              <div style={{
+                fontSize: 10.5, fontWeight: 700, padding: '3px 9px', borderRadius: 5,
+                background: label.bg, color: label.color, border: label.border || 'none',
+              }}>
+                {label.text}
+              </div>
+            )}
           </div>
 
           {/* Divider */}
           <div style={{ height: 1, background: 'var(--border)', margin: '0 0 14px' }} />
 
-          {/* Deal-Label + Chart */}
+          {/* Chart */}
           {deal.price_history?.length > 1 && (
             <div style={{ marginBottom: 18 }}>
-              {label && (
-                <div style={{
-                  display: 'inline-block',
-                  fontSize: 10.5, fontWeight: 700, padding: '3px 9px', borderRadius: 5,
-                  background: label.bg, color: label.color, border: label.border || 'none',
-                  marginBottom: 8,
-                }}>
-                  {label.text}
-                </div>
-              )}
               <PriceChart
                 prices={deal.price_history}
                 avgPrice={deal.avg_price}
@@ -247,7 +244,6 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
 
           {/* Kennzahlen */}
           <div style={{ display: 'flex', gap: 20, marginBottom: 24 }}>
-            <Stat label="Ø Preis" value={fmtPrice(deal.avg_price)} />
             {deal.rating && <Stat label="Bewertung" value={`★ ${Number(deal.rating).toFixed(1)}`} />}
             {deal.reviews && <Stat label="Reviews" value={deal.reviews.toLocaleString('de')} />}
           </div>

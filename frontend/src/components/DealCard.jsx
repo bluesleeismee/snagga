@@ -131,9 +131,22 @@ function SaveBtn({ saved, onSave, style = {} }) {
   return (
     <button
       onClick={onSave}
-      style={{ position: 'absolute', top: 8, right: 8, width: 30, height: 30, borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg-card)', fontSize: 15, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: saved ? '#E8500A' : 'var(--muted)', transition: 'color 0.15s', ...style }}
+      style={{
+        position: 'absolute', top: 8, right: 8,
+        width: 30, height: 30, borderRadius: 7,
+        border: `1px solid ${saved ? 'var(--star-saved)' : 'var(--border)'}`,
+        background: saved ? 'rgba(var(--star-saved-rgb, 232,80,10),0.1)' : 'var(--bg-card)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        transition: 'all 0.15s',
+        ...style,
+      }}
     >
-      {saved ? '★' : '☆'}
+      <svg width="14" height="14" viewBox="0 0 24 24"
+        fill={saved ? 'var(--star-saved)' : 'none'}
+        stroke={saved ? 'var(--star-saved)' : 'var(--muted)'}
+        strokeWidth="1.8" strokeLinejoin="round">
+        <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
+      </svg>
     </button>
   )
 }

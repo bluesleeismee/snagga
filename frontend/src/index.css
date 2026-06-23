@@ -37,6 +37,7 @@ body {
   --cyan:         #0097D5;
   --cyan-soft:    rgba(0, 151, 213, 0.10);
   --yellow:       #D97706;
+  --star-saved:   #E8500A;
 }
 
 /* ── Tokens — Dark ──────────────────────────────────────────────── */
@@ -62,6 +63,7 @@ body {
   --cyan:         #22D3EE;
   --cyan-soft:    rgba(34, 211, 238, 0.12);
   --yellow:       #F59E0B;
+  --star-saved:   #F5C518;
 }
 
 /* ── Scrollbar hide ─────────────────────────────────────────────── */
