@@ -21,81 +21,20 @@ export default function DealCard({ deal, saved, onSave, onClick, view = 'grid' }
 
 /* ── Grid Card ─────────────────────────────────────────────────── */
 function GridCard({ deal, saved, onSave, onClick, disc, label, imgError, setImgError }) {
-  const [imgHover, setImgHover] = useState(false)
-
   return (
     <div
       onClick={onClick}
-      style={{
-        background: 'var(--bg-card)', border: '1.5px solid var(--border)',
-        borderRadius: 11, overflow: 'hidden',
-        display: 'flex', flexDirection: 'column',
-        transition: 'box-shadow 0.2s, border-color 0.2s, transform 0.2s',
-        cursor: 'pointer',
-      }}
-      onMouseEnter={e => {
-        e.currentTarget.style.boxShadow = '0 6px 24px var(--shadow-hover)'
-        e.currentTarget.style.borderColor = 'var(--border-hover)'
-        e.currentTarget.style.transform = 'translateY(-2px)'
-      }}
-      onMouseLeave={e => {
-        e.currentTarget.style.boxShadow = 'none'
-        e.currentTarget.style.borderColor = 'var(--border)'
-        e.currentTarget.style.transform = 'translateY(0)'
-      }}
+      style={{ background: 'var(--bg-card)', border: '1.5px solid var(--border)', borderRadius: 11, overflow: 'hidden', display: 'flex', flexDirection: 'column', transition: 'box-shadow 0.2s, border-color 0.2s, transform 0.2s', cursor: 'pointer' }}
+      onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 6px 24px var(--shadow-hover)'; e.currentTarget.style.borderColor = 'var(--border-hover)'; e.currentTarget.style.transform = 'translateY(-2px)' }}
+      onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.transform = 'translateY(0)' }}
     >
       {/* Bild */}
-      <div
-        style={{ width: '100%', aspectRatio: '4/3', background: 'var(--bg-elev2)', position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-        onMouseEnter={() => setImgHover(true)}
-        onMouseLeave={() => setImgHover(false)}
-      >
+      <div style={{ width: '100%', aspectRatio: '4/3', background: 'var(--bg-elev2)', position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         {deal.image_url && !imgError
-          ? <img
-              src={deal.image_url} alt={deal.name}
-              onError={() => setImgError(true)}
-              style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 8, transition: 'transform 0.3s ease', transform: imgHover ? 'scale(1.06)' : 'scale(1)' }}
-            />
+          ? <img src={deal.image_url} alt={deal.name} onError={() => setImgError(true)} style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 8 }} />
           : <div style={{ fontSize: 40, color: 'var(--border)' }}>📦</div>}
-
         {label && <BadgeOverlay label={label} />}
         <SaveBtn saved={saved} onSave={e => { e.stopPropagation(); onSave?.(deal.asin) }} />
-
-        {/* Hover-Overlay mit Buttons */}
-        <div
-          onClick={e => e.stopPropagation()}
-          style={{
-            position: 'absolute', inset: 0,
-            background: 'rgba(0,0,0,0.45)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            opacity: imgHover ? 1 : 0,
-            transition: 'opacity 0.2s',
-            pointerEvents: imgHover ? 'auto' : 'none',
-          }}
-        >
-          {/* Warenkorb */}
-          <a href={cartUrl(deal.asin)} target="_blank" rel="noopener noreferrer"
-            style={overlayBtn('var(--orange)')}
-            title="In den Warenkorb"
-            onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
-            onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
-              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
-            </svg>
-          </a>
-          {/* Zum Deal */}
-          <a href={deal.affiliate_url} target="_blank" rel="noopener noreferrer"
-            style={{ ...overlayBtn('#fff'), color: '#111', fontSize: 12, fontWeight: 700, padding: '9px 14px', whiteSpace: 'nowrap' }}
-            onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
-            onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-          >
-            Zum Deal →
-          </a>
-          {/* Teilen */}
-          <ShareOverlayBtn asin={deal.asin} name={deal.name} />
-        </div>
       </div>
 
       {/* Body */}
@@ -227,7 +166,7 @@ function ActionButtons({ deal, compact = false }) {
         onMouseEnter={e => e.currentTarget.style.opacity = '0.82'}
         onMouseLeave={e => e.currentTarget.style.opacity = '1'}
       >
-        Zum Deal →
+        Zum Produkt →
       </a>
 
       {/* Teilen */}
@@ -264,38 +203,6 @@ function SaveBtn({ saved, onSave, style = {} }) {
       <svg width="14" height="14" viewBox="0 0 24 24" fill={saved ? 'var(--star-saved)' : 'none'} stroke={saved ? 'var(--star-saved)' : 'var(--muted)'} strokeWidth="1.8" strokeLinejoin="round">
         <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
       </svg>
-    </button>
-  )
-}
-
-function overlayBtn(bg) {
-  return {
-    width: 38, height: 38, borderRadius: 9,
-    background: bg, color: '#fff',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    transition: 'opacity 0.15s', flexShrink: 0,
-  }
-}
-
-function ShareOverlayBtn({ asin, name }) {
-  const [copied, setCopied] = useState(false)
-  function handle(e) {
-    e.stopPropagation()
-    const url = shareUrl(asin)
-    if (navigator.share) { navigator.share({ title: name, url }).catch(() => {}) }
-    else { navigator.clipboard.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) }) }
-  }
-  return (
-    <button onClick={handle} title={copied ? 'Kopiert!' : 'Teilen'}
-      style={{ ...overlayBtn('rgba(255,255,255,0.18)'), border: '1.5px solid rgba(255,255,255,0.35)' }}
-    >
-      {copied
-        ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20,6 9,17 4,12"/></svg>
-        : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-          </svg>
-      }
     </button>
   )
 }

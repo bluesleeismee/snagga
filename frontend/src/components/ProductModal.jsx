@@ -309,7 +309,7 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
               onMouseEnter={e => e.currentTarget.style.opacity = '0.82'}
               onMouseLeave={e => e.currentTarget.style.opacity = '1'}
             >
-              Zum Deal →
+              Zum Produkt →
             </a>
 
             {/* Teilen */}
