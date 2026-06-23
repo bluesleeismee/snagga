@@ -47,10 +47,24 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
     return () => clearTimeout(t)
   }, [loadDeals])
 
+  /* ── Deep-Link: ?asin=... beim Seitenaufruf ── */
+  useEffect(() => {
+    const asin = new URLSearchParams(window.location.search).get('asin')
+    if (!asin) return
+    api.product(asin)
+      .then(deal => {
+        setSelectedDeal(deal)
+        window.history.replaceState({ snagga: 'modal', asin: deal.asin }, '', `?asin=${asin}`)
+      })
+      .catch(() => {
+        window.history.replaceState({}, '', '/')
+      })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   /* ── History-basierte Modal-Navigation (Swipe-Back schliesst Modal) ── */
   const openDeal = useCallback((deal) => {
     setSelectedDeal(deal)
-    window.history.pushState({ snagga: 'modal', asin: deal.asin }, '')
+    window.history.pushState({ snagga: 'modal', asin: deal.asin }, '', `?asin=${deal.asin}`)
   }, [])
 
   const closeModal = useCallback(() => {
@@ -61,6 +75,8 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
     } else if (s === 'modal') {
       window.history.back()
     } else {
+      // Kein History-Eintrag (z.B. direkter Deep-Link) — URL manuell bereinigen
+      window.history.replaceState({}, '', '/')
       setSelectedDeal(null)
     }
   }, [])

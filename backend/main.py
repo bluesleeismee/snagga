@@ -3,13 +3,18 @@ Snagga — FastAPI Backend
 Endpoints: GET /deals  GET /product/{asin}  GET /categories  POST /refresh
 """
 import os
+import time
 from contextlib import asynccontextmanager
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 load_dotenv()
 
@@ -19,10 +24,11 @@ from scheduler import create_scheduler
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
-# Rate-Limiting für /refresh
-import time
-_last_refresh: float = 0
-REFRESH_COOLDOWN = 300  # 5 Minuten
+# ---------------------------------------------------------------------------
+# Rate Limiter
+# ---------------------------------------------------------------------------
+
+limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
 
 
 # ---------------------------------------------------------------------------
@@ -81,6 +87,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Snagga API", version="1.0.0", lifespan=lifespan)
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -127,7 +136,9 @@ async def row_to_product(row, conn, history_limit: int = 30) -> Product:
 # ---------------------------------------------------------------------------
 
 @app.get("/deals", response_model=list[Product])
+@limiter.limit("60/minute")
 async def get_deals(
+    request: Request,
     category: Optional[str] = Query(None),
     sort_by:  str           = Query("score", pattern="^(score|discount|price_asc|price_desc|newest)$"),
     limit:    int           = Query(50, ge=1, le=200),
@@ -170,7 +181,8 @@ async def get_deals(
 
 
 @app.get("/product/{asin}", response_model=Product)
-async def get_product(asin: str):
+@limiter.limit("60/minute")
+async def get_product(request: Request, asin: str):
     """Gibt ein einzelnes Produkt mit voller Preishistorie zurück."""
     pool = await get_pool()
     async with pool.acquire() as conn:
@@ -181,7 +193,8 @@ async def get_product(asin: str):
 
 
 @app.get("/categories", response_model=list[str])
-async def get_categories():
+@limiter.limit("30/minute")
+async def get_categories(request: Request):
     """Gibt alle vorhandenen Kategorien zurück."""
     pool = await get_pool()
     async with pool.acquire() as conn:
@@ -191,21 +204,16 @@ async def get_categories():
 
 
 @app.post("/refresh")
-async def refresh_deals():
-    """Manuelles Refresh der Deal-Daten — max. alle 5 Minuten."""
-    global _last_refresh
-    now = time.time()
-    if now - _last_refresh < REFRESH_COOLDOWN:
-        wait = int(REFRESH_COOLDOWN - (now - _last_refresh))
-        from fastapi import HTTPException
-        raise HTTPException(status_code=429, detail=f"Bitte {wait}s warten.")
-    _last_refresh = now
+@limiter.limit("1/5minutes")
+async def refresh_deals(request: Request):
+    """Manuelles Refresh der Deal-Daten — max. alle 5 Minuten pro IP."""
     count = await fetch_and_update_deals()
     return {"message": f"{count} Produkte aktualisiert"}
 
 
 @app.api_route("/health", methods=["GET", "HEAD"])
 async def health():
+    """Health-Check für UptimeRobot — kein Rate-Limit."""
     pool = await get_pool()
     async with pool.acquire() as conn:
         count = await conn.fetchval("SELECT COUNT(*) FROM products")
