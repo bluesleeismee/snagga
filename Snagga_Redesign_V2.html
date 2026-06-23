@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Snagga Redesign V2 — Hell</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #F8F8F6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif; color: #1A1A1A; font-size: 14px; }
+
+  /* ── TOPBAR ── */
+  .topbar {
+    background: #fff;
+    border-bottom: 1px solid #E8E8E4;
+    padding: 0 28px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .logo {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.8px;
+    color: #1A1A1A;
+    white-space: nowrap;
+  }
+  .logo span { color: #E8500A; }
+  .logo-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #E8500A;
+    margin-right: 6px;
+    vertical-align: middle;
+    margin-bottom: 2px;
+  }
+  .search-wrap {
+    flex: 1;
+    max-width: 600px;
+    position: relative;
+  }
+  .search-wrap input {
+    width: 100%;
+    background: #F2F2EF;
+    border: 1px solid #E2E2DE;
+    border-radius: 10px;
+    padding: 9px 14px 9px 38px;
+    font-size: 14px;
+    color: #1A1A1A;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .search-wrap input:focus { border-color: #E8500A; background: #fff; }
+  .search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #999;
+    font-size: 16px;
+  }
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: auto;
+    white-space: nowrap;
+  }
+  .topbar-badge {
+    background: #FFF3ED;
+    color: #E8500A;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 11px;
+    border-radius: 7px;
+    border: 1px solid #FFD9C4;
+  }
+
+  /* ── LAYOUT ── */
+  .layout {
+    display: flex;
+    min-height: calc(100vh - 60px);
+  }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: 210px;
+    flex-shrink: 0;
+    background: #fff;
+    border-right: 1px solid #E8E8E4;
+    padding: 20px 0;
+    position: sticky;
+    top: 60px;
+    height: calc(100vh - 60px);
+    overflow-y: auto;
+  }
+  .sidebar-section { margin-bottom: 8px; }
+  .sidebar-title {
+    font-size: 10px;
+    font-weight: 700;
+    color: #999;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    padding: 0 18px 8px;
+    margin-top: 16px;
+  }
+  .sidebar-item {
+    padding: 8px 18px;
+    font-size: 13px;
+    color: #555;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-radius: 0;
+    transition: background 0.1s;
+  }
+  .sidebar-item:hover { background: #F5F5F2; color: #1A1A1A; }
+  .sidebar-item.active {
+    background: #FFF3ED;
+    color: #E8500A;
+    font-weight: 600;
+    border-right: 2px solid #E8500A;
+  }
+  .sidebar-item .count {
+    font-size: 11px;
+    color: #C0C0BA;
+    font-weight: 400;
+  }
+  .sidebar-item.active .count { color: #F4A97A; }
+  .sidebar-divider { height: 1px; background: #F0F0EC; margin: 8px 18px; }
+
+  /* Deal-Label Filter */
+  .label-filter {
+    padding: 0 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 4px;
+  }
+  .lf-item {
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 7px;
+    border: 1px solid #E8E8E4;
+    color: #666;
+    background: #FAFAF8;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .lf-item:hover { border-color: #E8500A; color: #E8500A; }
+  .lf-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── MAIN ── */
+  .main { flex: 1; padding: 22px 24px; min-width: 0; }
+
+  .main-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 18px;
+  }
+  .main-title { font-size: 18px; font-weight: 700; color: #1A1A1A; }
+  .main-count { font-size: 13px; color: #999; font-weight: 400; margin-left: 8px; }
+  .sort-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #888;
+  }
+  .sort-btn {
+    padding: 5px 11px;
+    border-radius: 7px;
+    border: 1px solid #E2E2DE;
+    background: #fff;
+    color: #555;
+    font-size: 12px;
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .sort-btn.active {
+    background: #1A1A1A;
+    color: #fff;
+    border-color: #1A1A1A;
+  }
+
+  /* ── PRODUCT GRID ── */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+  }
+
+  /* ── PRODUCT CARD ── */
+  .card {
+    background: #fff;
+    border: 1px solid #E8E8E4;
+    border-radius: 12px;
+    overflow: hidden;
+    transition: box-shadow 0.2s, border-color 0.2s;
+    cursor: pointer;
+  }
+  .card:hover {
+    box-shadow: 0 4px 20px rgba(0,0,0,0.07);
+    border-color: #D0D0CA;
+  }
+  .card-img {
+    width: 100%;
+    aspect-ratio: 1;
+    background: #F5F5F2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .card-img-placeholder {
+    font-size: 48px;
+    color: #DDD;
+  }
+  /* Deal Label Badge auf dem Bild */
+  .deal-label {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 4px 8px;
+    border-radius: 5px;
+    letter-spacing: 0.1px;
+  }
+  .label-atl { background: #1A1A1A; color: #fff; } /* Allzeit-Tief */
+  .label-rare { background: #E8500A; color: #fff; } /* Seltene Gelegenheit */
+  .label-good { background: #2D7D46; color: #fff; } /* Sehr guter Deal */
+  .label-ok { background: #F0F0EC; color: #666; border: 1px solid #E0E0DB; } /* Guter Deal */
+
+  .card-body { padding: 12px 13px 14px; }
+  .card-brand { font-size: 11px; color: #999; font-weight: 500; margin-bottom: 3px; }
+  .card-name {
+    font-size: 13px;
+    color: #1A1A1A;
+    font-weight: 500;
+    line-height: 1.45;
+    margin-bottom: 4px;
+    /* Genug Platz — kein harter Abschnitt bei kurzen Texten */
+    min-height: 38px;
+  }
+  .card-cat {
+    font-size: 11px;
+    color: #B0B0AA;
+    margin-bottom: 10px;
+  }
+
+  /* Preis */
+  .card-price-row {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    margin-bottom: 10px;
+  }
+  .price-now { font-size: 22px; font-weight: 800; color: #1A1A1A; letter-spacing: -0.5px; }
+  .price-was { font-size: 13px; color: #C0C0BA; text-decoration: line-through; }
+  .price-off {
+    font-size: 12px;
+    font-weight: 700;
+    color: #E8500A;
+    background: #FFF3ED;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  /* Linienchart */
+  .chart-wrap {
+    margin-bottom: 11px;
+    position: relative;
+  }
+  .chart-label-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: #B8B8B2;
+    margin-bottom: 3px;
+  }
+  .chart-svg { width: 100%; height: 44px; display: block; }
+  .chart-bottom {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: #C8C8C2;
+    margin-top: 2px;
+  }
+
+  /* CTA Button */
+  .card-btn {
+    width: 100%;
+    background: #1A1A1A;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 9px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+    letter-spacing: 0.1px;
+  }
+  .card-btn:hover { background: #333; }
+
+  /* Prime badge */
+  .prime-badge {
+    display: inline-block;
+    font-size: 10px;
+    color: #00A8E0;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo"><span class="logo-dot"></span>SNAG<span>GA</span></div>
+  <div class="search-wrap">
+    <span class="search-icon">🔍</span>
+    <input type="text" placeholder="Produkt, Marke oder Kategorie suchen…" />
+  </div>
+  <div class="topbar-right">
+    <div class="topbar-badge">🔥 4 Allzeit-Tiefs heute</div>
+    <div style="font-size:13px;color:#999;">☾ Dark mode</div>
+  </div>
+</div>
+
+<!-- LAYOUT -->
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-title">Kategorien</div>
+      <div class="sidebar-item active">Alle Deals <span class="count">47</span></div>
+      <div class="sidebar-item">Elektronik <span class="count">18</span></div>
+      <div class="sidebar-item">Gaming <span class="count">8</span></div>
+      <div class="sidebar-item">Haushalt <span class="count">7</span></div>
+      <div class="sidebar-item">Küche <span class="count">5</span></div>
+      <div class="sidebar-item">Sport <span class="count">4</span></div>
+      <div class="sidebar-item">Beauty <span class="count">3</span></div>
+      <div class="sidebar-item">Sonstiges <span class="count">2</span></div>
+    </div>
+
+    <div class="sidebar-divider"></div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-title">Deal-Qualität</div>
+      <div class="label-filter">
+        <div class="lf-item">
+          <div class="lf-dot" style="background:#1A1A1A;"></div>
+          Allzeit-Tief
+        </div>
+        <div class="lf-item">
+          <div class="lf-dot" style="background:#E8500A;"></div>
+          Seltene Gelegenheit
+        </div>
+        <div class="lf-item">
+          <div class="lf-dot" style="background:#2D7D46;"></div>
+          Sehr guter Deal
+        </div>
+        <div class="lf-item">
+          <div class="lf-dot" style="background:#888;"></div>
+          Guter Deal
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-divider"></div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-title">Sortieren</div>
+      <div class="sidebar-item active">Bester Deal</div>
+      <div class="sidebar-item">Grösste Rabatte</div>
+      <div class="sidebar-item">Günstigste zuerst</div>
+      <div class="sidebar-item">Neueste zuerst</div>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="main-header">
+      <div>
+        <span class="main-title">Alle Deals</span>
+        <span class="main-count">47 Produkte</span>
+      </div>
+      <div class="sort-row">
+        Ansicht:
+        <button class="sort-btn active">⊞ Grid</button>
+        <button class="sort-btn">☰ Liste</button>
+      </div>
+    </div>
+
+    <div class="grid">
+
+      <!-- CARD 1 — Allzeit-Tief -->
+      <div class="card">
+        <div class="card-img">
+          <div class="card-img-placeholder">🎧</div>
+          <div class="deal-label label-atl">Allzeit-Tief</div>
+        </div>
+        <div class="card-body">
+          <div class="card-brand">Sony</div>
+          <div class="card-name">WH-1000XM5 Noise Cancelling Kopfhörer, 30h Akku</div>
+          <div class="card-cat">Elektronik · Kopfhörer</div>
+          <div class="card-price-row">
+            <span class="price-now">248 €</span>
+            <span class="price-was">379 €</span>
+            <span class="price-off">–34%</span>
+          </div>
+          <div class="chart-wrap">
+            <div class="chart-label-row">
+              <span>Preisverlauf (60 Tage)</span>
+              <span style="color:#2D7D46;font-weight:600;">▼ Aktuell günstigster</span>
+            </div>
+            <svg class="chart-svg" viewBox="0 0 200 44" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#E8500A" stop-opacity="0.12"/>
+                  <stop offset="100%" stop-color="#E8500A" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <path d="M0,15 C20,14 30,20 50,18 C70,16 80,10 100,12 C120,14 130,22 150,20 C170,18 180,16 200,38" fill="url(#g1)"/>
+              <path d="M0,15 C20,14 30,20 50,18 C70,16 80,10 100,12 C120,14 130,22 150,20 C170,18 180,16 200,38" fill="none" stroke="#E8500A" stroke-width="1.5"/>
+              <circle cx="200" cy="38" r="3" fill="#E8500A"/>
+            </svg>
+            <div class="chart-bottom">
+              <span>vor 60 Tagen</span>
+              <span>Ø 310 €</span>
+              <span>heute</span>
+            </div>
+          </div>
+          <div class="prime-badge">✦ Prime</div>
+          <button class="card-btn">Zum Deal auf Amazon →</button>
+        </div>
+      </div>
+
+      <!-- CARD 2 — Seltene Gelegenheit -->
+      <div class="card">
+        <div class="card-img">
+          <div class="card-img-placeholder">🎮</div>
+          <div class="deal-label label-rare">Seltene Gelegenheit</div>
+        </div>
+        <div class="card-body">
+          <div class="card-brand">Nintendo</div>
+          <div class="card-name">Switch OLED-Modell mit weissem Joy-Con, 64 GB</div>
+          <div class="card-cat">Gaming · Konsolen</div>
+          <div class="card-price-row">
+            <span class="price-now">299 €</span>
+            <span class="price-was">349 €</span>
+            <span class="price-off">–14%</span>
+          </div>
+          <div class="chart-wrap">
+            <div class="chart-label-row">
+              <span>Preisverlauf (60 Tage)</span>
+              <span style="color:#E8500A;font-weight:600;">▼ Selten so tief</span>
+            </div>
+            <svg class="chart-svg" viewBox="0 0 200 44" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#E8500A" stop-opacity="0.10"/>
+                  <stop offset="100%" stop-color="#E8500A" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <path d="M0,10 C30,10 40,12 70,11 C100,10 110,12 140,11 C160,10 175,14 200,34" fill="url(#g2)"/>
+              <path d="M0,10 C30,10 40,12 70,11 C100,10 110,12 140,11 C160,10 175,14 200,34" fill="none" stroke="#E8500A" stroke-width="1.5"/>
+              <circle cx="200" cy="34" r="3" fill="#E8500A"/>
+            </svg>
+            <div class="chart-bottom">
+              <span>vor 60 Tagen</span>
+              <span>Ø 335 €</span>
+              <span>heute</span>
+            </div>
+          </div>
+          <div class="prime-badge">✦ Prime</div>
+          <button class="card-btn">Zum Deal auf Amazon →</button>
+        </div>
+      </div>
+
+      <!-- CARD 3 — Sehr guter Deal -->
+      <div class="card">
+        <div class="card-img">
+          <div class="card-img-placeholder">🎧</div>
+          <div class="deal-label label-good">Sehr guter Deal</div>
+        </div>
+        <div class="card-body">
+          <div class="card-brand">Apple</div>
+          <div class="card-name">AirPods Pro (2. Generation) mit MagSafe Ladecase</div>
+          <div class="card-cat">Elektronik · Kopfhörer</div>
+          <div class="card-price-row">
+            <span class="price-now">189 €</span>
+            <span class="price-was">279 €</span>
+            <span class="price-off">–32%</span>
+          </div>
+          <div class="chart-wrap">
+            <div class="chart-label-row">
+              <span>Preisverlauf (60 Tage)</span>
+              <span style="color:#2D7D46;font-weight:600;">▼ Deutlich unter Ø</span>
+            </div>
+            <svg class="chart-svg" viewBox="0 0 200 44" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="g3" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#E8500A" stop-opacity="0.10"/>
+                  <stop offset="100%" stop-color="#E8500A" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <path d="M0,18 C25,16 40,22 60,19 C85,15 95,12 120,16 C145,20 160,18 180,14 C190,12 195,18 200,30" fill="url(#g3)"/>
+              <path d="M0,18 C25,16 40,22 60,19 C85,15 95,12 120,16 C145,20 160,18 180,14 C190,12 195,18 200,30" fill="none" stroke="#E8500A" stroke-width="1.5"/>
+              <circle cx="200" cy="30" r="3" fill="#E8500A"/>
+            </svg>
+            <div class="chart-bottom">
+              <span>vor 60 Tagen</span>
+              <span>Ø 245 €</span>
+              <span>heute</span>
+            </div>
+          </div>
+          <div class="prime-badge">✦ Prime</div>
+          <button class="card-btn">Zum Deal auf Amazon →</button>
+        </div>
+      </div>
+
+      <!-- CARD 4 — Guter Deal -->
+      <div class="card">
+        <div class="card-img">
+          <div class="card-img-placeholder">🧹</div>
+          <div class="deal-label label-ok">Guter Deal</div>
+        </div>
+        <div class="card-body">
+          <div class="card-brand">Dyson</div>
+          <div class="card-name">V15 Detect Absolute Kabelloser Staubsauger mit Laser</div>
+          <div class="card-cat">Haushalt · Staubsauger</div>
+          <div class="card-price-row">
+            <span class="price-now">499 €</span>
+            <span class="price-was">699 €</span>
+            <span class="price-off">–29%</span>
+          </div>
+          <div class="chart-wrap">
+            <div class="chart-label-row">
+              <span>Preisverlauf (60 Tage)</span>
+              <span style="color:#888;font-weight:600;">▼ Leicht unter Ø</span>
+            </div>
+            <svg class="chart-svg" viewBox="0 0 200 44" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="g4" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#E8500A" stop-opacity="0.08"/>
+                  <stop offset="100%" stop-color="#E8500A" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <path d="M0,12 C20,14 35,10 60,13 C90,16 105,20 130,18 C155,16 170,20 190,22 C195,23 198,24 200,26" fill="url(#g4)"/>
+              <path d="M0,12 C20,14 35,10 60,13 C90,16 105,20 130,18 C155,16 170,20 190,22 C195,23 198,24 200,26" fill="none" stroke="#E8500A" stroke-width="1.5"/>
+              <circle cx="200" cy="26" r="3" fill="#E8500A"/>
+            </svg>
+            <div class="chart-bottom">
+              <span>vor 60 Tagen</span>
+              <span>Ø 540 €</span>
+              <span>heute</span>
+            </div>
+          </div>
+          <div class="prime-badge">✦ Prime</div>
+          <button class="card-btn">Zum Deal auf Amazon →</button>
+        </div>
+      </div>
+
+      <!-- CARD 5 -->
+      <div class="card">
+        <div class="card-img">
+          <div class="card-img-placeholder">📱</div>
+          <div class="deal-label label-atl">Allzeit-Tief</div>
+        </div>
+        <div class="card-body">
+          <div class="card-brand">Apple</div>
+          <div class="card-name">iPad (10. Generation) 64 GB Wi-Fi, Space Gray</div>
+          <div class="card-cat">Elektronik · Tablets</div>
+          <div class="card-price-row">
+            <span class="price-now">379 €</span>
+            <span class="price-was">529 €</span>
+            <span class="price-off">–28%</span>
+          </div>
+          <div class="chart-wrap">
+            <div class="chart-label-row">
+              <span>Preisverlauf (60 Tage)</span>
+              <span style="color:#2D7D46;font-weight:600;">▼ Aktuell günstigster</span>
+            </div>
+            <svg class="chart-svg" viewBox="0 0 200 44" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="g5" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#E8500A" stop-opacity="0.12"/>
+                  <stop offset="100%" stop-color="#E8500A" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <path d="M0,8 C30,8 50,14 80,12 C110,10 120,8 150,10 C170,12 185,16 200,36" fill="url(#g5)"/>
+              <path d="M0,8 C30,8 50,14 80,12 C110,10 120,8 150,10 C170,12 185,16 200,36" fill="none" stroke="#E8500A" stroke-width="1.5"/>
+              <circle cx="200" cy="36" r="3" fill="#E8500A"/>
+            </svg>
+            <div class="chart-bottom">
+              <span>vor 60 Tagen</span>
+              <span>Ø 460 €</span>
+              <span>heute</span>
+            </div>
+          </div>
+          <div class="prime-badge">✦ Prime</div>
+          <button class="card-btn">Zum Deal auf Amazon →</button>
+        </div>
+      </div>
+
+      <!-- CARD 6 -->
+      <div class="card">
+        <div class="card-img">
+          <div class="card-img-placeholder">☕</div>
+          <div class="deal-label label-rare">Seltene Gelegenheit</div>
+        </div>
+        <div class="card-body">
+          <div class="card-brand">Nespresso</div>
+          <div class="card-name">Vertuo Pop Kaffeekapselmaschine, 1260W, Mango Yellow</div>
+          <div class="card-cat">Küche · Kaffeemaschinen</div>
+          <div class="card-price-row">
+            <span class="price-now">59 €</span>
+            <span class="price-was">109 €</span>
+            <span class="price-off">–45%</span>
+          </div>
+          <div class="chart-wrap">
+            <div class="chart-label-row">
+              <span>Preisverlauf (60 Tage)</span>
+              <span style="color:#E8500A;font-weight:600;">▼ Selten so tief</span>
+            </div>
+            <svg class="chart-svg" viewBox="0 0 200 44" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="g6" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#E8500A" stop-opacity="0.10"/>
+                  <stop offset="100%" stop-color="#E8500A" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <path d="M0,10 C40,10 60,12 90,10 C120,8 130,10 155,9 C175,8 185,10 200,32" fill="url(#g6)"/>
+              <path d="M0,10 C40,10 60,12 90,10 C120,8 130,10 155,9 C175,8 185,10 200,32" fill="none" stroke="#E8500A" stroke-width="1.5"/>
+              <circle cx="200" cy="32" r="3" fill="#E8500A"/>
+            </svg>
+            <div class="chart-bottom">
+              <span>vor 60 Tagen</span>
+              <span>Ø 89 €</span>
+              <span>heute</span>
+            </div>
+          </div>
+          <button class="card-btn">Zum Deal auf Amazon →</button>
+        </div>
+      </div>
+
+      <!-- CARD 7 -->
+      <div class="card">
+        <div class="card-img">
+          <div class="card-img-placeholder">🎮</div>
+          <div class="deal-label label-good">Sehr guter Deal</div>
+        </div>
+        <div class="card-body">
+          <div class="card-brand">Sony</div>
+          <div class="card-name">DualSense Wireless Controller für PlayStation 5</div>
+          <div class="card-cat">Gaming · Controller</div>
+          <div class="card-price-row">
+            <span class="price-now">49 €</span>
+            <span class="price-was">69 €</span>
+            <span class="price-off">–29%</span>
+          </div>
+          <div class="chart-wrap">
+            <div class="chart-label-row">
+              <span>Preisverlauf (60 Tage)</span>
+              <span style="color:#2D7D46;font-weight:600;">▼ Deutlich unter Ø</span>
+            </div>
+            <svg class="chart-svg" viewBox="0 0 200 44" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="g7" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#E8500A" stop-opacity="0.10"/>
+                  <stop offset="100%" stop-color="#E8500A" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <path d="M0,14 C25,12 45,18 70,16 C95,14 105,10 130,13 C155,16 170,14 190,18 C195,19 198,22 200,28" fill="url(#g7)"/>
+              <path d="M0,14 C25,12 45,18 70,16 C95,14 105,10 130,13 C155,16 170,14 190,18 C195,19 198,22 200,28" fill="none" stroke="#E8500A" stroke-width="1.5"/>
+              <circle cx="200" cy="28" r="3" fill="#E8500A"/>
+            </svg>
+            <div class="chart-bottom">
+              <span>vor 60 Tagen</span>
+              <span>Ø 62 €</span>
+              <span>heute</span>
+            </div>
+          </div>
+          <div class="prime-badge">✦ Prime</div>
+          <button class="card-btn">Zum Deal auf Amazon →</button>
+        </div>
+      </div>
+
+      <!-- CARD 8 -->
+      <div class="card">
+        <div class="card-img">
+          <div class="card-img-placeholder">💡</div>
+          <div class="deal-label label-ok">Guter Deal</div>
+        </div>
+        <div class="card-body">
+          <div class="card-brand">Philips</div>
+          <div class="card-name">Hue White & Color Ambiance Starter Set E27, 3 Lampen</div>
+          <div class="card-cat">Haushalt · Smarthome</div>
+          <div class="card-price-row">
+            <span class="price-now">119 €</span>
+            <span class="price-was">179 €</span>
+            <span class="price-off">–33%</span>
+          </div>
+          <div class="chart-wrap">
+            <div class="chart-label-row">
+              <span>Preisverlauf (60 Tage)</span>
+              <span style="color:#888;font-weight:600;">▼ Leicht unter Ø</span>
+            </div>
+            <svg class="chart-svg" viewBox="0 0 200 44" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="g8" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#E8500A" stop-opacity="0.08"/>
+                  <stop offset="100%" stop-color="#E8500A" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <path d="M0,16 C30,14 50,18 80,15 C110,12 125,16 150,14 C170,13 185,17 200,24" fill="url(#g8)"/>
+              <path d="M0,16 C30,14 50,18 80,15 C110,12 125,16 150,14 C170,13 185,17 200,24" fill="none" stroke="#E8500A" stroke-width="1.5"/>
+              <circle cx="200" cy="24" r="3" fill="#E8500A"/>
+            </svg>
+            <div class="chart-bottom">
+              <span>vor 60 Tagen</span>
+              <span>Ø 145 €</span>
+              <span>heute</span>
+            </div>
+          </div>
+          <div class="prime-badge">✦ Prime</div>
+          <button class="card-btn">Zum Deal auf Amazon →</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

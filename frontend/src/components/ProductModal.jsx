@@ -93,9 +93,12 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
     return () => document.removeEventListener('keydown', handleKey)
   }, [handleKey])
 
-  // Swipe-Back schliesst Lightbox zuerst, dann den Modal (über DealsPage-Handler)
+  // Swipe-Back: Lightbox→Modal oder Modal→Hauptseite
   useEffect(() => {
-    const onPop = () => { if (lightboxOpen) setLightbox(false) }
+    const onPop = (e) => {
+      // Lightbox schliessen wenn wir NICHT zu einem Lightbox-State zurückkehren
+      if (lightboxOpen && e.state?.snagga !== 'lightbox') setLightbox(false)
+    }
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [lightboxOpen])

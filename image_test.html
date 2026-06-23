@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Snagga — Bildtest</title>
+<style>
+  body { font-family: sans-serif; padding: 20px; background: #f5f5f2; }
+  h2 { margin-bottom: 16px; }
+  .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  .card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 12px; text-align: center; }
+  img { width: 120px; height: 90px; object-fit: contain; display: block; margin: 0 auto 6px; }
+  .status { font-size: 11px; margin-top: 4px; }
+  .ok { color: green; } .fail { color: red; }
+  code { font-size: 9px; display: block; word-break: break-all; color: #666; margin-top: 4px; }
+</style>
+</head>
+<body>
+<h2>Amazon Bildtest — images-na Format</h2>
+<p>Grüne Häkchen = Bild geladen ✓ | Rotes X = blockiert ✗</p>
+<div class="grid" id="grid"></div>
+<script>
+const products = [
+  ["B09XS7JWHH", "Sony WH-1000XM5"],
+  ["B0BDHWDR12", "AirPods Pro 2"],
+  ["B0BJLT98Q7", "iPad 10"],
+  ["B09GZ93GFG", "Dyson V15"],
+  ["B098RL6SBJ", "Switch OLED"],
+  ["B08H99BPJN", "DualSense"],
+  ["B0B6FJVL85", "Nespresso Pop"],
+  ["B07KW1QHBB", "Philips Hue"],
+  ["B09JCQD7V6", "adidas UB22"],
+  ["B0C8K3JZP6", "Samsung QLED"],
+];
+
+const grid = document.getElementById('grid');
+
+products.forEach(([asin, name]) => {
+  const url = `https://images-na.ssl-images-amazon.com/images/P/${asin}.01.LZZZZZZZ.jpg`;
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `
+    <img id="img_${asin}" src="${url}" />
+    <div><b>${name}</b></div>
+    <div class="status" id="st_${asin}">Lädt…</div>
+    <code>${url.replace('https://images-na.ssl-images-amazon.com', '…')}</code>
+  `;
+  grid.appendChild(card);
+
+  const img = card.querySelector(`#img_${asin}`);
+  const st  = card.querySelector(`#st_${asin}`);
+  img.onload  = () => { st.textContent = '✓ OK'; st.className = 'status ok'; };
+  img.onerror = () => { st.textContent = '✗ Blockiert'; st.className = 'status fail'; img.style.opacity = '0.2'; };
+});
+</script>
+</body>
+</html>

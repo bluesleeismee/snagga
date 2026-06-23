@@ -54,15 +54,23 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
   }, [])
 
   const closeModal = useCallback(() => {
-    if (window.history.state?.snagga === 'modal') {
-      window.history.back()   // löst popstate aus → setSelectedDeal(null)
+    const s = window.history.state?.snagga
+    if (s === 'lightbox') {
+      // Lightbox + Modal beide aus History entfernen, popstate setzt selectedDeal null
+      window.history.go(-2)
+    } else if (s === 'modal') {
+      window.history.back()
     } else {
       setSelectedDeal(null)
     }
   }, [])
 
   useEffect(() => {
-    const onPop = () => setSelectedDeal(null)
+    // Nur schliessen wenn wir zur Basis zurückkehren (nicht wenn Lightbox→Modal)
+    const onPop = (e) => {
+      const s = e.state?.snagga
+      if (s !== 'modal' && s !== 'lightbox') setSelectedDeal(null)
+    }
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [])
