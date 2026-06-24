@@ -2,12 +2,18 @@
 PostgreSQL-Datenbankverbindung via asyncpg.
 """
 import os
+import ssl
 import asyncpg
 
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 
 # Globaler Connection Pool
 pool: asyncpg.Pool | None = None
+
+# SSL-Kontext für Supabase
+ssl_ctx = ssl.create_default_context()
+ssl_ctx.check_hostname = False
+ssl_ctx.verify_mode = ssl.CERT_NONE
 
 
 CREATE_PRODUCTS = """
@@ -42,7 +48,12 @@ CREATE TABLE IF NOT EXISTS price_history (
 
 async def create_pool() -> asyncpg.Pool:
     global pool
-    pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
+    pool = await asyncpg.create_pool(
+        DATABASE_URL,
+        min_size=1,
+        max_size=10,
+        ssl=ssl_ctx,
+    )
     return pool
 
 

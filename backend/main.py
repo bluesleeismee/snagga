@@ -54,15 +54,18 @@ class Product(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await init_db()
-
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        count = await conn.fetchval("SELECT COUNT(*) FROM products")
-
-    if count == 0:
-        print("Datenbank leer — lade initiale Daten …")
-        await fetch_and_update_deals()
+    try:
+        await init_db()
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            count = await conn.fetchval("SELECT COUNT(*) FROM products")
+        if count == 0:
+            print("Datenbank leer — lade initiale Daten …")
+            await fetch_and_update_deals()
+        print("Datenbankverbindung OK.")
+    except Exception as e:
+        print(f"⚠️  DB-Verbindung beim Start fehlgeschlagen: {e}")
+        print("App startet trotzdem — DB wird beim ersten Request neu versucht.")
 
     scheduler = create_scheduler()
     scheduler.start()
