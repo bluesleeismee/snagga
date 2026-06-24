@@ -24,6 +24,25 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 _last_refresh: float = 0
 REFRESH_COOLDOWN = 300  # 5 Minuten
 
+# In-Memory-Cache für /deals und /categories
+_cache: dict = {}
+CACHE_TTL = 300  # 5 Minuten
+
+
+def cache_get(key: str):
+    entry = _cache.get(key)
+    if entry and time.time() - entry["ts"] < CACHE_TTL:
+        return entry["data"]
+    return None
+
+
+def cache_set(key: str, data):
+    _cache[key] = {"data": data, "ts": time.time()}
+
+
+def cache_clear():
+    _cache.clear()
+
 
 # ---------------------------------------------------------------------------
 # Pydantic-Modelle
@@ -134,6 +153,11 @@ async def get_deals(
     limit:    int           = Query(50, ge=1, le=200),
     search:   Optional[str] = Query(None),
 ):
+    cache_key = f"deals:{category}:{sort_by}:{limit}:{search}"
+    cached = cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     sort_map = {
         "score":      "deal_score DESC",
         "discount":   "(1.0 - current_price / original_price) DESC",
@@ -166,7 +190,9 @@ async def get_deals(
         rows = await conn.fetch(
             f"SELECT * FROM products {where} ORDER BY {order} LIMIT ${idx}", *params
         )
-        return [await row_to_product(r, conn) for r in rows]
+        result = [await row_to_product(r, conn) for r in rows]
+    cache_set(cache_key, result)
+    return result
 
 
 @app.get("/product/{asin}", response_model=Product)
@@ -181,11 +207,15 @@ async def get_product(asin: str):
 
 @app.get("/categories", response_model=list[str])
 async def get_categories():
+    cached = cache_get("categories")
+    if cached is not None:
+        return cached
     pool = await get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch("SELECT DISTINCT category FROM products ORDER BY category")
-    cats = [r["category"] for r in rows if r["category"]]
-    return ["Alle"] + cats
+    cats = ["Alle"] + [r["category"] for r in rows if r["category"]]
+    cache_set("categories", cats)
+    return cats
 
 
 @app.post("/refresh")
@@ -198,6 +228,7 @@ async def refresh_deals():
         raise HTTPException(status_code=429, detail=f"Bitte {wait}s warten.")
     _last_refresh = now
     count = await fetch_and_update_deals()
+    cache_clear()
     return {"message": f"{count} Produkte aktualisiert"}
 
 
