@@ -117,7 +117,7 @@ async def row_to_product(row, conn, history_limit: int = 30) -> Product:
         current_price=row["current_price"], original_price=row["original_price"],
         all_time_low=row["all_time_low"], avg_price=row["avg_price"],
         deal_score=row["deal_score"], rating=row["rating"], reviews=row["reviews"],
-        prime=bool(row["prime"]), last_updated=row["last_updated"],
+        prime=bool(row["prime"]), last_updated=str(row["last_updated"]) if row["last_updated"] else "",
         affiliate_url=row["affiliate_url"],
         price_history=prices,
     )
