@@ -18,28 +18,55 @@ const SORTS = [
   { id: 'price_asc', label: 'Günstigste' },
 ]
 
+// ── localStorage Cache Helpers ──────────────────────────────────────────────
+const LS_DEALS = 'sng_deals_v1'
+const LS_CATS  = 'sng_cats_v1'
+const CACHE_TTL = 5 * 60 * 1000 // 5 Minuten
+
+function lsGet(key) {
+  try {
+    const v = localStorage.getItem(key)
+    if (!v) return null
+    const { data, ts } = JSON.parse(v)
+    if (Date.now() - ts > CACHE_TTL) return null
+    return data
+  } catch { return null }
+}
+function lsSet(key, data) {
+  try { localStorage.setItem(key, JSON.stringify({ data, ts: Date.now() })) } catch {}
+}
+
 export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWatch, onShowLegal }) {
   const { isMobile, isTablet } = useBreakpoint()
-  const [categories, setCategories]         = useState(['Alle'])
+  const [categories, setCategories]         = useState(() => lsGet(LS_CATS) || ['Alle'])
   const [selectedCat, setSelectedCat]       = useState('Alle')
   const [activeFilters, setActiveFilters]   = useState(new Set())
   const [sortBy, setSortBy]                 = useState('score')
   const [search, setSearch]                 = useState('')
-  const [deals, setDeals]                   = useState([])
-  const [loading, setLoading]               = useState(true)
+  const [deals, setDeals]                   = useState(() => lsGet(LS_DEALS) || [])
+  const [loading, setLoading]               = useState(deals.length === 0)
   const [error, setError]                   = useState(null)
   const [view, setView]                     = useState('grid')
   const [selectedDeal, setSelectedDeal]     = useState(null)
   const [sidebarOpen, setSidebarOpen]       = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
-  useEffect(() => { api.categories().then(setCategories).catch(() => {}) }, [])
+  useEffect(() => {
+    api.categories().then(cats => { setCategories(cats); lsSet(LS_CATS, cats) }).catch(() => {})
+  }, [])
 
   const loadDeals = useCallback(() => {
-    setLoading(true); setError(null)
+    // Nur Hauptansicht (kein Filter/Suche) cached
+    const isDefault = selectedCat === 'Alle' && sortBy === 'score' && !search
+    if (!isDefault) setLoading(true)
+    setError(null)
     api.deals({ category: selectedCat, sort_by: sortBy, search: search || undefined, limit: 100 })
-      .then(data => { setDeals(data); setLoading(false) })
-      .catch(e  => { setError(e.message); setLoading(false) })
+      .then(data => {
+        setDeals(data)
+        setLoading(false)
+        if (isDefault) lsSet(LS_DEALS, data)
+      })
+      .catch(e => { setError(e.message); setLoading(false) })
   }, [selectedCat, sortBy, search])
 
   useEffect(() => {
