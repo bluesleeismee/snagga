@@ -200,11 +200,34 @@ function ActionButtons({ deal, compact = false }) {
     }
   }
 
+  // Grid-Ansicht (Desktop): zwei gleich breite Text-Buttons
+  if (!compact) {
+    return (
+      <div style={{ display: 'flex', gap: 5, marginTop: 'auto' }} onClick={e => e.stopPropagation()}>
+        <a href={cartUrl(deal.asin)} target="_blank" rel="noopener noreferrer"
+          style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--orange)', color: '#fff', borderRadius: 7, padding: '7px 6px', fontSize: 11.5, fontWeight: 600, textDecoration: 'none', textAlign: 'center', transition: 'opacity 0.15s' }}
+          onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
+          onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+        >
+          In den Warenkorb
+        </a>
+        <a href={deal.affiliate_url} target="_blank" rel="noopener noreferrer"
+          style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--text)', color: 'var(--bg-card)', borderRadius: 7, padding: '7px 6px', fontSize: 11.5, fontWeight: 600, textDecoration: 'none', textAlign: 'center', transition: 'opacity 0.15s' }}
+          onMouseEnter={e => e.currentTarget.style.opacity = '0.82'}
+          onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+        >
+          Zum Produkt
+        </a>
+      </div>
+    )
+  }
+
+  // Kompakt (Listen-Ansicht): Icon + Zum Produkt + Teilen
   return (
     <div style={{ display: 'flex', gap: 5, marginTop: 'auto' }} onClick={e => e.stopPropagation()}>
-      {/* Warenkorb */}
+      {/* Warenkorb Icon */}
       <a href={cartUrl(deal.asin)} target="_blank" rel="noopener noreferrer"
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--orange)', color: '#fff', borderRadius: 7, padding: compact ? '7px 8px' : '7px 10px', transition: 'opacity 0.15s', flexShrink: 0 }}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--orange)', color: '#fff', borderRadius: 7, padding: '7px 8px', transition: 'opacity 0.15s', flexShrink: 0 }}
         title="In den Warenkorb"
         onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
         onMouseLeave={e => e.currentTarget.style.opacity = '1'}
