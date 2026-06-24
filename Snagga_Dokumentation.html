@@ -652,7 +652,7 @@
     <tr>
       <td><span class="badge badge-orange">POST</span></td>
       <td><code>/refresh</code></td>
-      <td>Manuelles Deal-Update (Cooldown: 5 Min.)</td>
+      <td>Manuelles Deal-Update — Rate-Limit: 1×/5 Min. pro IP</td>
       <td>—</td>
     </tr>
     <tr>
@@ -661,6 +661,18 @@
       <td>Status + Produktanzahl (UptimeRobot-Ping)</td>
       <td>—</td>
     </tr>
+  </tbody>
+</table>
+
+<h4>Rate-Limits (slowapi, IP-basiert)</h4>
+<table>
+  <thead><tr><th>Endpoint</th><th>Limit</th><th>Hinweis</th></tr></thead>
+  <tbody>
+    <tr><td><code>/deals</code></td><td>60/Minute</td><td>—</td></tr>
+    <tr><td><code>/product/{asin}</code></td><td>60/Minute</td><td>—</td></tr>
+    <tr><td><code>/categories</code></td><td>30/Minute</td><td>—</td></tr>
+    <tr><td><code>/refresh</code></td><td>1/5 Minuten</td><td>Manuelles Update</td></tr>
+    <tr><td><code>/health</code></td><td>kein Limit</td><td>UptimeRobot-Ping</td></tr>
   </tbody>
 </table>
 
@@ -743,8 +755,8 @@
 <table>
   <thead><tr><th>Typ</th><th>Host</th><th>Port</th><th>Verwendung</th></tr></thead>
   <tbody>
-    <tr><td>Transaction Pooler</td><td><code>aws-1-eu-central-1.pooler.supabase.com</code></td><td>6543</td><td>Render Backend (empfohlen)</td></tr>
-    <tr><td>Direct Connection</td><td><code>db.gxuxqselrjhqmrfalrhl.supabase.co</code></td><td>5432</td><td>Migrations-Scripts lokal</td></tr>
+    <tr><td>Direct Connection</td><td><code>db.gxuxqselrjhqmrfalrhl.supabase.co</code></td><td>5432</td><td>Render Backend ✅ (asyncpg braucht direkte Verbindung)</td></tr>
+    <tr><td>Transaction Pooler</td><td><code>aws-1-eu-central-1.pooler.supabase.com</code></td><td>6543</td><td>Nur für serverlose/Edge Functions</td></tr>
   </tbody>
 </table>
 
@@ -970,6 +982,8 @@ products = <span class="kw">await</span> api.query([<span class="st">'ASIN1'</sp
       <li>404-Seite</li>
       <li>Sidebar einklappbar</li>
       <li>Dark/Light Mode</li>
+      <li>Rate-Limiting via slowapi (IP-basiert)</li>
+      <li>URL Deep-Links (<code>?asin=...</code> öffnet Modal direkt)</li>
     </ul>
   </div>
   <div>
@@ -978,9 +992,7 @@ products = <span class="kw">await</span> api.query([<span class="st">'ASIN1'</sp
       <li class="pending">Keepa API Integration (€49/Mo)</li>
       <li class="pending">robots.txt auf Allow umstellen (Go-Live)</li>
       <li class="pending">SEO: sitemap.xml, og:image, meta-Tags</li>
-      <li class="pending">Rate-Limiting auf FastAPI</li>
       <li class="pending">DKIM (ImprovMX Premium)</li>
-      <li class="pending">URL Deep-Links (?asin=...)</li>
       <li class="pending">Nutzer-Login &amp; Watchlist persistent</li>
       <li class="pending">Preisalarm per E-Mail</li>
       <li class="pending">Supabase RLS (Row Level Security)</li>

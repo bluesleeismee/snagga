@@ -10,11 +10,7 @@ from typing import Optional
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
 load_dotenv()
 
@@ -24,11 +20,9 @@ from scheduler import create_scheduler
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
-# ---------------------------------------------------------------------------
-# Rate Limiter
-# ---------------------------------------------------------------------------
-
-limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
+# Rate-Limiting für /refresh (manuell, kein externes Paket)
+_last_refresh: float = 0
+REFRESH_COOLDOWN = 300  # 5 Minuten
 
 
 # ---------------------------------------------------------------------------
@@ -62,7 +56,6 @@ class Product(BaseModel):
 async def lifespan(app: FastAPI):
     await init_db()
 
-    # Beim ersten Start: DB befüllen wenn leer
     pool = await get_pool()
     async with pool.acquire() as conn:
         count = await conn.fetchval("SELECT COUNT(*) FROM products")
@@ -71,7 +64,6 @@ async def lifespan(app: FastAPI):
         print("Datenbank leer — lade initiale Daten …")
         await fetch_and_update_deals()
 
-    # Scheduler starten
     scheduler = create_scheduler()
     scheduler.start()
     print(f"Scheduler aktiv — tägliches Update um {os.getenv('SCHEDULER_HOUR','3')}:0{os.getenv('SCHEDULER_MINUTE','0')} Uhr")
@@ -86,9 +78,6 @@ async def lifespan(app: FastAPI):
 # ---------------------------------------------------------------------------
 
 app = FastAPI(title="Snagga API", version="1.0.0", lifespan=lifespan)
-
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -136,15 +125,12 @@ async def row_to_product(row, conn, history_limit: int = 30) -> Product:
 # ---------------------------------------------------------------------------
 
 @app.get("/deals", response_model=list[Product])
-@limiter.limit("60/minute")
 async def get_deals(
-    request: Request,
     category: Optional[str] = Query(None),
     sort_by:  str           = Query("score", pattern="^(score|discount|price_asc|price_desc|newest)$"),
     limit:    int           = Query(50, ge=1, le=200),
     search:   Optional[str] = Query(None),
 ):
-    """Gibt gefilterte und sortierte Deal-Liste zurück."""
     sort_map = {
         "score":      "deal_score DESC",
         "discount":   "(1.0 - current_price / original_price) DESC",
@@ -181,9 +167,7 @@ async def get_deals(
 
 
 @app.get("/product/{asin}", response_model=Product)
-@limiter.limit("60/minute")
-async def get_product(request: Request, asin: str):
-    """Gibt ein einzelnes Produkt mit voller Preishistorie zurück."""
+async def get_product(asin: str):
     pool = await get_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow("SELECT * FROM products WHERE asin=$1", asin)
@@ -193,9 +177,7 @@ async def get_product(request: Request, asin: str):
 
 
 @app.get("/categories", response_model=list[str])
-@limiter.limit("30/minute")
-async def get_categories(request: Request):
-    """Gibt alle vorhandenen Kategorien zurück."""
+async def get_categories():
     pool = await get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch("SELECT DISTINCT category FROM products ORDER BY category")
@@ -204,16 +186,20 @@ async def get_categories(request: Request):
 
 
 @app.post("/refresh")
-@limiter.limit("1/5minutes")
-async def refresh_deals(request: Request):
-    """Manuelles Refresh der Deal-Daten — max. alle 5 Minuten pro IP."""
+async def refresh_deals():
+    """Manuelles Refresh — max. alle 5 Minuten."""
+    global _last_refresh
+    now = time.time()
+    if now - _last_refresh < REFRESH_COOLDOWN:
+        wait = int(REFRESH_COOLDOWN - (now - _last_refresh))
+        raise HTTPException(status_code=429, detail=f"Bitte {wait}s warten.")
+    _last_refresh = now
     count = await fetch_and_update_deals()
     return {"message": f"{count} Produkte aktualisiert"}
 
 
 @app.api_route("/health", methods=["GET", "HEAD"])
 async def health():
-    """Health-Check für UptimeRobot — kein Rate-Limit."""
     pool = await get_pool()
     async with pool.acquire() as conn:
         count = await conn.fetchval("SELECT COUNT(*) FROM products")
