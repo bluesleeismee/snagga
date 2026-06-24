@@ -13,13 +13,17 @@ export default function LegalPage({ onBack }) {
         <button
           onClick={onBack}
           style={{
-            width: 34, height: 34, borderRadius: 9,
-            border: '1px solid var(--border)', background: 'var(--bg-elev2)',
-            color: 'var(--text)', fontSize: 16,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+            display: 'flex', alignItems: 'center', gap: 6,
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'var(--muted)', fontSize: 13, fontWeight: 500, padding: '4px 2px',
           }}
+          onMouseEnter={e => e.currentTarget.style.color = 'var(--text)'}
+          onMouseLeave={e => e.currentTarget.style.color = 'var(--muted)'}
         >
-          ←
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15,18 9,12 15,6"/>
+          </svg>
+          Zurück
         </button>
         <span style={{ fontFamily: 'Space Grotesk', fontWeight: 700, fontSize: 21, letterSpacing: '-.3px' }}>
           Rechtliches
