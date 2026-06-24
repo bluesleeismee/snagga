@@ -41,7 +41,7 @@ function GridCard({ deal, saved, onSave, onClick, disc, label, imgError, setImgE
       {/* Body */}
       <div style={{ padding: '11px 12px 13px', display: 'flex', flexDirection: 'column', flex: 1 }}>
         <div style={{ fontSize: 11.5, color: 'var(--muted)', fontWeight: 500, marginBottom: 2 }}>{deal.brand}</div>
-        <div style={{ fontSize: 13.5, color: 'var(--text)', fontWeight: 500, lineHeight: 1.45, marginBottom: 3, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', height: 'calc(3 * 1.45 * 13.5px)' }}>
+        <div style={{ fontSize: 12.5, color: 'var(--text)', fontWeight: 500, lineHeight: 1.4, marginBottom: 3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', height: 'calc(2 * 1.4 * 12.5px)' }}>
           {deal.name}
         </div>
         <div style={{ fontSize: 11.5, color: 'var(--text)', marginBottom: 9 }}>{deal.category}</div>
@@ -203,16 +203,16 @@ function ActionButtons({ deal, compact = false }) {
   // Grid-Ansicht (Desktop): zwei gleich breite Text-Buttons
   if (!compact) {
     return (
-      <div style={{ display: 'flex', gap: 5, marginTop: 'auto' }} onClick={e => e.stopPropagation()}>
+      <div style={{ display: 'flex', gap: 4, marginTop: 'auto' }} onClick={e => e.stopPropagation()}>
         <a href={cartUrl(deal.asin)} target="_blank" rel="noopener noreferrer"
-          style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--orange)', color: '#fff', borderRadius: 7, padding: '7px 6px', fontSize: 11.5, fontWeight: 600, textDecoration: 'none', textAlign: 'center', transition: 'opacity 0.15s' }}
+          style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--orange)', color: '#fff', borderRadius: 7, padding: '6px 3px', fontSize: 10, fontWeight: 700, textDecoration: 'none', textAlign: 'center', whiteSpace: 'nowrap', transition: 'opacity 0.15s' }}
           onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
           onMouseLeave={e => e.currentTarget.style.opacity = '1'}
         >
           In den Warenkorb
         </a>
         <a href={deal.affiliate_url} target="_blank" rel="noopener noreferrer"
-          style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--text)', color: 'var(--bg-card)', borderRadius: 7, padding: '7px 6px', fontSize: 11.5, fontWeight: 600, textDecoration: 'none', textAlign: 'center', transition: 'opacity 0.15s' }}
+          style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--text)', color: 'var(--bg-card)', borderRadius: 7, padding: '6px 3px', fontSize: 10, fontWeight: 700, textDecoration: 'none', textAlign: 'center', whiteSpace: 'nowrap', transition: 'opacity 0.15s' }}
           onMouseEnter={e => e.currentTarget.style.opacity = '0.82'}
           onMouseLeave={e => e.currentTarget.style.opacity = '1'}
         >
@@ -288,7 +288,7 @@ function SaveBtn({ saved, onSave, style = {} }) {
 function PriceRow({ current, original, disc, vertical = false }) {
   return (
     <div style={{ display: 'flex', alignItems: vertical ? 'flex-start' : 'baseline', flexDirection: vertical ? 'column' : 'row', gap: vertical ? 2 : 7, flexWrap: 'wrap' }}>
-      <span style={{ fontSize: 21, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.5px' }}>{fmtPrice(current)}</span>
+      <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.5px' }}>{fmtPrice(current)}</span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
         {original > current && <span style={{ fontSize: 13, color: 'var(--muted)', textDecoration: 'line-through' }}>{fmtPrice(original)}</span>}
         {disc > 0 && <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--orange)', background: 'var(--orange-soft)', padding: '2px 6px', borderRadius: 4 }}>–{disc}%</span>}

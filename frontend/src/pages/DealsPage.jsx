@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import DealCard from '../components/DealCard.jsx'
 import Sidebar from '../components/Sidebar.jsx'
 import ProductModal from '../components/ProductModal.jsx'
+import DealTicker from '../components/DealTicker.jsx'
 import { useBreakpoint } from '../hooks/useBreakpoint.js'
 import { api } from '../api.js'
 
@@ -139,7 +140,8 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
   })
 
   const showBottomNav = isMobile || isTablet
-  const gridCols = isMobile ? 'repeat(2, 1fr)' : isTablet ? 'repeat(3, 1fr)' : 'repeat(4, 1fr)'
+  const isDesktop = !isMobile && !isTablet
+  const gridCols = isMobile ? 'repeat(2, 1fr)' : isTablet ? 'repeat(3, 1fr)' : 'repeat(5, 1fr)'
   const pad      = showBottomNav ? (isMobile ? '12px 12px 96px' : '16px 22px 96px') : '16px 22px 40px'
 
   /* ── Filter chip ── */
@@ -243,6 +245,9 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
           )}
         </button>
       </div>
+
+      {/* DEAL TICKER — nur Desktop */}
+      {isDesktop && <DealTicker deals={deals} />}
 
       {/* LAYOUT */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
