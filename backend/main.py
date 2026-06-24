@@ -106,6 +106,7 @@ app.add_middleware(
     allow_origins=[
         "https://snagga.de",
         "https://www.snagga.de",
+        "https://snagga-git-variante-desktop-v2-davidpauli-6139s-projects.vercel.app",
         "http://localhost:5173",
         "http://localhost:3000",
         FRONTEND_URL,
