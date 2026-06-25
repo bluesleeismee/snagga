@@ -16,7 +16,31 @@ const SORTS = [
   { id: 'score',     label: 'Bester Deal' },
   { id: 'discount',  label: 'Grösster Rabatt' },
   { id: 'price_asc', label: 'Günstigste' },
+  { id: 'newest',    label: 'Neu' },
 ]
+
+// Prime Day Banner — anzeigen wenn innerhalb 14 Tage vor/während Prime Day
+function PrimeDayBanner() {
+  // Prime Day 2026: ~8–9 Juli (geschätzt, anpassen wenn bestätigt)
+  const start = new Date('2026-07-01')
+  const end   = new Date('2026-07-12')
+  const now   = new Date()
+  if (now < start || now > end) return null
+  const daysLeft = Math.ceil((new Date('2026-07-08') - now) / 86400000)
+  const live = now >= new Date('2026-07-08')
+  return (
+    <div style={{
+      background: 'linear-gradient(90deg, #FF9900 0%, #E8500A 100%)',
+      color: '#fff', padding: '10px 22px',
+      display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0,
+    }}>
+      <span style={{ fontSize: 18 }}>⚡</span>
+      <span style={{ fontWeight: 700, fontSize: 13.5 }}>
+        {live ? 'Prime Day läuft — jetzt die besten Deals sichern!' : `Prime Day in ${daysLeft} Tag${daysLeft !== 1 ? 'en' : ''} — beste Deals vormerken`}
+      </span>
+    </div>
+  )
+}
 
 // ── localStorage Cache Helpers ──────────────────────────────────────────────
 const LS_DEALS = 'sng_deals_v1'
@@ -243,6 +267,9 @@ export default function DealsPage({ theme, onToggleTheme, watchlist, onToggleWat
           )}
         </button>
       </div>
+
+      {/* PRIME DAY BANNER */}
+      <PrimeDayBanner />
 
       {/* LAYOUT */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>

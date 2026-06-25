@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { getVote, setVote } from '../utils.js'
 import PriceChart from './PriceChart.jsx'
 import { fmtPrice, discount, dealLabel, fmtAge, AGE_COLORS } from '../utils.js'
 import { useBreakpoint } from '../hooks/useBreakpoint.js'
@@ -37,6 +38,17 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
   const [slide, setSlide]           = useState(0)
   const [copied, setCopied]         = useState(false)
   const [lightboxOpen, setLightbox] = useState(false)
+  const [vote, setVoteState]        = useState(() => deal ? getVote(deal.asin) : null)
+  const [expired, setExpired]       = useState(false)
+
+  function handleVote(v) {
+    const next = setVote(deal.asin, v)
+    setVoteState(next)
+  }
+  function handleExpired() {
+    setExpired(true)
+    setTimeout(() => setExpired(false), 3000)
+  }
 
   const openLightbox = () => {
     setLightbox(true)
@@ -447,7 +459,38 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
                 </button>
               </div>
 
-              <p style={{ fontSize: 10.5, color: 'var(--muted)', textAlign: 'center', marginTop: 10, lineHeight: 1.4 }}>
+              {/* Voting */}
+              <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                <button onClick={() => handleVote('hot')}
+                  style={{ flex: 1, padding: '7px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                    border: `1.5px solid ${vote === 'hot' ? '#E8500A' : 'var(--border)'}`,
+                    background: vote === 'hot' ? '#FFF4F0' : 'var(--bg-elev)',
+                    color: vote === 'hot' ? '#E8500A' : 'var(--muted)', cursor: 'pointer', transition: 'all 0.12s' }}>
+                  🔥 Heisser Deal
+                </button>
+                <button onClick={() => handleVote('cold')}
+                  style={{ flex: 1, padding: '7px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                    border: `1.5px solid ${vote === 'cold' ? '#3B82F6' : 'var(--border)'}`,
+                    background: vote === 'cold' ? '#EFF6FF' : 'var(--bg-elev)',
+                    color: vote === 'cold' ? '#3B82F6' : 'var(--muted)', cursor: 'pointer', transition: 'all 0.12s' }}>
+                  ❄️ Zu teuer
+                </button>
+              </div>
+
+              {/* Deal abgelaufen */}
+              <div style={{ textAlign: 'center', marginTop: 8 }}>
+                {expired ? (
+                  <span style={{ fontSize: 11, color: '#1E7A3C', fontWeight: 600 }}>✓ Danke für dein Feedback!</span>
+                ) : (
+                  <button onClick={handleExpired}
+                    style={{ background: 'none', border: 'none', fontSize: 11, color: 'var(--muted)',
+                      cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
+                    Deal abgelaufen melden
+                  </button>
+                )}
+              </div>
+
+              <p style={{ fontSize: 10.5, color: 'var(--muted)', textAlign: 'center', marginTop: 8, lineHeight: 1.4 }}>
                 * Als Amazon-Partner verdiene ich an qualifizierten Käufen.
               </p>
             </div>

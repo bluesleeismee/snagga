@@ -83,3 +83,18 @@ export const AGE_COLORS = {
   ok:    '#E8500A',
   stale: '#888888',
 }
+
+/** Deal-Voting via localStorage */
+const VOTE_KEY = 'sng_votes_v1'
+export function getVote(asin) {
+  try { return JSON.parse(localStorage.getItem(VOTE_KEY) || '{}')[asin] || null } catch { return null }
+}
+export function setVote(asin, vote) {
+  try {
+    const votes = JSON.parse(localStorage.getItem(VOTE_KEY) || '{}')
+    if (votes[asin] === vote) delete votes[asin]  // toggle off
+    else votes[asin] = vote
+    localStorage.setItem(VOTE_KEY, JSON.stringify(votes))
+    return votes[asin] || null
+  } catch { return null }
+}

@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import PriceChart from './PriceChart.jsx'
-import { fmtPrice, discount, dealLabel, fmtAge, AGE_COLORS } from '../utils.js'
+import { fmtPrice, discount, dealLabel, fmtAge, AGE_COLORS, getVote, setVote } from '../utils.js'
 import { useBreakpoint } from '../hooks/useBreakpoint.js'
 
 const AFFILIATE_TAG = 'snagga-21'
@@ -65,6 +65,7 @@ function GridCard({ deal, saved, onSave, onClick, disc, label, imgError, setImgE
         </div>
 
         <ActionButtons deal={deal} />
+        <VoteBar asin={deal.asin} />
       </div>
     </div>
   )
@@ -283,6 +284,37 @@ function SaveBtn({ saved, onSave, style = {} }) {
         <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
       </svg>
     </button>
+  )
+}
+
+function VoteBar({ asin }) {
+  const [vote, setVoteState] = useState(() => getVote(asin))
+  function handleVote(e, v) {
+    e.stopPropagation()
+    const next = setVote(asin, v)
+    setVoteState(next)
+  }
+  return (
+    <div style={{ display: 'flex', gap: 4, marginTop: 6 }} onClick={e => e.stopPropagation()}>
+      <button onClick={e => handleVote(e, 'hot')}
+        style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+          padding: '4px 6px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+          border: `1.5px solid ${vote === 'hot' ? '#E8500A' : 'var(--border)'}`,
+          background: vote === 'hot' ? '#FFF4F0' : 'var(--bg-elev)',
+          color: vote === 'hot' ? '#E8500A' : 'var(--muted)',
+          transition: 'all 0.12s', cursor: 'pointer' }}>
+        🔥 Heiss
+      </button>
+      <button onClick={e => handleVote(e, 'cold')}
+        style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+          padding: '4px 6px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+          border: `1.5px solid ${vote === 'cold' ? '#3B82F6' : 'var(--border)'}`,
+          background: vote === 'cold' ? '#EFF6FF' : 'var(--bg-elev)',
+          color: vote === 'cold' ? '#3B82F6' : 'var(--muted)',
+          transition: 'all 0.12s', cursor: 'pointer' }}>
+        ❄️ Kalt
+      </button>
+    </div>
   )
 }
 
