@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import PriceChart from './PriceChart.jsx'
-import { fmtPrice, discount, dealLabel } from '../utils.js'
+import { fmtPrice, discount, dealLabel, fmtAge, AGE_COLORS } from '../utils.js'
 import { useBreakpoint } from '../hooks/useBreakpoint.js'
 
 const AFFILIATE_TAG = 'snagga-21'
@@ -47,6 +47,7 @@ function GridCard({ deal, saved, onSave, onClick, disc, label, imgError, setImgE
         <div style={{ fontSize: 11.5, color: 'var(--text)', marginBottom: 9 }}>{deal.category}</div>
 
         <PriceRow current={deal.current_price} original={deal.original_price} disc={disc} />
+        <FreshnessTag lastUpdated={deal.last_updated} />
 
         {deal.price_history?.length > 1 && (
           <PriceChart prices={deal.price_history} avgPrice={deal.avg_price} allTimeLow={deal.all_time_low} asin={deal.asin} />
@@ -282,6 +283,18 @@ function SaveBtn({ saved, onSave, style = {} }) {
         <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
       </svg>
     </button>
+  )
+}
+
+function FreshnessTag({ lastUpdated }) {
+  const age = fmtAge(lastUpdated)
+  if (!age) return null
+  const color = AGE_COLORS[age.level]
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+      <div style={{ width: 5, height: 5, borderRadius: '50%', background: color, flexShrink: 0 }} />
+      <span style={{ fontSize: 10, color: 'var(--muted)' }}>{age.text}</span>
+    </div>
   )
 }
 

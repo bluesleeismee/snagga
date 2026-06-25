@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import PriceChart from './PriceChart.jsx'
-import { fmtPrice, discount, dealLabel } from '../utils.js'
+import { fmtPrice, discount, dealLabel, fmtAge, AGE_COLORS } from '../utils.js'
 import { useBreakpoint } from '../hooks/useBreakpoint.js'
 
 /* Versucht bis zu 5 Bilder pro ASIN zu laden (Amazon .01–.05) */
@@ -338,6 +338,19 @@ export default function ProductModal({ deal, onClose, saved, onSave }) {
                   </span>
                 )}
               </div>
+
+              {/* Freshness + Preishinweis */}
+              {(() => {
+                const age = fmtAge(deal.last_updated)
+                return age ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 8 }}>
+                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: AGE_COLORS[age.level], flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                      Preis geprüft {age.text} · kann sich geändert haben
+                    </span>
+                  </div>
+                ) : null
+              })()}
 
               {/* Prime + Deal-Label */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>

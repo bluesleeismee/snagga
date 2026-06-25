@@ -60,3 +60,26 @@ export function scoreBadge(score) {
 export function stars(rating) {
   return '★'.repeat(Math.round(rating)) + '☆'.repeat(5 - Math.round(rating))
 }
+
+/** Zeitdifferenz seit last_updated → { text, level }
+ *  level: 'fresh' (<6h) | 'ok' (6–24h) | 'stale' (>24h)
+ */
+export function fmtAge(lastUpdated) {
+  if (!lastUpdated) return null
+  const date = new Date(lastUpdated)
+  if (isNaN(date.getTime())) return null
+  const mins = Math.floor((Date.now() - date.getTime()) / 60000)
+  if (mins < 1)   return { text: 'gerade eben', level: 'fresh' }
+  if (mins < 60)  return { text: `vor ${mins}m`,            level: 'fresh' }
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 6)    return { text: `vor ${hrs}h`,             level: 'fresh' }
+  if (hrs < 24)   return { text: `vor ${hrs}h`,             level: 'ok'    }
+  const days = Math.floor(hrs / 24)
+  return           { text: `vor ${days} Tag${days > 1 ? 'en' : ''}`, level: 'stale' }
+}
+
+export const AGE_COLORS = {
+  fresh: '#1E7A3C',
+  ok:    '#E8500A',
+  stale: '#888888',
+}
