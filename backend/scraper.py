@@ -127,7 +127,7 @@ def generate_history(asin: str, current: float, avg: float, days: int = 60) -> l
     now = datetime.utcnow()
     history = []
     for i in range(days, -1, -1):
-        ts = (now - timedelta(days=i)).isoformat()
+        ts = now - timedelta(days=i)
         if i < 5:
             price = current + random.gauss(0, current * 0.005)
         else:
@@ -189,7 +189,7 @@ async def enrich_images(products: list[dict], client: httpx.AsyncClient) -> None
 # ---------------------------------------------------------------------------
 
 def get_seed_data() -> list[dict]:
-    now = datetime.utcnow().isoformat()
+    now = datetime.utcnow()
     raw = [
         ("B09XS7JWHH", "Sony WH-1000XM5 Noise Cancelling Kopfhörer",       "Sony",      248.90, 379.99, "Elektronik", 4.7, 8432),
         ("B0BDHWDR12", "Apple AirPods Pro (2. Generation)",                  "Apple",     189.00, 279.00, "Elektronik", 4.8, 12500),
@@ -201,6 +201,16 @@ def get_seed_data() -> list[dict]:
         ("B07KW1QHBB", "Philips Hue White & Color Ambiance Starter Set",     "Philips",   119.99, 179.99, "Haushalt",   4.6, 6800),
         ("B09JCQD7V6", "adidas Ultraboost 22 Laufschuhe",                   "adidas",     89.95, 189.95, "Sport",      4.4, 2300),
         ("B0C8K3JZP6", "Samsung 65\" QLED 4K Q60C Smart TV",               "Samsung",   699.00, 999.00, "Elektronik", 4.3, 1800),
+        ("B09TMF6745", "Kindle Paperwhite (11. Generation) 8 GB",           "Amazon",     99.99, 139.99, "Elektronik", 4.7, 18200),
+        ("B07XJ8C8F5", "Amazon Echo Dot (4. Gen.) Smarter Lautsprecher",    "Amazon",     24.99,  54.99, "Elektronik", 4.6, 32000),
+        ("B09X7FXNLP", "Amazon Fire TV Stick 4K Max",                       "Amazon",     39.99,  74.99, "Elektronik", 4.5,  9800),
+        ("B09JH7J6CB", "Bose QuietComfort 45 Bluetooth Kopfhörer",          "Bose",      199.00, 329.00, "Elektronik", 4.6,  5400),
+        ("B09BJYWB2G", "Samsung Galaxy Buds2 Kabellose Ohrhörer",           "Samsung",    79.99, 149.99, "Elektronik", 4.4,  7600),
+        ("B07YGTSGL7", "De'Longhi Magnifica Start Kaffeevollautomat",       "DeLonghi",  349.00, 549.00, "Küche",      4.4,  4100),
+        ("B0B6QJJRTB", "Tefal Easy Fry XXL Heißluftfritteuse 6,2 L",       "Tefal",      89.99, 149.99, "Küche",      4.5,  6200),
+        ("B08VX9T2FB", "Ring Video Doorbell (2. Gen) 1080p HD",             "Ring",       59.99,  99.99, "Haushalt",   4.3,  8900),
+        ("B09KZKXQR4", "Garmin Venu 2 GPS-Fitness-Smartwatch",              "Garmin",    249.00, 399.00, "Sport",      4.5,  3300),
+        ("B0851THX55", "Oral-B iO Series 8 Elektrische Zahnbürste",         "Oral-B",     89.99, 219.99, "Haushalt",   4.6,  5700),
     ]
     products = []
     for asin, name, brand, current, original, cat, rating, reviews in raw:
@@ -212,7 +222,7 @@ def get_seed_data() -> list[dict]:
             "current_price": current, "original_price": original,
             "all_time_low": low, "avg_price": avg,
             "deal_score": score, "rating": rating, "reviews": reviews,
-            "prime": 1, "last_updated": now,
+            "prime": True, "last_updated": now,
             "affiliate_url": f"https://www.amazon.de/dp/{asin}?tag={AFFILIATE_TAG}",
         })
     return products

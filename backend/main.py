@@ -83,8 +83,8 @@ async def lifespan(app: FastAPI):
             await fetch_and_update_deals()
         print("Datenbankverbindung OK.")
     except Exception as e:
-        print(f"⚠️  DB-Verbindung beim Start fehlgeschlagen: {e}")
-        print("App startet trotzdem — DB wird beim ersten Request neu versucht.")
+        print(f"[WARN] DB-Verbindung beim Start fehlgeschlagen: {e}")
+        print("App startet trotzdem -- DB wird beim ersten Request neu versucht.")
 
     scheduler = create_scheduler()
     scheduler.start()
