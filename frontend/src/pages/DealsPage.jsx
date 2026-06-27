@@ -498,7 +498,7 @@ export default function DealsPage() {
               Täglich kuratierte Amazon-Bestpreise · Affiliate-Partner von Amazon
             </p>
           </div>
-          <nav style={{ display: 'flex', gap: isMobile ? 16 : 28, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? 12 : 28, flexWrap: 'wrap' }}>
             {[
               ['Impressum', '/legal#impressum'],
               ['Datenschutz', '/legal#datenschutz'],
@@ -510,12 +510,10 @@ export default function DealsPage() {
                 onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.65)'}
               >{label}</a>
             ))}
-          </nav>
-        </div>
-        <div style={{ maxWidth: 1840, width: '98%', margin: '24px auto 0', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 20 }}>
-          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', textAlign: 'center' }}>
-            © 2026 snagga.de · Preise ohne Gewähr · Stand Juni 2026
-          </p>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginLeft: isMobile ? 0 : 'auto' }}>
+              © 2026 snagga.de · Preise ohne Gewähr
+            </span>
+          </div>
         </div>
       </footer>
     </div>
