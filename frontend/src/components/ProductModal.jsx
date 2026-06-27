@@ -23,7 +23,8 @@ function useProductImages(asin, primaryUrl) {
 
 export default function ProductModal({ deal, onClose }) {
   const [slide, setSlide] = useState(0)
-  const { isMobile } = useBreakpoint()
+  const { isMobile, width } = useBreakpoint()
+  const isStacked = width < 1100   // phone + tablet (portrait & landscape)
   const images = useProductImages(deal?.asin, deal?.image_url)
   const touchStartX = useRef(null)
 
@@ -67,7 +68,7 @@ export default function ProductModal({ deal, onClose }) {
         position: 'fixed', inset: 0, zIndex: 500,
         background: 'rgba(31,30,29,0.48)', backdropFilter: 'blur(8px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: isMobile ? 0 : 24,
+        padding: isMobile ? 0 : isStacked ? 16 : 24,
       }}
     >
       <div
@@ -75,13 +76,13 @@ export default function ProductModal({ deal, onClose }) {
         style={{
           background: 'var(--bg-card)',
           width: '100%',
-          maxWidth: isMobile ? '100%' : 1280,
-          height: isMobile ? '100dvh' : '59vh',
-          maxHeight: isMobile ? '100dvh' : '98vh',
-          display: isMobile ? 'flex' : 'grid',
+          maxWidth: isStacked ? '100%' : 1280,
+          height: isMobile ? '100dvh' : 'auto',
+          maxHeight: isMobile ? '100dvh' : '95vh',
+          display: isStacked ? 'flex' : 'grid',
           flexDirection: 'column',
           gridTemplateColumns: '1.2fr 0.8fr',
-          overflowY: isMobile ? 'auto' : 'hidden',
+          overflowY: 'auto',
           position: 'relative',
           boxShadow: '0 30px 70px rgba(0,0,0,0.2)',
         }}
@@ -98,16 +99,16 @@ export default function ProductModal({ deal, onClose }) {
         <div
           style={{
             background: 'var(--bg-img)',
-            padding: isMobile ? '48px 24px 20px' : '48px 48px 32px',
+            padding: isMobile ? '48px 24px 20px' : isStacked ? '40px 32px 20px' : '48px 48px 32px',
             display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-            borderRight: isMobile ? 'none' : '1px solid var(--border)',
-            borderBottom: isMobile ? '1px solid var(--border)' : 'none',
+            borderRight: isStacked ? 'none' : '1px solid var(--border)',
+            borderBottom: isStacked ? '1px solid var(--border)' : 'none',
           }}
         >
           <div
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
-            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', minHeight: isMobile ? 240 : 360 }}
+            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', minHeight: isMobile ? 220 : isStacked ? 280 : 360 }}
           >
             {images.length > 1 && (
               <button
