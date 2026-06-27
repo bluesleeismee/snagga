@@ -41,12 +41,17 @@ export default function LegalPage() {
           <p>
             snagga.de ist Teilnehmer am Partnerprogramm von Amazon Europe S.à r.l. und Partner des Werbeprogramms,
             das zur Bereitstellung eines Mediums für Websites konzipiert wurde, mittels dessen durch die Platzierung
-            von Werbeanzeigen und Links zu amazon.de Werbekostenerstattungen verdient werden können.
+            von Werbeanzeigen und Links zu amazon.de, amazon.at und amazon.ch Werbekostenerstattungen verdient werden können.
           </p>
           <p>
-            Als Amazon-Partner verdienen wir an qualifizierten Käufen eine Provision — für dich entstehen
-            dabei <strong>keine zusätzlichen Kosten</strong>. Der angezeigte Preis entspricht dem regulären
-            Amazon-Preis.
+            Als Amazon-Partner verdiene ich an qualifizierten Verkäufen eine Provision — für dich entstehen
+            dabei <strong>keine zusätzlichen Kosten</strong>. Der angezeigte Preis entspricht dem zum Zeitpunkt
+            des Abrufs auf Amazon gültigen Preis.
+          </p>
+          <p>
+            snagga.de ist ein kommerziell betriebenes Angebot, das durch Affiliate-Provisionen finanziert wird.
+            Alle Produktempfehlungen und Deal-Bewertungen werden unabhängig erstellt; die Provisionsstruktur
+            beeinflusst die Auswahl der Produkte nicht.
           </p>
           <p style={{ marginBottom: 0 }}>Amazon-Partner-Tag: <strong>snagga-21</strong></p>
         </Section>
@@ -73,8 +78,15 @@ export default function LegalPage() {
           </SubSection>
 
           <SubSection title="Preisdaten">
-            Preisdaten werden von CamelCamelCamel-RSS-Feeds bezogen.
+            Preisdaten werden über einen eigenen Backend-Dienst erhoben und verarbeitet.
             Es werden keine Nutzerdaten an Dritte weitergegeben.
+          </SubSection>
+
+          <SubSection title="Rechtsgrundlage">
+            Die Verarbeitung technisch notwendiger Daten (z. B. IP-Adressen in Server-Logs)
+            erfolgt auf Basis von Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse am
+            sicheren Betrieb der Website). Daten werden nicht länger gespeichert als technisch
+            erforderlich.
           </SubSection>
 
           <SubSection title="Affiliate-Links">
@@ -99,15 +111,24 @@ export default function LegalPage() {
             {' '}— Eidgenössischer Datenschutz- und Öffentlichkeitsbeauftragter<br />
             Deutschland:{' '}
             <a href="https://www.bfdi.bund.de" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>BfDI</a>
-            {' '}— Bundesbeauftragte für den Datenschutz und die Informationsfreiheit
+            {' '}— Bundesbeauftragte für den Datenschutz und die Informationsfreiheit<br />
+            Österreich:{' '}
+            <a href="https://www.dsb.gv.at" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>DSB</a>
+            {' '}— Datenschutzbehörde
           </SubSection>
         </Section>
 
         <Section id="preise" title="Preisangaben">
+          <p>
+            Alle Preise verstehen sich inkl. der gesetzlichen Mehrwertsteuer (MwSt.).
+            Versandkosten können je nach Produkt, Anbieter und Bestellwert anfallen;
+            massgeblich ist die bei Amazon zum Zeitpunkt des Kaufs angezeigte Versandkostenpauschale.
+          </p>
           <p style={{ marginBottom: 0 }}>
-            Alle Preise sind unverbindliche Richtwerte und können sich jederzeit ändern.
-            Massgeblich ist der zum Kaufzeitpunkt auf Amazon.de angezeigte Preis.
-            snagga.de übernimmt keine Gewähr für die Richtigkeit der Preisangaben.
+            Alle angezeigten Preise sind unverbindliche Richtwerte und können sich jederzeit ändern.
+            Massgeblich ist ausschliesslich der zum Kaufzeitpunkt auf der jeweiligen Amazon-Seite
+            angezeigte Endpreis. snagga.de übernimmt keine Gewähr für die Aktualität und
+            Richtigkeit der Preisangaben.
           </p>
         </Section>
 
@@ -122,9 +143,18 @@ export default function LegalPage() {
           <p>
             E-Mail: <a href="mailto:contact@snagga.de" style={{ color: 'var(--accent)' }}>contact@snagga.de</a>
           </p>
+          <p>
+            snagga.de ist ein kommerziell betriebenes Angebot mit Sitz in der Schweiz.
+            Das Angebot steht in keiner direkten Verbindung zu Amazon.
+            Teilnahme am Amazon-Partnerprogramm (Partner-Tag: snagga-21).
+          </p>
           <p style={{ marginBottom: 0, color: 'var(--muted)', fontSize: 13 }}>
-            snagga.de ist ein unabhängiges Privatprojekt und steht in keiner direkten Verbindung zu Amazon.
-            Wir sind Teilnehmer am Amazon-Partnerprogramm (Partner-Tag: snagga-21).
+            <strong style={{ color: 'var(--muted)' }}>Online-Streitbeilegung (EU):</strong>{' '}
+            Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit:{' '}
+            <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>
+              https://ec.europa.eu/consumers/odr
+            </a>. Eine Teilnahme an einem Streitbeilegungsverfahren vor einer
+            Verbraucherschlichtungsstelle wird nicht angestrebt, ist jedoch nicht ausgeschlossen.
           </p>
         </Section>
       </main>
