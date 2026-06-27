@@ -207,23 +207,6 @@ export default function DealsPage() {
   const toggleTheme = () => setTheme(t => t === 'light' ? 'dark' : 'light')
   const [error,        setError]        = useState(null)
   const [selectedDeal, setSelectedDeal] = useState(null)
-  const catScrollRef = useRef(null)
-
-  /* Verhindert iOS-Zurück-Geste beim horizontalen Swipen in der Kategorieleiste */
-  useEffect(() => {
-    const el = catScrollRef.current
-    if (!el) return
-    let startX = 0, startY = 0
-    const onStart = e => { startX = e.touches[0].clientX; startY = e.touches[0].clientY }
-    const onMove  = e => {
-      const dx = Math.abs(e.touches[0].clientX - startX)
-      const dy = Math.abs(e.touches[0].clientY - startY)
-      if (dx > dy) e.preventDefault()
-    }
-    el.addEventListener('touchstart', onStart, { passive: true })
-    el.addEventListener('touchmove',  onMove,  { passive: false })
-    return () => { el.removeEventListener('touchstart', onStart); el.removeEventListener('touchmove', onMove) }
-  }, [])
 
   /* Load best picks once — unaffected by filters */
   useEffect(() => {
@@ -394,7 +377,7 @@ export default function DealsPage() {
           ))}
           <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.2)', flexShrink: 0 }} />
           {/* Rest — scrollable */}
-          <div ref={catScrollRef} className="no-scroll" style={{ display: 'flex', gap: 6, alignItems: 'center', overflowX: 'auto', flexWrap: 'nowrap', minWidth: 0, overscrollBehaviorX: 'contain' }}>
+          <div className="no-scroll" style={{ display: 'flex', gap: 6, alignItems: 'center', overflowX: 'auto', flexWrap: 'nowrap', minWidth: 0, overscrollBehaviorX: 'contain' }}>
           {categories.filter(c => c !== 'Alle').map(cat => (
             <button
               key={cat}
