@@ -32,21 +32,63 @@ function lsSet(key, data) {
 
 /* ── Best Picks Slider ──────────────────────────────────────────── */
 function BestPicksSlider({ deals, onOpen }) {
-  const [paused, setPaused] = useState(false)
-  const topDeals = deals.filter(d => d.deal_score >= 75).slice(0, 6)
+  const { isDesktop, width } = useBreakpoint()
+  const topDeals = deals.filter(d => d.deal_score >= 75).slice(0, 8)
   if (topDeals.length === 0) return null
 
-  const duration = topDeals.length * 6  // seconds — 6s per card
+  const CARD_W = width < 500 ? width - 48 : 440
+  const GAP    = 20
+  const STEP   = CARD_W + GAP
+
+  const [offset,  setOffset]  = useState(0)
+  const [paused,  setPaused]  = useState(false)
+  const [animate, setAnimate] = useState(true)
+  const swipeX = useRef(null)
+
+  const maxOffset = (topDeals.length - 1) * STEP
+
+  const go = useCallback((dir) => {
+    setAnimate(true)
+    setPaused(true)
+    setOffset(o => dir > 0
+      ? (o >= maxOffset ? 0 : o + STEP)
+      : (o <= 0 ? maxOffset : o - STEP)
+    )
+    setTimeout(() => setPaused(false), 6000)
+  }, [maxOffset, STEP])
+
+  // Auto-advance
+  useEffect(() => {
+    if (paused) return
+    const t = setTimeout(() => {
+      setAnimate(true)
+      setOffset(o => o >= maxOffset ? 0 : o + STEP)
+    }, 5000)
+    return () => clearTimeout(t)
+  }, [paused, offset, maxOffset, STEP])
+
+  const onTouchStart = e => { swipeX.current = e.touches[0].clientX }
+  const onTouchEnd   = e => {
+    if (!swipeX.current) return
+    const dx = e.changedTouches[0].clientX - swipeX.current
+    if (dx < -40) go(1)
+    else if (dx > 40) go(-1)
+    swipeX.current = null
+  }
+
+  const btnStyle = (side) => ({
+    flexShrink: 0, width: 44, height: 44, borderRadius: '50%',
+    background: 'var(--bg-card)', border: '1px solid var(--border)',
+    color: 'var(--text)', fontSize: 22,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    cursor: 'pointer', transition: 'all 0.2s', alignSelf: 'center',
+    marginLeft: side === 'right' ? 12 : 0,
+    marginRight: side === 'left' ? 12 : 0,
+    boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+  })
 
   return (
     <section style={{ marginBottom: 28 }}>
-      <style>{`
-        @keyframes marquee {
-          from { transform: translateX(0) }
-          to   { transform: translateX(-50%) }
-        }
-      `}</style>
-
       <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)', marginBottom: 22 }}>
         Die besten Picks des Tages
         <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--muted)', marginLeft: 10 }}>
@@ -54,63 +96,81 @@ function BestPicksSlider({ deals, onOpen }) {
         </span>
       </h2>
 
-      <div style={{ overflow: 'hidden', padding: '4px 0 16px' }}
-        onMouseEnter={() => setPaused(true)}
-        onMouseLeave={() => setPaused(false)}
-      >
-        <div style={{
-          display: 'flex', gap: 24,
-          width: 'max-content',
-          animation: `marquee ${duration}s linear infinite`,
-          animationPlayState: paused ? 'paused' : 'running',
-        }}>
-          {[...topDeals, ...topDeals].map((deal, i) => {
-          const disc = discount(deal.current_price, deal.original_price)
-          return (
-            <div
-              key={`${deal.asin}-${i}`}
-              onClick={() => onOpen(deal)}
-              style={{ flexShrink: 0, width: 500, background: 'var(--bg-card)', border: '1px solid var(--border)', display: 'flex', cursor: 'pointer', transition: 'transform 0.3s cubic-bezier(0.16,1,0.3,1), box-shadow 0.3s' }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 12px 30px rgba(31,30,29,0.06)' }}
-              onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '' }}
-            >
-              <div style={{ width: 190, flexShrink: 0, background: 'var(--bg-img)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, position: 'relative' }}>
-                {disc > 0 && (
-                  <div style={{ position: 'absolute', top: 12, left: 12, background: 'var(--accent)', color: '#fff', fontSize: 10, fontWeight: 600, padding: '2px 8px', letterSpacing: 0.5 }}>
-                    –{disc}%
-                  </div>
-                )}
-                {deal.image_url
-                  ? <img src={deal.image_url} alt={deal.name} style={{ maxWidth: '100%', maxHeight: 150, objectFit: 'contain' }} />
-                  : <div style={{ fontSize: 40, color: 'var(--border)' }}>📦</div>
-                }
-              </div>
-              <div style={{ flex: 1, padding: '24px 22px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                <div>
-                  <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--muted)', fontWeight: 500, marginBottom: 7 }}>
-                    {deal.brand || deal.category}
-                  </div>
-                  <h3 style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.4, marginBottom: 12, color: 'var(--text)' }}>
-                    {deal.name}
-                  </h3>
-                </div>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
-                    <span style={{ fontSize: 18, fontWeight: 700 }}>{fmtPrice(deal.current_price)}</span>
-                    {deal.original_price > deal.current_price && (
-                      <span style={{ fontSize: 13, textDecoration: 'line-through', color: 'var(--muted)' }}>{fmtPrice(deal.original_price)}</span>
+      <div style={{ display: 'flex', alignItems: 'stretch' }}>
+        {isDesktop && (
+          <button style={btnStyle('left')} onClick={() => go(-1)}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent)'; e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = '#fff' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-card)'; e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text)' }}
+          >‹</button>
+        )}
+
+        <div
+          style={{ flex: 1, overflow: 'hidden', padding: '4px 0 12px' }}
+          onMouseEnter={() => setPaused(true)}
+          onMouseLeave={() => setPaused(false)}
+          onTouchStart={onTouchStart}
+          onTouchEnd={onTouchEnd}
+        >
+          <div style={{
+            display: 'flex', gap: GAP,
+            transform: `translateX(-${offset}px)`,
+            transition: animate ? 'transform 0.45s cubic-bezier(0.16,1,0.3,1)' : 'none',
+          }}>
+            {topDeals.map((deal, i) => {
+              const disc = discount(deal.current_price, deal.original_price)
+              return (
+                <div
+                  key={`${deal.asin}-${i}`}
+                  onClick={() => onOpen(deal)}
+                  style={{ flexShrink: 0, width: CARD_W, background: 'var(--bg-card)', border: '1px solid var(--border)', display: 'flex', cursor: 'pointer', transition: 'transform 0.3s cubic-bezier(0.16,1,0.3,1), box-shadow 0.3s' }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 12px 30px rgba(31,30,29,0.06)' }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '' }}
+                >
+                  <div style={{ width: 170, flexShrink: 0, background: 'var(--bg-img)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, position: 'relative' }}>
+                    {disc > 0 && (
+                      <div style={{ position: 'absolute', top: 12, left: 12, background: 'var(--accent)', color: '#fff', fontSize: 10, fontWeight: 600, padding: '2px 8px', letterSpacing: 0.5 }}>
+                        –{disc}%
+                      </div>
                     )}
+                    {deal.image_url
+                      ? <img src={deal.image_url} alt={deal.name} style={{ maxWidth: '100%', maxHeight: 130, objectFit: 'contain' }} />
+                      : <div style={{ fontSize: 40, color: 'var(--border)' }}>📦</div>
+                    }
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                    {deal.category}
-                    {deal.prime && <span style={{ color: '#00A8E0', fontWeight: 600, marginLeft: 8 }}>Prime</span>}
+                  <div style={{ flex: 1, padding: '20px 18px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--muted)', fontWeight: 500, marginBottom: 6 }}>
+                        {deal.brand || deal.category}
+                      </div>
+                      <h3 style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.4, marginBottom: 10, color: 'var(--text)' }}>
+                        {deal.name}
+                      </h3>
+                    </div>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
+                        <span style={{ fontSize: 17, fontWeight: 700 }}>{fmtPrice(deal.current_price)}</span>
+                        {deal.original_price > deal.current_price && (
+                          <span style={{ fontSize: 12, textDecoration: 'line-through', color: 'var(--muted)' }}>{fmtPrice(deal.original_price)}</span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                        {deal.category}
+                        {deal.prime && <span style={{ color: '#00A8E0', fontWeight: 600, marginLeft: 8 }}>Prime</span>}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
-          )
-        })}
+              )
+            })}
+          </div>
         </div>
+
+        {isDesktop && (
+          <button style={btnStyle('right')} onClick={() => go(1)}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent)'; e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = '#fff' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-card)'; e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text)' }}
+          >›</button>
+        )}
       </div>
     </section>
   )
