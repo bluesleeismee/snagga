@@ -205,7 +205,7 @@ export default function DealsPage() {
 
       {/* ── HEADER ── */}
       <header style={{
-        background: '#153D68', borderBottom: '1px solid #1E5080',
+        background: '#153D68',
         position: 'sticky', top: 0, zIndex: 100,
         height: 'var(--header-h)',
       }}>
@@ -272,7 +272,7 @@ export default function DealsPage() {
 
         {/* ── FILTER BAR ── */}
         <div style={{
-          background: '#153D68', border: '1px solid #1E5080',
+          background: '#153D68', border: '1px solid #1E5080', borderTop: 'none',
           padding: isMobile ? '10px 14px' : '13px 24px',
           display: 'flex',
           flexDirection: isMobile ? 'column' : 'row',
