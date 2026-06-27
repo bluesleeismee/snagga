@@ -362,13 +362,14 @@ export default function DealsPage() {
           alignItems: isMobile ? 'stretch' : 'center',
           gap: isMobile ? 8 : 0,
         }}>
-        <div className="no-scroll" style={{ display: 'flex', gap: 6, alignItems: 'center', overflowX: 'auto', flexWrap: 'nowrap', minWidth: 0, flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', minWidth: 0, flex: 1, gap: 6 }}>
           {isDesktop && (
-            <span style={{ fontSize: 13, color: '#fff', fontWeight: 600, marginRight: 10, flexShrink: 0 }}>
+            <span style={{ fontSize: 13, color: '#fff', fontWeight: 600, flexShrink: 0 }}>
               Kategorien
             </span>
           )}
-          {categories.map(cat => (
+          {/* "Alle" — always visible, never scrolls away */}
+          {['Alle'].map(cat => (
             <button
               key={cat}
               onClick={() => setSelectedCat(cat)}
@@ -387,6 +388,29 @@ export default function DealsPage() {
               {cat}
             </button>
           ))}
+          <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.2)', flexShrink: 0 }} />
+          {/* Rest — scrollable */}
+          <div className="no-scroll" style={{ display: 'flex', gap: 6, alignItems: 'center', overflowX: 'auto', flexWrap: 'nowrap', minWidth: 0 }}>
+          {categories.filter(c => c !== 'Alle').map(cat => (
+            <button
+              key={cat}
+              onClick={() => setSelectedCat(cat)}
+              style={{
+                padding: isMobile ? '6px 12px' : '7px 16px',
+                fontSize: 13, flexShrink: 0, borderRadius: 2,
+                border: '1px solid transparent',
+                background: cat === selectedCat ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.1)',
+                color: cat === selectedCat ? '#153D68' : '#fff',
+                fontWeight: cat === selectedCat ? 600 : 500,
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => { if (cat !== selectedCat) { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; e.currentTarget.style.color = '#fff' } }}
+              onMouseLeave={e => { if (cat !== selectedCat) { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'rgba(255,255,255,0.8)' } }}
+            >
+              {cat}
+            </button>
+          ))}
+          </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, marginLeft: 12 }}>
