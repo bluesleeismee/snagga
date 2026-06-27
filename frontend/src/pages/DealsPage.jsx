@@ -284,25 +284,12 @@ export default function DealsPage() {
     return () => window.removeEventListener('popstate', onPop)
   }, [])
 
-  // Swipe-left on main page → browser back
-  const pageSwipeX = useRef(null)
-  const handlePageTouchStart = useCallback(e => {
-    pageSwipeX.current = e.touches[0].clientX
-  }, [])
-  const handlePageTouchEnd = useCallback(e => {
-    if (pageSwipeX.current === null || selectedDeal) return
-    const dx = e.changedTouches[0].clientX - pageSwipeX.current
-    if (dx < -80) window.history.back()
-    pageSwipeX.current = null
-  }, [selectedDeal])
 
   const cols = width >= 1500 ? 5 : width >= 1100 ? 4 : width >= 768 ? 3 : 2
 
   return (
     <div
       style={{ minHeight: '100%', background: 'var(--bg)' }}
-      onTouchStart={isMobile ? handlePageTouchStart : undefined}
-      onTouchEnd={isMobile ? handlePageTouchEnd : undefined}
     >
       {selectedDeal && <ProductModal deal={selectedDeal} onClose={closeModal} />}
 
