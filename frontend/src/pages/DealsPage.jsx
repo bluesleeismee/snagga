@@ -88,15 +88,17 @@ function BestPicksSlider({ deals, onOpen }) {
   }
 
   const btnStyle = (side) => ({
-    flexShrink: 0, width: 44, height: 44, borderRadius: '50%', alignSelf: 'center',
+    flexShrink: 0, width: 52, height: 52, borderRadius: '50%', alignSelf: 'center',
     background: 'var(--bg-card)', border: '1px solid var(--border)',
-    color: 'var(--text)', fontSize: 22,
+    color: 'var(--text)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     cursor: 'pointer', transition: 'all 0.2s',
     marginLeft: side === 'right' ? 12 : 0,
     marginRight: side === 'left'  ? 12 : 0,
     boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
   })
+  const ArrowLeft  = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15,18 9,12 15,6"/></svg>
+  const ArrowRight = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9,18 15,12 9,6"/></svg>
 
   return (
     <section style={{ marginBottom: 28 }}>
@@ -112,7 +114,7 @@ function BestPicksSlider({ deals, onOpen }) {
           <button style={btnStyle('left')} onClick={() => skip(-1)}
             onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent)'; e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = '#fff' }}
             onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-card)'; e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text)' }}
-          >‹</button>
+          ><ArrowLeft /></button>
         )}
 
         <div
@@ -178,7 +180,7 @@ function BestPicksSlider({ deals, onOpen }) {
           <button style={btnStyle('right')} onClick={() => skip(1)}
             onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent)'; e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = '#fff' }}
             onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-card)'; e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text)' }}
-          >›</button>
+          ><ArrowRight /></button>
         )}
       </div>
     </section>
