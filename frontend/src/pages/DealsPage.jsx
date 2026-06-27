@@ -350,7 +350,7 @@ export default function DealsPage() {
         )}
 
         {!loading && deals.length > 0 && (
-          <p style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center', marginTop: 52, lineHeight: 1.6 }}>
+          <p style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center', marginTop: 'auto', paddingTop: 48, lineHeight: 1.6 }}>
             * Als Amazon-Partner verdienen wir an qualifizierten Käufen — für dich entstehen keine Mehrkosten.
           </p>
         )}
