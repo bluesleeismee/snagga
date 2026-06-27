@@ -26,7 +26,7 @@ html, body, #root {
 }
 
 [data-theme="dark"] {
-  --bg:           #181715;
+  --bg:           #383b40;
   --bg-card:      #221F1C;
   --bg-img:       #2A2724;
   --border:       #38342F;
