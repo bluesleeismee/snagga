@@ -39,7 +39,7 @@ function BestPicksSlider({ deals, onOpen }) {
   const duration = topDeals.length * 6  // seconds — 6s per card
 
   return (
-    <section style={{ marginBottom: 60 }}>
+    <section style={{ marginBottom: 28 }}>
       <style>{`
         @keyframes marquee {
           from { transform: translateX(0) }
