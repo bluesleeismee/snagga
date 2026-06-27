@@ -471,7 +471,7 @@ export default function DealsPage() {
 
         {/* Grid title */}
         <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 22, color: 'var(--text)' }}>
-          {selectedCat !== 'Alle' ? `${selectedCat} Deals` : search ? `Suche: "${search}"` : 'Aktuelle Live-Deals'}
+          {selectedCat !== 'Alle' ? `${selectedCat} Deals` : search ? `Suche: "${search}"` : 'Alle Picks'}
           {!loading && (
             <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--muted)', marginLeft: 10 }}>
               ({deals.length})
