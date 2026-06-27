@@ -344,14 +344,17 @@ export default function DealsPage() {
       {/* ── FILTER BAR — full width, outside constrained main ── */}
       <div style={{
         background: '#153D68', border: '1px solid #1E5080', borderTop: 'none',
-        padding: isMobile ? '10px 4%' : '13px 1%',
-        display: 'flex',
-        flexDirection: isMobile ? 'column' : 'row',
-        justifyContent: 'space-between',
-        alignItems: isMobile ? 'stretch' : 'center',
-        gap: isMobile ? 8 : 0,
         position: 'sticky', top: 'calc(var(--header-h) - 1px)', zIndex: 90,
       }}>
+        <div style={{
+          maxWidth: 1840, width: '98%', margin: '0 auto',
+          padding: isMobile ? '10px 14px' : '13px 0',
+          display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
+          justifyContent: 'space-between',
+          alignItems: isMobile ? 'stretch' : 'center',
+          gap: isMobile ? 8 : 0,
+        }}>
         <div className="no-scroll" style={{ display: 'flex', gap: 6, alignItems: 'center', overflowX: 'auto', flexWrap: 'nowrap', minWidth: 0, flex: 1 }}>
           {isDesktop && (
             <span style={{ fontSize: 13, color: '#fff', fontWeight: 600, marginRight: 10, flexShrink: 0 }}>
@@ -392,6 +395,7 @@ export default function DealsPage() {
           >
             {SORTS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
+        </div>
         </div>
       </div>
 
