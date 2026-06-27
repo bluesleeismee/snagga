@@ -390,7 +390,7 @@ export default function DealsPage() {
           ))}
           <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.2)', flexShrink: 0 }} />
           {/* Rest — scrollable */}
-          <div className="no-scroll" style={{ display: 'flex', gap: 6, alignItems: 'center', overflowX: 'auto', flexWrap: 'nowrap', minWidth: 0 }}>
+          <div className="no-scroll" style={{ display: 'flex', gap: 6, alignItems: 'center', overflowX: 'auto', flexWrap: 'nowrap', minWidth: 0, overscrollBehaviorX: 'contain' }}>
           {categories.filter(c => c !== 'Alle').map(cat => (
             <button
               key={cat}
