@@ -12,6 +12,12 @@ const SORTS = [
   { id: 'newest',    label: 'Neu' },
 ]
 
+const COUNTRIES = [
+  { code: 'DE', flag: '🇩🇪', label: 'Deutschland' },
+  { code: 'AT', flag: '🇦🇹', label: 'Österreich' },
+  { code: 'CH', flag: '🇨🇭', label: 'Schweiz' },
+]
+
 const LS_DEALS = 'sng_deals_v2'
 const LS_CATS  = 'sng_cats_v2'
 const LS_PICKS = 'sng_picks_v2'
@@ -186,6 +192,7 @@ export default function DealsPage() {
   const [categories,   setCategories]   = useState(() => lsGet(LS_CATS)  || ['Alle'])
   const [selectedCat,  setSelectedCat]  = useState('Alle')
   const [sortBy,       setSortBy]       = useState('score')
+  const [selectedCountry, setSelectedCountry] = useState('DE')
   const [search,       setSearch]       = useState('')
   const [deals,        setDeals]        = useState(() => lsGet(LS_DEALS) || [])
   const [bestPicks,    setBestPicks]    = useState(() => lsGet(LS_PICKS) || [])
@@ -383,6 +390,34 @@ export default function DealsPage() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, marginLeft: 12 }}>
+          {/* Versandland */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            {isDesktop && (
+              <span style={{ fontSize: 13, color: '#fff', fontWeight: 600, marginRight: 4 }}>Versandland</span>
+            )}
+            {COUNTRIES.map(c => (
+              <button
+                key={c.code}
+                onClick={() => setSelectedCountry(c.code)}
+                title={c.label}
+                style={{
+                  padding: '4px 7px',
+                  fontSize: 19,
+                  lineHeight: 1,
+                  border: selectedCountry === c.code ? '2px solid rgba(255,255,255,0.85)' : '2px solid rgba(255,255,255,0.2)',
+                  borderRadius: 6,
+                  background: selectedCountry === c.code ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.1)',
+                  boxShadow: selectedCountry === c.code ? 'inset 0 2px 5px rgba(0,0,0,0.18)' : 'none',
+                  transform: selectedCountry === c.code ? 'scale(0.93)' : 'scale(1)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {c.flag}
+              </button>
+            ))}
+          </div>
+          <div style={{ width: 1, height: 22, background: 'rgba(255,255,255,0.2)', flexShrink: 0 }} />
           {isDesktop && (
             <span style={{ fontSize: 13, color: '#fff', fontWeight: 600 }}>
               Sortieren
