@@ -494,8 +494,8 @@ export default function DealsPage() {
             <a href="/" style={{ fontSize: 20, fontWeight: 800, color: '#EDE9E3', letterSpacing: '-0.5px' }}>
               snagga<span style={{ color: 'var(--accent)' }}>.de</span>
             </a>
-            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 6 }}>
-              Täglich kuratierte Amazon-Bestpreise · Affiliate-Partner von Amazon
+            <p style={{ fontSize: 12, color: '#fff', marginTop: 6 }}>
+              Täglich ausgewählte Amazon-Bestpreise · Affiliate-Partner von Amazon
             </p>
           </div>
           <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? 12 : 28, flexWrap: 'wrap' }}>
@@ -505,12 +505,12 @@ export default function DealsPage() {
               ['Affiliate-Hinweis', '/legal#affiliate'],
               ['Preisangaben', '/legal#preise'],
             ].map(([label, href]) => (
-              <a key={label} href={href} style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', fontWeight: 500, transition: 'color 0.15s' }}
-                onMouseEnter={e => e.currentTarget.style.color = '#fff'}
-                onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.65)'}
+              <a key={label} href={href} style={{ fontSize: 13, color: '#fff', fontWeight: 500, transition: 'opacity 0.15s' }}
+                onMouseEnter={e => e.currentTarget.style.opacity = '0.7'}
+                onMouseLeave={e => e.currentTarget.style.opacity = '1'}
               >{label}</a>
             ))}
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginLeft: isMobile ? 0 : 'auto' }}>
+            <span style={{ fontSize: 11, color: '#fff', marginLeft: isMobile ? 0 : 'auto' }}>
               © 2026 snagga.de · Preise ohne Gewähr
             </span>
           </div>
