@@ -169,12 +169,15 @@ export default function ProductModal({ deal, onClose }) {
             </div>
 
             {/* Title */}
-            <h2 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, lineHeight: 1.3, marginBottom: 22, color: 'var(--text)', paddingRight: isMobile ? 0 : 32 }}>
+            <h2 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, lineHeight: 1.3, color: 'var(--text)', paddingRight: isMobile ? 0 : 32 }}>
               {deal.name}
             </h2>
+          </div>
 
+          {/* CTA + Prices + Stats */}
+          <div>
             {/* Prices */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, flexWrap: 'wrap', marginTop: 24 }}>
               <span style={{ fontSize: isMobile ? 28 : 34, fontWeight: 700, color: 'var(--text)' }}>
                 {fmtPrice(deal.current_price)}
               </span>
@@ -192,7 +195,7 @@ export default function ProductModal({ deal, onClose }) {
 
             {/* Stats */}
             {(deal.rating || deal.reviews || deal.prime) && (
-              <div style={{ display: 'flex', gap: 24, marginBottom: 28, fontSize: 13 }}>
+              <div style={{ display: 'flex', gap: 24, marginBottom: 24, fontSize: 13 }}>
                 {deal.rating && (
                   <a href={reviewUrl} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
                     <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, letterSpacing: 0.5, marginBottom: 3 }}>BEWERTUNG</div>
@@ -213,10 +216,7 @@ export default function ProductModal({ deal, onClose }) {
                 )}
               </div>
             )}
-          </div>
 
-          {/* CTA */}
-          <div>
             <a
               href={cartUrl}
               target="_blank"
