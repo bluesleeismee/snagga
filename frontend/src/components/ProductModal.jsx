@@ -23,13 +23,14 @@ function useProductImages(asin, primaryUrl) {
 
 export default function ProductModal({ deal, onClose }) {
   const [slide, setSlide] = useState(0)
+  const [lightbox, setLightbox] = useState(false)
   const { isMobile, width } = useBreakpoint()
-  const isStacked = width < 1100   // phone + tablet (portrait & landscape)
+  const isStacked = width < 1100
   const images = useProductImages(deal?.asin, deal?.image_url)
   const touchStartX = useRef(null)
   const touchStartY = useRef(null)
 
-  // Swipe-down or swipe-left on details panel closes modal
+  // Swipe-down or swipe-left on details panel → close modal
   const handleDetailTouchStart = e => {
     touchStartX.current = e.touches[0].clientX
     touchStartY.current = e.touches[0].clientY
@@ -43,19 +44,37 @@ export default function ProductModal({ deal, onClose }) {
     touchStartY.current = null
   }
 
+  // Lightbox swipe handlers
+  const lbSwipeX = useRef(null)
+  const lbSwipeY = useRef(null)
+  const handleLbTouchStart = e => {
+    lbSwipeX.current = e.touches[0].clientX
+    lbSwipeY.current = e.touches[0].clientY
+  }
+  const handleLbTouchEnd = e => {
+    if (lbSwipeX.current === null) return
+    const dx = e.changedTouches[0].clientX - lbSwipeX.current
+    const dy = e.changedTouches[0].clientY - lbSwipeY.current
+    if (dy > 60 || (Math.abs(dx) < 40 && dy > 30)) { setLightbox(false) }
+    else if (dx < -40 && Math.abs(dy) < 40) setSlide(s => (s + 1) % images.length)
+    else if (dx > 40  && Math.abs(dy) < 40) setSlide(s => (s - 1 + images.length) % images.length)
+    lbSwipeX.current = null
+    lbSwipeY.current = null
+  }
+
   const disc    = deal ? discount(deal.current_price, deal.original_price) : 0
   const cartUrl = deal
     ? `https://www.amazon.de/gp/aws/cart/add.html?ASIN.1=${deal.asin}&Quantity.1=1&tag=snagga-21`
     : ''
   const reviewUrl = deal ? `https://www.amazon.de/product-reviews/${deal.asin}` : ''
 
-  useEffect(() => { setSlide(0) }, [deal?.asin])
+  useEffect(() => { setSlide(0); setLightbox(false) }, [deal?.asin])
 
   const handleKey = useCallback(e => {
-    if (e.key === 'Escape') onClose()
+    if (e.key === 'Escape') { if (lightbox) setLightbox(false); else onClose() }
     if (e.key === 'ArrowRight') setSlide(s => (s + 1) % Math.max(images.length, 1))
     if (e.key === 'ArrowLeft')  setSlide(s => (s - 1 + Math.max(images.length, 1)) % Math.max(images.length, 1))
-  }, [onClose, images.length])
+  }, [onClose, images.length, lightbox])
 
   useEffect(() => {
     document.addEventListener('keydown', handleKey)
@@ -77,6 +96,56 @@ export default function ProductModal({ deal, onClose }) {
   const currentImg = images[slide] || null
 
   return (
+    <>
+    {/* ── LIGHTBOX ── */}
+    {lightbox && currentImg && (
+      <div
+        onClick={() => setLightbox(false)}
+        onTouchStart={handleLbTouchStart}
+        onTouchEnd={handleLbTouchEnd}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 600,
+          background: 'rgba(0,0,0,0.92)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >
+        {images.length > 1 && (
+          <button
+            onClick={e => { e.stopPropagation(); setSlide(s => (s - 1 + images.length) % images.length) }}
+            style={{ ...arrowStyle('left'), zIndex: 10, background: 'rgba(255,255,255,0.12)', borderColor: 'rgba(255,255,255,0.2)', color: '#fff', position: 'fixed', left: 16 }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent)'; e.currentTarget.style.borderColor = 'var(--accent)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)' }}
+          >‹</button>
+        )}
+        <img
+          src={currentImg}
+          alt={deal.name}
+          onClick={e => e.stopPropagation()}
+          style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', userSelect: 'none' }}
+          draggable={false}
+        />
+        {images.length > 1 && (
+          <button
+            onClick={e => { e.stopPropagation(); setSlide(s => (s + 1) % images.length) }}
+            style={{ ...arrowStyle('right'), zIndex: 10, background: 'rgba(255,255,255,0.12)', borderColor: 'rgba(255,255,255,0.2)', color: '#fff', position: 'fixed', right: 16 }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent)'; e.currentTarget.style.borderColor = 'var(--accent)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)' }}
+          >›</button>
+        )}
+        <button
+          onClick={() => setLightbox(false)}
+          style={{ position: 'fixed', top: 20, right: 20, background: 'none', border: 'none', fontSize: 32, color: '#fff', cursor: 'pointer', lineHeight: 1, zIndex: 10 }}
+        >×</button>
+        {images.length > 1 && (
+          <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 8 }}>
+            {images.map((_, i) => (
+              <div key={i} onClick={e => { e.stopPropagation(); setSlide(i) }}
+                style={{ width: 8, height: 8, borderRadius: '50%', background: i === slide ? '#fff' : 'rgba(255,255,255,0.35)', cursor: 'pointer', transition: 'background 0.2s' }} />
+            ))}
+          </div>
+        )}
+      </div>
+    )}
     <div
       onClick={onClose}
       style={{
@@ -134,7 +203,12 @@ export default function ProductModal({ deal, onClose }) {
               >‹</button>
             )}
             {currentImg ? (
-              <img src={currentImg} alt={deal.name} style={{ maxWidth: '100%', maxHeight: isMobile ? 200 : 400, objectFit: 'contain' }} draggable={false} />
+              <img
+                src={currentImg} alt={deal.name}
+                onClick={() => setLightbox(true)}
+                style={{ maxWidth: '100%', maxHeight: isMobile ? 200 : 400, objectFit: 'contain', cursor: 'zoom-in' }}
+                draggable={false}
+              />
             ) : (
               <div style={{ fontSize: 60, color: 'var(--border)' }}>📦</div>
             )}
@@ -259,6 +333,7 @@ export default function ProductModal({ deal, onClose }) {
         </div>
       </div>
     </div>
+    </>
   )
 }
 
