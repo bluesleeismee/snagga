@@ -13,9 +13,9 @@ const SORTS = [
 ]
 
 const COUNTRIES = [
-  { code: 'DE', flag: '🇩🇪', label: 'Deutschland' },
-  { code: 'AT', flag: '🇦🇹', label: 'Österreich' },
-  { code: 'CH', flag: '🇨🇭', label: 'Schweiz' },
+  { code: 'DE', src: '/flags/de.svg',  label: 'Deutschland' },
+  { code: 'AT', src: '/flags/at.webp', label: 'Österreich' },
+  { code: 'CH', src: '/flags/ch.avif', label: 'Schweiz' },
 ]
 
 const LS_DEALS = 'sng_deals_v2'
@@ -391,31 +391,34 @@ export default function DealsPage() {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, marginLeft: 12 }}>
           {/* Versandland */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            {isDesktop && (
-              <span style={{ fontSize: 13, color: '#fff', fontWeight: 600, marginRight: 4 }}>Versandland</span>
-            )}
-            {COUNTRIES.map(c => (
-              <button
-                key={c.code}
-                onClick={() => setSelectedCountry(c.code)}
-                title={c.label}
-                style={{
-                  padding: '4px 7px',
-                  fontSize: 19,
-                  lineHeight: 1,
-                  border: selectedCountry === c.code ? '2px solid rgba(255,255,255,0.85)' : '2px solid rgba(255,255,255,0.2)',
-                  borderRadius: 6,
-                  background: selectedCountry === c.code ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.1)',
-                  boxShadow: selectedCountry === c.code ? 'inset 0 2px 5px rgba(0,0,0,0.18)' : 'none',
-                  transform: selectedCountry === c.code ? 'scale(0.93)' : 'scale(1)',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s',
-                }}
-              >
-                {c.flag}
-              </button>
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {COUNTRIES.map(c => {
+              const active = selectedCountry === c.code
+              return (
+                <button
+                  key={c.code}
+                  onClick={() => setSelectedCountry(c.code)}
+                  title={c.label}
+                  style={{
+                    padding: 0,
+                    border: 'none',
+                    background: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    transition: 'all 0.15s',
+                    transform: active ? 'scale(1.18)' : 'scale(1)',
+                    opacity: active ? 1 : 0.38,
+                    filter: active ? 'none' : 'grayscale(30%)',
+                  }}
+                >
+                  <img
+                    src={c.src}
+                    alt={c.label}
+                    style={{ width: 28, height: 19, objectFit: 'cover', display: 'block', borderRadius: 2 }}
+                  />
+                </button>
+              )
+            })}
           </div>
           <div style={{ width: 1, height: 22, background: 'rgba(255,255,255,0.2)', flexShrink: 0 }} />
           {isDesktop && (
