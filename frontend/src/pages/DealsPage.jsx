@@ -261,70 +261,67 @@ export default function DealsPage() {
         </div>
       </header>
 
+      {/* ── FILTER BAR — full width, outside constrained main ── */}
+      <div style={{
+        background: '#153D68', border: '1px solid #1E5080', borderTop: 'none',
+        padding: isMobile ? '10px 4%' : '13px 1%',
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        justifyContent: 'space-between',
+        alignItems: isMobile ? 'stretch' : 'center',
+        gap: isMobile ? 8 : 0,
+        position: 'sticky', top: 'calc(var(--header-h) - 1px)', zIndex: 90,
+      }}>
+        <div className="no-scroll" style={{ display: 'flex', gap: 6, alignItems: 'center', overflowX: 'auto', flexWrap: 'nowrap' }}>
+          {!isMobile && (
+            <span style={{ fontSize: 13, color: '#fff', fontWeight: 600, marginRight: 10, flexShrink: 0 }}>
+              Kategorien
+            </span>
+          )}
+          {categories.map(cat => (
+            <button
+              key={cat}
+              onClick={() => setSelectedCat(cat)}
+              style={{
+                padding: isMobile ? '6px 12px' : '7px 16px',
+                fontSize: 13, flexShrink: 0, borderRadius: 2,
+                border: '1px solid transparent',
+                background: cat === selectedCat ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.1)',
+                color: cat === selectedCat ? '#153D68' : '#fff',
+                fontWeight: cat === selectedCat ? 600 : 500,
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => { if (cat !== selectedCat) { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; e.currentTarget.style.color = '#fff' } }}
+              onMouseLeave={e => { if (cat !== selectedCat) { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'rgba(255,255,255,0.8)' } }}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          {!isMobile && (
+            <span style={{ fontSize: 13, color: '#fff', fontWeight: 600 }}>
+              Sortieren
+            </span>
+          )}
+          <select
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value)}
+            style={{ border: '1px solid var(--border)', background: 'var(--bg-card)', padding: '8px 14px', fontSize: 13, color: 'var(--text)', outline: 'none', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit' }}
+          >
+            {SORTS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+          </select>
+        </div>
+      </div>
+
       {/* ── MAIN ── */}
       <main style={{ maxWidth: 1840, width: '98%', margin: '0 auto', padding: isMobile ? '12px 0 48px' : '20px 0 80px', minHeight: 'calc(100vh - var(--header-h))' }}>
-
 
         {/* Best Picks — immer sichtbar, unabhängig vom Filter */}
         {!isMobile && bestPicks.length >= 3 && (
           <BestPicksSlider deals={bestPicks} onOpen={openDeal} />
         )}
-
-        {/* ── FILTER BAR ── */}
-        <div style={{
-          background: '#153D68', border: '1px solid #1E5080', borderTop: 'none',
-          padding: isMobile ? '10px 14px' : '13px 24px',
-          display: 'flex',
-          flexDirection: isMobile ? 'column' : 'row',
-          justifyContent: 'space-between',
-          alignItems: isMobile ? 'stretch' : 'center',
-          gap: isMobile ? 8 : 0,
-          marginBottom: 32,
-          position: 'sticky', top: 'calc(var(--header-h) - 1px)', zIndex: 90,
-          boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
-        }}>
-          <div className="no-scroll" style={{ display: 'flex', gap: 6, alignItems: 'center', overflowX: 'auto', flexWrap: 'nowrap' }}>
-            {!isMobile && (
-              <span style={{ fontSize: 13, color: '#fff', fontWeight: 600, marginRight: 10, flexShrink: 0 }}>
-                Kategorien
-              </span>
-            )}
-            {categories.map(cat => (
-              <button
-                key={cat}
-                onClick={() => setSelectedCat(cat)}
-                style={{
-                  padding: isMobile ? '6px 12px' : '7px 16px',
-                  fontSize: 13, flexShrink: 0, borderRadius: 2,
-                  border: '1px solid transparent',
-                  background: cat === selectedCat ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.1)',
-                  color: cat === selectedCat ? '#153D68' : '#fff',
-                  fontWeight: cat === selectedCat ? 600 : 500,
-                  transition: 'all 0.15s',
-                }}
-                onMouseEnter={e => { if (cat !== selectedCat) { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; e.currentTarget.style.color = '#fff' } }}
-                onMouseLeave={e => { if (cat !== selectedCat) { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'rgba(255,255,255,0.8)' } }}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-            {!isMobile && (
-              <span style={{ fontSize: 13, color: '#fff', fontWeight: 600 }}>
-                Sortieren
-              </span>
-            )}
-            <select
-              value={sortBy}
-              onChange={e => setSortBy(e.target.value)}
-              style={{ border: '1px solid var(--border)', background: 'var(--bg-card)', padding: '8px 14px', fontSize: 13, color: 'var(--text)', outline: 'none', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit' }}
-            >
-              {SORTS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-            </select>
-          </div>
-        </div>
 
         {/* Grid title */}
         <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 22, color: 'var(--text)' }}>
