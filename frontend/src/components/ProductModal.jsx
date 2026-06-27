@@ -47,19 +47,23 @@ export default function ProductModal({ deal, onClose }) {
   // Lightbox swipe handlers
   const lbSwipeX = useRef(null)
   const lbSwipeY = useRef(null)
+  const lbEdgeSwipe = useRef(false)
   const handleLbTouchStart = e => {
     lbSwipeX.current = e.touches[0].clientX
     lbSwipeY.current = e.touches[0].clientY
+    lbEdgeSwipe.current = e.touches[0].clientX < 40  // left-edge back gesture
   }
   const handleLbTouchEnd = e => {
     if (lbSwipeX.current === null) return
     const dx = e.changedTouches[0].clientX - lbSwipeX.current
     const dy = e.changedTouches[0].clientY - lbSwipeY.current
-    if (dy > 60 || (Math.abs(dx) < 40 && dy > 30)) { setLightbox(false) }
-    else if (dx < -40 && Math.abs(dy) < 40) setSlide(s => (s + 1) % images.length)
-    else if (dx > 40  && Math.abs(dy) < 40) setSlide(s => (s - 1 + images.length) % images.length)
+    if (lbEdgeSwipe.current && dx > 40 && Math.abs(dy) < 60) { setLightbox(false) }  // edge swipe right → back to modal
+    else if (dy > 60 || (Math.abs(dx) < 40 && dy > 30)) { setLightbox(false) }        // swipe down → close
+    else if (dx < -40 && Math.abs(dy) < 40) setSlide(s => (s + 1) % images.length)   // swipe left → next
+    else if (dx > 40  && Math.abs(dy) < 40) setSlide(s => (s - 1 + images.length) % images.length) // swipe right → prev
     lbSwipeX.current = null
     lbSwipeY.current = null
+    lbEdgeSwipe.current = false
   }
 
   const disc    = deal ? discount(deal.current_price, deal.original_price) : 0
