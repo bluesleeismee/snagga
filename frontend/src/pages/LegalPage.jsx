@@ -186,7 +186,7 @@ function SubSection({ title, children, last }) {
   return (
     <div style={{ paddingBottom: last ? 0 : 14, borderBottom: last ? 'none' : '1px solid var(--border)', marginBottom: last ? 0 : 14 }}>
       <strong style={{ display: 'block', marginBottom: 4, color: 'var(--text)' }}>{title}</strong>
-      <span style={{ color: 'var(--muted)', fontSize: 13, lineHeight: 1.7 }}>{children}</span>
+      <span style={{ color: 'var(--muted)', fontSize: 14, lineHeight: 1.7 }}>{children}</span>
     </div>
   )
 }
