@@ -316,7 +316,7 @@ export default function DealsPage() {
       </div>
 
       {/* ── MAIN ── */}
-      <main style={{ maxWidth: 1840, width: '98%', margin: '0 auto', padding: isMobile ? '12px 0 48px' : '20px 0 80px', minHeight: 'calc(100vh - var(--header-h))' }}>
+      <main style={{ maxWidth: 1840, width: '98%', margin: '0 auto', padding: isMobile ? '12px 0 24px' : '20px 0 32px', minHeight: 'calc(100vh - var(--header-h))', display: 'flex', flexDirection: 'column' }}>
 
         {/* Best Picks — immer sichtbar, unabhängig vom Filter */}
         {!isMobile && bestPicks.length >= 3 && (
