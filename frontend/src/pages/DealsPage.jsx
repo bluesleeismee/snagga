@@ -407,7 +407,7 @@ export default function DealsPage() {
                     display: 'flex',
                     transition: 'all 0.15s',
                     transform: active ? 'scale(1.18)' : 'scale(1)',
-                    opacity: active ? 1 : 0.38,
+                    opacity: active ? 1 : 0.55,
                     filter: active ? 'none' : 'grayscale(30%)',
                   }}
                 >
