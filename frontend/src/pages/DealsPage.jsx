@@ -228,6 +228,7 @@ export default function DealsPage() {
         <div style={{
           maxWidth: 1840, width: '98%', margin: '0 auto',
           height: '100%', display: 'flex', alignItems: 'center', gap: isMobile ? 12 : 36,
+          paddingLeft: isMobile ? 14 : 0, paddingRight: isMobile ? 14 : 0,
         }}>
           <a href="/" style={{ fontSize: isMobile ? 22 : 28, fontWeight: 800, letterSpacing: '-0.5px', flexShrink: 0, color: '#EDE9E3' }}>
             snagga<span style={{ color: 'var(--accent)' }}>.de</span>
