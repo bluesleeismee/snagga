@@ -298,7 +298,7 @@ export default function DealsPage() {
                   fontSize: 13, flexShrink: 0, borderRadius: 2,
                   border: '1px solid transparent',
                   background: cat === selectedCat ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.1)',
-                  color: cat === selectedCat ? '#153D68' : 'rgba(255,255,255,0.8)',
+                  color: cat === selectedCat ? '#153D68' : '#fff',
                   fontWeight: cat === selectedCat ? 600 : 500,
                   transition: 'all 0.15s',
                 }}
