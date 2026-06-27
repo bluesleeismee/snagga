@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { fmtPrice, discount } from '../utils.js'
+import { fmtPrice, discount, fmtAge, AGE_COLORS } from '../utils.js'
 import { useBreakpoint } from '../hooks/useBreakpoint.js'
 
 function useProductImages(asin, primaryUrl) {
@@ -289,8 +289,8 @@ export default function ProductModal({ deal, onClose }) {
             </div>
 
             {/* Stats */}
-            {(deal.rating || deal.reviews || deal.prime) && (
-              <div style={{ display: 'flex', gap: 24, marginBottom: 24, fontSize: 13 }}>
+            {(deal.rating || deal.reviews || deal.prime || deal.last_updated) && (
+              <div style={{ display: 'flex', gap: 24, marginBottom: 24, fontSize: 13, alignItems: 'flex-start' }}>
                 {deal.rating && (
                   <a href={reviewUrl} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
                     <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, letterSpacing: 0.5, marginBottom: 3 }}>BEWERTUNG</div>
@@ -309,6 +309,12 @@ export default function ProductModal({ deal, onClose }) {
                     <div style={{ fontWeight: 600, color: '#00A8E0' }}>Prime</div>
                   </div>
                 )}
+                {deal.last_updated && (() => { const age = fmtAge(deal.last_updated); return age ? (
+                  <div style={{ marginLeft: 'auto' }}>
+                    <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, letterSpacing: 0.5, marginBottom: 3 }}>AKTUALISIERT</div>
+                    <div style={{ fontWeight: 600, color: AGE_COLORS[age.level] }}>{age.text}</div>
+                  </div>
+                ) : null })()}
               </div>
             )}
 

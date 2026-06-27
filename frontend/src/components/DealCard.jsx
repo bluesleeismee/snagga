@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react'
-import { fmtPrice, discount } from '../utils.js'
+import { fmtPrice, discount, fmtAge, AGE_COLORS } from '../utils.js'
 
 export default function DealCard({ deal, onClick }) {
   const [imgError,    setImgError]    = useState(false)
   const [hovered,     setHovered]     = useState(false)
   const [secondImg,   setSecondImg]   = useState(null)
   const disc = discount(deal.current_price, deal.original_price)
+  const age  = fmtAge(deal.last_updated)
 
   /* Preload second Amazon image variant */
   useEffect(() => {
@@ -78,13 +79,20 @@ export default function DealCard({ deal, onClick }) {
         </h3>
 
         {/* Price row */}
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 14 }}>
-          <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>
-            {fmtPrice(deal.current_price)}
-          </span>
-          {deal.original_price > deal.current_price && (
-            <span style={{ fontSize: 13, textDecoration: 'line-through', color: 'var(--muted)' }}>
-              {fmtPrice(deal.original_price)}
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>
+              {fmtPrice(deal.current_price)}
+            </span>
+            {deal.original_price > deal.current_price && (
+              <span style={{ fontSize: 13, textDecoration: 'line-through', color: 'var(--muted)' }}>
+                {fmtPrice(deal.original_price)}
+              </span>
+            )}
+          </div>
+          {age && (
+            <span style={{ fontSize: 10, color: AGE_COLORS[age.level], flexShrink: 0, lineHeight: 1 }}>
+              {age.text}
             </span>
           )}
         </div>
