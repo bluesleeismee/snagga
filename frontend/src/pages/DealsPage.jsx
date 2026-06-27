@@ -280,7 +280,7 @@ export default function DealsPage() {
           alignItems: isMobile ? 'stretch' : 'center',
           gap: isMobile ? 8 : 0,
           marginBottom: 32,
-          position: 'sticky', top: 'var(--header-h)', zIndex: 90,
+          position: 'sticky', top: 'calc(var(--header-h) - 1px)', zIndex: 90,
           boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
         }}>
           <div className="no-scroll" style={{ display: 'flex', gap: 6, alignItems: 'center', overflowX: 'auto', flexWrap: 'nowrap' }}>
