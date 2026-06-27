@@ -289,20 +289,8 @@ export default function ProductModal({ deal, onClose }) {
             </div>
 
             {/* Stats */}
-            {(deal.rating || deal.reviews || deal.prime || deal.last_updated) && (
+            {(deal.prime || deal.last_updated) && (
               <div style={{ display: 'flex', gap: 24, marginBottom: 24, fontSize: 13, alignItems: 'flex-start' }}>
-                {deal.rating && (
-                  <a href={reviewUrl} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
-                    <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, letterSpacing: 0.5, marginBottom: 3 }}>BEWERTUNG</div>
-                    <div style={{ fontWeight: 600, color: 'var(--text)' }}>★ {Number(deal.rating).toFixed(1)}</div>
-                  </a>
-                )}
-                {deal.reviews && (
-                  <a href={reviewUrl} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
-                    <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, letterSpacing: 0.5, marginBottom: 3 }}>REVIEWS</div>
-                    <div style={{ fontWeight: 600, color: 'var(--text)' }}>{deal.reviews.toLocaleString('de')}</div>
-                  </a>
-                )}
                 {deal.prime && (
                   <div>
                     <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, letterSpacing: 0.5, marginBottom: 3 }}>VERSAND</div>
