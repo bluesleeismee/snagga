@@ -119,7 +119,7 @@ function BestPicksSlider({ deals, onOpen }) {
 
 /* ── Main Page ──────────────────────────────────────────────────── */
 export default function DealsPage() {
-  const { isMobile, width } = useBreakpoint()
+  const { isMobile, isDesktop, width } = useBreakpoint()
   const [categories,   setCategories]   = useState(() => lsGet(LS_CATS)  || ['Alle'])
   const [selectedCat,  setSelectedCat]  = useState('Alle')
   const [sortBy,       setSortBy]       = useState('score')
@@ -272,8 +272,8 @@ export default function DealsPage() {
         gap: isMobile ? 8 : 0,
         position: 'sticky', top: 'calc(var(--header-h) - 1px)', zIndex: 90,
       }}>
-        <div className="no-scroll" style={{ display: 'flex', gap: 6, alignItems: 'center', overflowX: 'auto', flexWrap: 'nowrap' }}>
-          {!isMobile && (
+        <div className="no-scroll" style={{ display: 'flex', gap: 6, alignItems: 'center', overflowX: 'auto', flexWrap: 'nowrap', minWidth: 0, flex: 1 }}>
+          {isDesktop && (
             <span style={{ fontSize: 13, color: '#fff', fontWeight: 600, marginRight: 10, flexShrink: 0 }}>
               Kategorien
             </span>
@@ -299,8 +299,8 @@ export default function DealsPage() {
           ))}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-          {!isMobile && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, marginLeft: 12 }}>
+          {isDesktop && (
             <span style={{ fontSize: 13, color: '#fff', fontWeight: 600 }}>
               Sortieren
             </span>
