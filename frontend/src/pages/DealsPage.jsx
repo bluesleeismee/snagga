@@ -37,53 +37,58 @@ function BestPicksSlider({ deals, onOpen }) {
   if (topDeals.length === 0) return null
 
   const CARD_W = width < 500 ? width - 48 : 440
-  const GAP    = 20
+  const GAP    = 24
   const STEP   = CARD_W + GAP
 
-  const [offset,  setOffset]  = useState(0)
-  const [paused,  setPaused]  = useState(false)
-  const [animate, setAnimate] = useState(true)
-  const swipeX = useRef(null)
+  const trackRef  = useRef(null)
+  const rafRef    = useRef(null)
+  const pausedRef = useRef(false)
+  const swipeX    = useRef(null)
 
-  const maxOffset = (topDeals.length - 1) * STEP
-
-  const go = useCallback((dir) => {
-    setAnimate(true)
-    setPaused(true)
-    setOffset(o => dir > 0
-      ? (o >= maxOffset ? 0 : o + STEP)
-      : (o <= 0 ? maxOffset : o - STEP)
-    )
-    setTimeout(() => setPaused(false), 6000)
-  }, [maxOffset, STEP])
-
-  // Auto-advance
+  // RAF scroll loop — continuous, pausable via ref
   useEffect(() => {
-    if (paused) return
-    const t = setTimeout(() => {
-      setAnimate(true)
-      setOffset(o => o >= maxOffset ? 0 : o + STEP)
-    }, 5000)
-    return () => clearTimeout(t)
-  }, [paused, offset, maxOffset, STEP])
+    const track = trackRef.current
+    if (!track) return
+    const SPEED = 0.6
+    const loop = () => {
+      if (!pausedRef.current) {
+        track.scrollLeft += SPEED
+        const half = track.scrollWidth / 2
+        if (track.scrollLeft >= half) track.scrollLeft -= half
+      }
+      rafRef.current = requestAnimationFrame(loop)
+    }
+    rafRef.current = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(rafRef.current)
+  }, [])
+
+  const setPaused = (val) => { pausedRef.current = val }
+
+  const skip = (dir) => {
+    const track = trackRef.current
+    if (!track) return
+    track.scrollLeft += dir * STEP
+    const half = track.scrollWidth / 2
+    if (track.scrollLeft >= half) track.scrollLeft -= half
+    if (track.scrollLeft < 0)    track.scrollLeft += half
+  }
 
   const onTouchStart = e => { swipeX.current = e.touches[0].clientX }
   const onTouchEnd   = e => {
     if (!swipeX.current) return
     const dx = e.changedTouches[0].clientX - swipeX.current
-    if (dx < -40) go(1)
-    else if (dx > 40) go(-1)
+    if (Math.abs(dx) > 40) skip(dx < 0 ? 1 : -1)
     swipeX.current = null
   }
 
   const btnStyle = (side) => ({
-    flexShrink: 0, width: 44, height: 44, borderRadius: '50%',
+    flexShrink: 0, width: 44, height: 44, borderRadius: '50%', alignSelf: 'center',
     background: 'var(--bg-card)', border: '1px solid var(--border)',
     color: 'var(--text)', fontSize: 22,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    cursor: 'pointer', transition: 'all 0.2s', alignSelf: 'center',
+    cursor: 'pointer', transition: 'all 0.2s',
     marginLeft: side === 'right' ? 12 : 0,
-    marginRight: side === 'left' ? 12 : 0,
+    marginRight: side === 'left'  ? 12 : 0,
     boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
   })
 
@@ -98,25 +103,23 @@ function BestPicksSlider({ deals, onOpen }) {
 
       <div style={{ display: 'flex', alignItems: 'stretch' }}>
         {isDesktop && (
-          <button style={btnStyle('left')} onClick={() => go(-1)}
+          <button style={btnStyle('left')} onClick={() => skip(-1)}
             onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent)'; e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = '#fff' }}
             onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-card)'; e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text)' }}
           >‹</button>
         )}
 
         <div
-          style={{ flex: 1, overflow: 'hidden', padding: '4px 0 12px' }}
+          ref={trackRef}
+          className="no-scroll"
+          style={{ flex: 1, overflowX: 'scroll', padding: '4px 0 12px' }}
           onMouseEnter={() => setPaused(true)}
           onMouseLeave={() => setPaused(false)}
           onTouchStart={onTouchStart}
           onTouchEnd={onTouchEnd}
         >
-          <div style={{
-            display: 'flex', gap: GAP,
-            transform: `translateX(-${offset}px)`,
-            transition: animate ? 'transform 0.45s cubic-bezier(0.16,1,0.3,1)' : 'none',
-          }}>
-            {topDeals.map((deal, i) => {
+          <div style={{ display: 'flex', gap: GAP, width: 'max-content' }}>
+            {[...topDeals, ...topDeals].map((deal, i) => {
               const disc = discount(deal.current_price, deal.original_price)
               return (
                 <div
@@ -166,7 +169,7 @@ function BestPicksSlider({ deals, onOpen }) {
         </div>
 
         {isDesktop && (
-          <button style={btnStyle('right')} onClick={() => go(1)}
+          <button style={btnStyle('right')} onClick={() => skip(1)}
             onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent)'; e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = '#fff' }}
             onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-card)'; e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text)' }}
           >›</button>
