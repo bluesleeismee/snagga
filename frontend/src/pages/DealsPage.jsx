@@ -188,7 +188,7 @@ function BestPicksSlider({ deals, onOpen }) {
 
 /* ── Main Page ──────────────────────────────────────────────────── */
 export default function DealsPage() {
-  const { isMobile, isDesktop, width } = useBreakpoint()
+  const { isMobile, isTablet, isDesktop, width } = useBreakpoint()
   const [categories,   setCategories]   = useState(() => lsGet(LS_CATS)  || ['Alle'])
   const [selectedCat,  setSelectedCat]  = useState('Alle')
   const [sortBy,       setSortBy]       = useState('score')
@@ -402,6 +402,7 @@ export default function DealsPage() {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, marginLeft: 12 }}>
           {/* Versandland */}
+          {isTablet && <div style={{ width: 1, height: 22, background: 'rgba(255,255,255,0.2)', flexShrink: 0 }} />}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {COUNTRIES.map(c => {
               const active = selectedCountry === c.code
