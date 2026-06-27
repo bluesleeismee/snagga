@@ -27,6 +27,21 @@ export default function ProductModal({ deal, onClose }) {
   const isStacked = width < 1100   // phone + tablet (portrait & landscape)
   const images = useProductImages(deal?.asin, deal?.image_url)
   const touchStartX = useRef(null)
+  const touchStartY = useRef(null)
+
+  // Swipe-down or swipe-left on details panel closes modal
+  const handleDetailTouchStart = e => {
+    touchStartX.current = e.touches[0].clientX
+    touchStartY.current = e.touches[0].clientY
+  }
+  const handleDetailTouchEnd = e => {
+    if (touchStartX.current === null) return
+    const dx = e.changedTouches[0].clientX - touchStartX.current
+    const dy = e.changedTouches[0].clientY - touchStartY.current
+    if (dy > 60 || (dx < -60 && Math.abs(dy) < 40)) onClose()
+    touchStartX.current = null
+    touchStartY.current = null
+  }
 
   const disc    = deal ? discount(deal.current_price, deal.original_price) : 0
   const cartUrl = deal
@@ -156,6 +171,8 @@ export default function ProductModal({ deal, onClose }) {
 
         {/* ── RIGHT: Details ── */}
         <div
+          onTouchStart={isStacked ? handleDetailTouchStart : undefined}
+          onTouchEnd={isStacked ? handleDetailTouchEnd : undefined}
           style={{
             padding: isMobile ? '28px 24px 40px' : '48px 44px',
             display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
