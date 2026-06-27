@@ -49,6 +49,9 @@ function BestPicksSlider({ deals, onOpen }) {
 
       <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)', marginBottom: 22 }}>
         Die besten Picks des Tages
+        <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--muted)', marginLeft: 10 }}>
+          ({topDeals.length})
+        </span>
       </h2>
 
       <div style={{ overflow: 'hidden', padding: '4px 0 16px' }}
@@ -259,7 +262,7 @@ export default function DealsPage() {
       </header>
 
       {/* ── MAIN ── */}
-      <main style={{ maxWidth: 1840, width: '98%', margin: '0 auto', padding: isMobile ? '16px 0 48px' : '28px 0 80px' }}>
+      <main style={{ maxWidth: 1840, width: '98%', margin: '0 auto', padding: isMobile ? '16px 0 48px' : '28px 0 80px', minHeight: 'calc(100vh - var(--header-h))' }}>
 
 
         {/* Best Picks — immer sichtbar, unabhängig vom Filter */}
@@ -291,15 +294,16 @@ export default function DealsPage() {
                 key={cat}
                 onClick={() => setSelectedCat(cat)}
                 style={{
-                  padding: isMobile ? '6px 12px' : '8px 16px',
+                  padding: isMobile ? '6px 12px' : '7px 16px',
                   fontSize: 13, flexShrink: 0, borderRadius: 2,
-                  border: `1px solid ${cat === selectedCat ? 'var(--accent)' : 'transparent'}`,
-                  background: cat === selectedCat ? 'var(--accent-light)' : 'var(--bg-img)',
-                  color: cat === selectedCat ? 'var(--accent)' : 'var(--text)',
-                  fontWeight: 500, transition: 'all 0.15s',
+                  border: '1px solid transparent',
+                  background: cat === selectedCat ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.1)',
+                  color: cat === selectedCat ? '#153D68' : 'rgba(255,255,255,0.8)',
+                  fontWeight: cat === selectedCat ? 600 : 500,
+                  transition: 'all 0.15s',
                 }}
-                onMouseEnter={e => { if (cat !== selectedCat) { e.currentTarget.style.background = 'var(--accent-light)'; e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.borderColor = 'var(--accent)' } }}
-                onMouseLeave={e => { if (cat !== selectedCat) { e.currentTarget.style.background = 'var(--bg-img)'; e.currentTarget.style.color = 'var(--text)'; e.currentTarget.style.borderColor = 'transparent' } }}
+                onMouseEnter={e => { if (cat !== selectedCat) { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; e.currentTarget.style.color = '#fff' } }}
+                onMouseLeave={e => { if (cat !== selectedCat) { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'rgba(255,255,255,0.8)' } }}
               >
                 {cat}
               </button>
