@@ -291,7 +291,8 @@ async def fetch_and_update_deals():
 
             d["deal_score"]      = score
             d["score_breakdown"] = breakdown
-            d["tag"]             = determine_tag(d["current_price"], d["atl"], d["avg90"], d["avg180"])
+            # atl_confirmed=False: /deal gibt nur avg365, kein echter ATL
+            d["tag"]             = determine_tag(d["current_price"], d["atl"], d["avg90"], d["avg180"], atl_confirmed=False)
             d["original_price"]  = max(d["avg90"] or d["current_price"] * 1.25,
                                        d["current_price"] * 1.10)
             d["avg_price"]       = d["avg90"] or d["current_price"]
@@ -443,6 +444,7 @@ async def hourly_price_check():
                         row["all_time_low"] or 0,
                         row["avg90_price"] or 0,
                         0,
+                        atl_confirmed=False,  # hourly check hat keinen echten ATL
                     )
                     await conn.execute(
                         "UPDATE products SET current_price=$2, deal_score=$3, "
@@ -551,8 +553,9 @@ async def nightly_deep_sync():
                 kd["rating"], kd["reviews"],
                 price_updated=now,
             )
+            # Deep-Sync hat echten ATL aus /product → atl_confirmed=True
             tag = determine_tag(kd["current_price"], kd["all_time_low"],
-                                kd["avg90_price"], kd["avg180_price"])
+                                kd["avg90_price"], kd["avg180_price"], atl_confirmed=True)
 
             await conn.execute("""
                 UPDATE products SET

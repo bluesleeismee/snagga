@@ -141,16 +141,34 @@ def calculate_deal_score(
 # Tags
 # ---------------------------------------------------------------------------
 
-def determine_tag(current: float, atl: float, avg90: float, avg180: float) -> str:
-    """Gibt den höchstpriorisierten Tag zurück (maximal einer pro Deal)."""
-    if atl > 0 and current <= atl * 1.02:
+def determine_tag(
+    current: float,
+    atl: float,        # Echter ATL (nur aus /product Deep-Sync, sonst 0)
+    avg90:  float,
+    avg180: float,
+    atl_confirmed: bool = False,  # True nur wenn ATL aus /product stammt
+) -> str:
+    """
+    Gibt den höchstpriorisierten Tag zurück (maximal einer pro Deal).
+
+    "Allzeittiefpreis" wird NUR vergeben wenn der echte ATL bekannt ist
+    (atl_confirmed=True, kommt aus /product Deep-Sync).
+    Aus /deal-Daten steht nur avg365 als Proxy — das reicht NICHT für den Tag.
+    """
+    # Echter ATL nur wenn durch Deep-Sync bestätigt
+    if atl_confirmed and atl > 0 and current <= atl * 1.03:
         return "Allzeittiefpreis"
-    if avg180 > 0 and current <= avg180 * 0.80:
+
+    # Stark unter 6-Monats-Durchschnitt → historisch günstig
+    if avg180 > 0 and current <= avg180 * 0.78:
         return "Historisch günstig"
-    if avg90 > 0 and current <= avg90 * 0.70:
+
+    # Stark unter 3-Monats-Durchschnitt
+    if avg90 > 0 and current <= avg90 * 0.72:
         return "Stark gefallen"
-    if atl > 0 and current <= atl * 1.08:
-        return "Seltene Gelegenheit"
-    if avg90 > 0 and current <= avg90 * 0.85:
+
+    # Moderat unter 3-Monats-Durchschnitt
+    if avg90 > 0 and current <= avg90 * 0.87:
         return "Preis gefallen"
+
     return ""
