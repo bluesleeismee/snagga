@@ -104,6 +104,10 @@ async def fetch_keepa_deals(
     deals_obj = data.get("deals") or {}
     raw_deals = deals_obj.get("dr") or []
     print(f"  Keepa /deal: {len(raw_deals)} Kandidaten · {tokens} Tokens übrig")
+    if raw_deals:
+        import json as _json
+        print(f"  DEBUG erstes Deal-Objekt keys: {list(raw_deals[0].keys())}")
+        print(f"  DEBUG erstes Deal-Objekt: {_json.dumps(raw_deals[0], default=str)[:500]}")
 
     results = []
     for d in raw_deals:
