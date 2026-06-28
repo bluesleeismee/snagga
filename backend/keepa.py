@@ -97,7 +97,7 @@ async def fetch_keepa_deals(
         "domainId":            domain,
         "priceTypes":          0,                   # 0 = alle Preistypen
         "deltaPercentRange":   [-100, -delta_pct],  # mind. X% gefallen
-        "dateRange":           0,                   # letzte 24 Stunden
+        "dateRange":           2,                   # letzte 3 Tage
         "minRating":           min_rating,          # 40 = 4.0 Sterne (×10)
         "hasReviews":          True,
         "isFilterEnabled":     True,

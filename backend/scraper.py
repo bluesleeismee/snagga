@@ -301,7 +301,7 @@ async def fetch_and_update_deals():
     async with httpx.AsyncClient(timeout=30) as client:
         # ── 1. Keepa /deals (2 Seiten à 150 = bis zu 300 Kandidaten) ────────
         raw_deals = []
-        for page in range(2):
+        for page in range(3):
             page_deals = await fetch_keepa_deals(
                 domain=3, delta_pct=15, min_rating=40, min_reviews=50,
                 page=page, client=client,
