@@ -10,14 +10,17 @@ from datetime import datetime
 # ---------------------------------------------------------------------------
 
 CATEGORY_MAX_RANK: dict[str, int] = {
-    "Elektronik": 8_000,
-    "Gaming":     5_000,
-    "Haushalt":  20_000,
-    "Küche":     20_000,
-    "Sport":     25_000,
-    "Beauty":    30_000,
-    "Werkzeug":  25_000,
-    "Sonstiges": 30_000,
+    "Elektronik & Foto":           8_000,
+    "Computer & Zubehör":          8_000,
+    "Kamera & Foto":              10_000,
+    "Games":                       5_000,
+    "Baumarkt":                   30_000,
+    "Drogerie & Körperpflege":    30_000,
+    "Küche, Haushalt & Wohnen":   20_000,
+    "Elektro-Großgeräte":         10_000,
+    "Sport & Freizeit":           25_000,
+    "Musikinstrumente & DJ-Equipment": 15_000,
+    "Auto & Motorrad":            20_000,
 }
 
 

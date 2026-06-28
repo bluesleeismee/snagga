@@ -25,50 +25,143 @@ MAX_ACTIVE      = 200
 MAX_BACKUP      = 100
 TOP_PICKS_COUNT = 10
 MIN_SCORE       = 40   # Deals unter diesem Score werden nicht angezeigt
+MIN_PRICE       = 15.0  # Billigst-Artikel (Papier, Socken, …) rausfiltern
 
-CATEGORY_KEYWORDS = {
-    "Elektronik": [
-        "laptop", "notebook", "tablet", "smartphone", "handy", "kamera", "monitor",
-        "drucker", "kopfhörer", "headphone", "headset", "tv", "fernseher", "lautsprecher",
-        "speaker", "router", "modem", "festplatte", "ssd", "cpu", "grafikkarte",
-        "maus", "tastatur", "keyboard", "mouse", "earbuds", "airpods", "kindle", "echo",
-        "alexa", "fire", "powerbank", "ladekabel", "usb", "hdmi", "projektor",
+# ---------------------------------------------------------------------------
+# Amazon-DE rootCat-ID → Snagga-Kategorie
+# IDs aus Keepa-Logs ableiten (erste Werte) und hier erweitern
+# ---------------------------------------------------------------------------
+ROOTCAT_MAP: dict[int, str] = {
+    # Elektronik & Foto
+    569604:     "Elektronik & Foto",
+    4185211:    "Elektronik & Foto",     # Zubehör & Kabel
+    # Computer & Zubehör
+    340843031:  "Computer & Zubehör",
+    541966:     "Computer & Zubehör",
+    # Kamera & Foto
+    571860:     "Kamera & Foto",
+    # Games (Video-Spiele)
+    296676011:  "Games",
+    12950511:   "Games",
+    # Baumarkt
+    80084:      "Baumarkt",
+    # Drogerie & Körperpflege
+    64117011:   "Drogerie & Körperpflege",
+    # Küche, Haushalt & Wohnen
+    3667441:    "Küche, Haushalt & Wohnen",
+    3375251:    "Küche, Haushalt & Wohnen",  # Haushalt
+    # Elektro-Großgeräte
+    3197571:    "Elektro-Großgeräte",
+    # Sport & Freizeit
+    16435731:   "Sport & Freizeit",
+    14:         "Sport & Freizeit",
+    # Musikinstrumente
+    3382071:    "Musikinstrumente & DJ-Equipment",
+    # Auto & Motorrad
+    12950651:   "Auto & Motorrad",
+    77:         "Auto & Motorrad",
+    # Gewerbe weggelassen – bringt B2B-Schrott
+}
+
+# Keyword-Fallback NUR für bekannte Produkte (exhaustiv, kein Catch-all)
+KEYWORD_MAP: dict[str, list[str]] = {
+    "Elektronik & Foto": [
+        "laptop", "notebook", "tablet", "smartphone", "monitor", "bildschirm",
+        "kopfhörer", "headphones", "headset", "lautsprecher", "soundbar",
+        "fernseher", " tv ", "beamer", "projektor", "router", "access point",
+        "festplatte", "ssd", "grafikkarte", "gpu", "cpu", "prozessor",
+        "tastatur", "keyboard", "maus", "mouse", "webcam", "mikrofon",
+        "powerbank", "ladegerät", "usb-hub", "hdmi", "kindle", "e-reader",
+        "echo dot", "fire tv", "apple watch", "airpods", "earbuds",
+        "drucker", "scanner", "nas", "ups",
     ],
-    "Gaming": [
-        "gaming", "playstation", "ps5", "ps4", "xbox", "nintendo", "switch", "controller",
-        "konsole", "console", "gpu", "steam", "game", "spiel",
+    "Computer & Zubehör": [
+        "computer", "pc ", "desktop", "mini-pc", "stick pc",
+        "ram ", "arbeitsspeicher", "mainboard", "netzteil", "gehäuse tower",
     ],
-    "Haushalt": [
-        "staubsauger", "vacuum", "saugroboter", "roomba", "reinigung",
-        "waschmaschine", "geschirrspüler", "kühlschrank", "bügeleisen", "philips hue",
-        "lampe", "glühbirne", "luftreiniger", "dyson",
+    "Kamera & Foto": [
+        "kamera", "camera", "objektiv", "lens", "spiegelreflex", "dslr",
+        "mirrorless", "systemkamera", "gopro", "action cam", "stativ",
+        "blitzgerät", "drohne", "drone",
     ],
-    "Küche": [
-        "blender", "mixer", "kaffeemaschine", "coffee", "küche", "topf",
-        "pfanne", "messer", "airfryer", "friteuse", "nespresso", "thermomix",
-        "wasserkocher", "toaster", "mikrowelle",
+    "Games": [
+        "playstation", "ps5", "ps4", "xbox", "nintendo switch",
+        "gaming headset", "gaming maus", "gaming tastatur", "gaming stuhl",
+        "gaming monitor", "controller",
     ],
-    "Sport": [
-        "sport", "fitness", "laufen", "fahrrad", "bike", "yoga", "training",
-        "hantel", "dumbbell", "treadmill", "laufband", "fitbit", "garmin",
+    "Baumarkt": [
+        "bohrmaschine", "akkuschrauber", "säge", "schleifer", "flex ",
+        "hammer", "schraubendreher", "werkzeug", "metabo", "makita",
+        "bosch", "dewalt", "festool", "hilti", "kärcher", "hochdruckreiniger",
+        "malerrolle", "farbe ", "klebeband profi", "schrauben set",
     ],
-    "Beauty": [
-        "beauty", "kosmetik", "pflege", "parfum", "shampoo", "haarpflege",
-        "skincare", "creme", "rasierer", "epilator",
+    "Drogerie & Körperpflege": [
+        "elektrische zahnbürste", "oral-b", "sonicare", "haartrockner",
+        "föhn", "glätteisen", "lockenstab", "rasierer", "elektrorasierer",
+        "epilator", "epilierer", "rasierklinge", "parfum", "deo ",
     ],
-    "Werkzeug": [
-        "bohrmaschine", "akkuschrauber", "säge", "schleifer", "werkzeug", "tool",
-        "hammer", "schraubendreher", "metabo", "makita", "bosch", "dewalt",
+    "Küche, Haushalt & Wohnen": [
+        "kaffeemaschine", "kaffeevollautomat", "nespresso", "dolce gusto",
+        "airfryer", "heißluftfritteuse", "mikrowelle", "toaster", "wasserkocher",
+        "mixer", "blender", "küchenmaschine", "thermomix", "staubsauger",
+        "saugroboter", "roomba", "dampfbügeleisen", "luftreiniger",
+        "luftbefeuchter", "heizlüfter", "ventilator", "standventilator",
+    ],
+    "Elektro-Großgeräte": [
+        "waschmaschine", "trockner", "geschirrspüler", "kühlschrank",
+        "gefrierbox", "gefrierschrank", "herd ", "backofen", "induktionskochfeld",
+    ],
+    "Sport & Freizeit": [
+        "fahrrad", "e-bike", "mountainbike", "laufrad", "scooter",
+        "fitnessgerät", "laufband", "crosstrainer", "ergometer", "rudergerät",
+        "hantel", "kettlebell", "yogamatte", "garmin", "fitbit",
+        "sportschuhe", "laufschuhe",
+    ],
+    "Musikinstrumente & DJ-Equipment": [
+        "gitarre", "keyboard piano", "klavier", "schlagzeug", "mikrofon xlr",
+        "kopfhörer studio", "audio interface", "midi", "synthesizer",
+        "lautsprecher pa", "dj controller",
+    ],
+    "Auto & Motorrad": [
+        "dashcam", "navigationssystem", "navi ", "obd2", "autoreinigung",
+        "autopflege", "dachbox", "fahrradträger auto",
     ],
 }
 
+# Ausschluss-Keywords: egal was rootCat sagt, diese Produkte nie anzeigen
+EXCLUDE_KEYWORDS = [
+    "papier", "druckerpapier", "bastelfilz", "filz ", "plüsch", "kuscheltier",
+    "spielzeug", "puppe ", "lego ", "puzzle", "brettspiel", "kartenspiel",
+    "buch ", "bücher", "roman ", "unterwäsche", "unterhose", "socken",
+    "t-shirt", "jeans", "hose ", "jacke ", "pullover", "kleidung",
+    "schuhe ", "sneaker ", "handtuch", "bettwäsche", "kissen ", "decke ",
+    "nahrungsergänzung", "protein pulver", "vitamine", "kapsel ",
+    "lebensmittel", "kaffee bohnen", "tee ", "gewürze",
+]
 
-def classify_category(name: str) -> str:
-    name_l = name.lower()
-    for cat, keywords in CATEGORY_KEYWORDS.items():
-        if any(kw in name_l for kw in keywords):
+
+def classify_category(title: str, root_cat: int = 0) -> str | None:
+    """
+    Gibt Kategorie zurück oder None wenn das Produkt nicht angezeigt werden soll.
+    Reihenfolge: rootCat-Map → Keyword-Fallback → ablehnen.
+    """
+    title_l = title.lower()
+
+    # Ausschluss-Keywords zuerst (egal was rootCat sagt)
+    if any(kw in title_l for kw in EXCLUDE_KEYWORDS):
+        return None
+
+    # rootCat-Mapping (zuverlässig wenn vorhanden)
+    if root_cat and root_cat in ROOTCAT_MAP:
+        return ROOTCAT_MAP[root_cat]
+
+    # Keyword-Fallback (exhaustiv — kein Catch-all mehr)
+    for cat, keywords in KEYWORD_MAP.items():
+        if any(kw in title_l for kw in keywords):
             return cat
-    return "Sonstiges"
+
+    # Kein Match → ablehnen
+    return None
 
 
 def generate_history(asin: str, current: float, avg: float, days: int = 60) -> list[tuple[float, datetime]]:
@@ -143,14 +236,24 @@ async def fetch_and_update_deals():
 
         # ── 2. Hard Filters + Scoring ────────────────────────────────────────
         candidates = []
+        skipped_cat = skipped_price = skipped_filter = skipped_score = 0
         for d in raw_deals:
-            cat = classify_category(d["title"] or d["brand"])
+            # Mindestpreis
+            if d["current_price"] < MIN_PRICE:
+                skipped_price += 1
+                continue
+
+            cat = classify_category(d["title"] or d["brand"], d.get("root_cat", 0))
+            if cat is None:
+                skipped_cat += 1
+                continue
             d["category"] = cat
 
             if not passes_hard_filters(
                 d["rating"], d["reviews"], d["sales_rank"], cat,
                 d["current_price"], d["avg90"], d["atl"],
             ):
+                skipped_filter += 1
                 continue
 
             score, breakdown = calculate_deal_score(
@@ -160,6 +263,7 @@ async def fetch_and_update_deals():
                 price_updated=None,  # Timestamp unbekannt aus /deals
             )
             if score < MIN_SCORE:
+                skipped_score += 1
                 continue
 
             d["deal_score"]      = score
@@ -175,6 +279,10 @@ async def fetch_and_update_deals():
         active_pool = candidates[:MAX_ACTIVE]
         backup_pool = candidates[MAX_ACTIVE : MAX_ACTIVE + MAX_BACKUP]
 
+        print(
+            f"  Gefiltert: {skipped_price} Preis<{MIN_PRICE}€ · "
+            f"{skipped_cat} unbekannte Kat · {skipped_filter} HardFilter · {skipped_score} Score"
+        )
         print(f"  {len(candidates)} qualifiziert · {len(active_pool)} aktiv · {len(backup_pool)} Backup")
 
         # ── 3. DB schreiben ──────────────────────────────────────────────────

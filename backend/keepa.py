@@ -104,6 +104,11 @@ async def fetch_keepa_deals(
     deals_obj = data.get("deals") or {}
     raw_deals = deals_obj.get("dr") or []
     print(f"  Keepa /deal: {len(raw_deals)} Kandidaten · {tokens} Tokens übrig")
+    # rootCat-Verteilung loggen (hilft beim Aufbau des includeCategories-Filters)
+    if raw_deals:
+        from collections import Counter
+        cat_counts = Counter(d.get("rootCat", 0) for d in raw_deals)
+        print(f"  rootCat-Verteilung (Top 15): {cat_counts.most_common(15)}")
     # Keepa Preis-Typ-Indices (aus constants.py):
     # 0=AMAZON, 1=NEW, 3=SALES_RANK, 7=NEW_FBM, 10=NEW_FBA
     # 16=RATING(×10), 17=COUNT_REVIEWS, 18=BUY_BOX_SHIPPING
@@ -189,6 +194,7 @@ async def fetch_keepa_deals(
             "reviews":       reviews,
             "is_fba":        is_fba,
             "delta_pct":     dp,
+            "root_cat":      d.get("rootCat", 0),
         })
 
     return results
