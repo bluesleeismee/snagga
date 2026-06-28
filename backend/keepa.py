@@ -62,20 +62,20 @@ async def fetch_keepa_deals(
     if not KEEPA_KEY:
         return []
 
-    # Nur offiziell gültige Felder (aus DEAL_REQUEST_KEYS der keepa lib):
-    # deltaPercentRange: [min, max] — negative Werte = Preissenkung
-    # dateRange: 0=24h, 1=2 Tage, 2=3 Tage, ... 6=7 Tage
+    # Keepa Deal-Finder: priceTypes als Integer (0 = alle Typen)
+    # deltaPercentRange: [min, max], negative = Preissenkung in %
+    # dateRange: 0=24h, 1=2 Tage, ... 6=7 Tage
     selection = {
         "page":               page,
         "domainId":           domain,
-        "priceTypes":         [0, 1],              # 0=Amazon, 1=New
+        "priceTypes":         0,                   # 0 = alle Preistypen
         "deltaPercentRange":  [-100, -delta_pct],  # mind. X% gefallen
         "dateRange":          0,                   # letzte 24 Stunden
-        "minRating":          min_rating,          # z.B. 40 = 4.0 Sterne
+        "minRating":          min_rating,          # 40 = 4.0 Sterne (×10)
         "hasReviews":         True,
         "isFilterEnabled":    True,
         "filterErotic":       True,
-        "sortType":           1,                   # 1 = nach deltaPercent sortiert
+        "sortType":           1,                   # 1 = nach deltaPercent
     }
 
     own_client = client is None
@@ -104,10 +104,26 @@ async def fetch_keepa_deals(
     deals_obj = data.get("deals") or {}
     raw_deals = deals_obj.get("dr") or []
     print(f"  Keepa /deal: {len(raw_deals)} Kandidaten · {tokens} Tokens übrig")
-    if raw_deals:
-        import json as _json
-        print(f"  DEBUG erstes Deal-Objekt keys: {list(raw_deals[0].keys())}")
-        print(f"  DEBUG erstes Deal-Objekt: {_json.dumps(raw_deals[0], default=str)[:500]}")
+    # Keepa Preis-Typ-Indices (aus constants.py):
+    # 0=AMAZON, 1=NEW, 3=SALES_RANK, 7=NEW_FBM, 10=NEW_FBA
+    # 16=RATING(×10), 17=COUNT_REVIEWS, 18=BUY_BOX_SHIPPING
+    IDX_AMAZON   = 0
+    IDX_SALES    = 3
+    IDX_NEW_FBA  = 10
+    IDX_RATING   = 16
+    IDX_REVIEWS  = 17
+    IDX_BUYBOX   = 18
+
+    def _cv(arr, idx):
+        """Holt Wert aus Keepa-Array, gibt 0 zurück wenn nicht verfügbar."""
+        if arr and idx < len(arr):
+            v = arr[idx]
+            return v if isinstance(v, (int, float)) and v > 0 else 0
+        return 0
+
+    def c2e(v):
+        """Cent → EUR, 0 wenn ungültig."""
+        return round(v / 100.0, 2) if v > 0 else 0.0
 
     results = []
     for d in raw_deals:
@@ -115,52 +131,59 @@ async def fetch_keepa_deals(
         if not asin:
             continue
 
-        # Preis in Cent → EUR
-        def c2e(v): return round(v / 100.0, 2) if isinstance(v, (int, float)) and v > 0 else 0.0
+        # current[] = aktueller Preisarray (Cent)
+        cur_arr = d.get("current") or []
 
-        current   = c2e(d.get("currentPrice") or d.get("current") or 0)
-        avg30     = c2e(d.get("avg30",  0))
-        avg90     = c2e(d.get("avg90",  0))
-        avg180    = c2e(d.get("avg180", 0))
-        atl       = c2e(d.get("atl",   0))
-
+        # Bester aktueller Preis: Buy Box > Amazon direkt
+        current = c2e(_cv(cur_arr, IDX_BUYBOX) or _cv(cur_arr, IDX_AMAZON) or _cv(cur_arr, IDX_NEW_FBA))
         if current <= 0:
             continue
 
-        # Image
-        img_file = d.get("img", "") or d.get("image", "")
-        image_url = (
-            f"https://images-na.ssl-images-amazon.com/images/I/{img_file}"
-            if img_file else
-            f"https://images-na.ssl-images-amazon.com/images/P/{asin}.01.LZZZZZZZ.jpg"
-        )
+        # avg[] = Liste von Perioden-Arrays: [30d, 90d, 180d, 365d]
+        avg_arr = d.get("avg") or []
+        avg30  = c2e(_cv(avg_arr[0], IDX_AMAZON) if len(avg_arr) > 0 else 0)
+        avg90  = c2e(_cv(avg_arr[1], IDX_AMAZON) if len(avg_arr) > 1 else 0)
+        avg180 = c2e(_cv(avg_arr[2], IDX_AMAZON) if len(avg_arr) > 2 else 0)
+        # 365d-Ø als ATL-Proxy (besser als nichts)
+        atl = c2e(_cv(avg_arr[3], IDX_AMAZON) if len(avg_arr) > 3 else 0) or avg180
 
-        # Rating × 10 → float
-        r_raw  = d.get("rating") or 0
-        rating = round(r_raw / 10.0, 1) if r_raw > 0 else 0.0
+        # Rating: current[16] ist Rating × 10 (z.B. 45 = 4.5 Sterne)
+        rating  = round(_cv(cur_arr, IDX_RATING) / 10.0, 1)
+        reviews = _cv(cur_arr, IDX_REVIEWS)
 
-        # FBA-Proxy: buyBoxSeller is Amazon oder bbIsAmazon flag
-        is_fba = bool(
-            d.get("bbIsAmazon") or
-            d.get("isFBA") or
-            d.get("priceType") == 0  # Preis kam von Amazon direkt
-        )
+        # Sales Rank: current[3]
+        sales_rank = _cv(cur_arr, IDX_SALES)
+
+        # FBA-Proxy: NEW_FBA Preis > 0
+        is_fba = _cv(cur_arr, IDX_NEW_FBA) > 0 or _cv(cur_arr, IDX_BUYBOX) > 0
+
+        # Image: Array von ASCII-Codes → Dateiname
+        img_raw = d.get("image") or []
+        if isinstance(img_raw, list) and img_raw:
+            img_file = "".join(chr(c) for c in img_raw if isinstance(c, int))
+            image_url = f"https://images-na.ssl-images-amazon.com/images/I/{img_file}"
+        else:
+            image_url = f"https://images-na.ssl-images-amazon.com/images/P/{asin}.01.LZZZZZZZ.jpg"
+
+        # deltaPercent: auch ein Array [30d, 90d, 180d, 365d] von Preis-Typ-Arrays
+        dp_arr = d.get("deltaPercent") or []
+        dp = _cv(dp_arr[0], IDX_AMAZON) if dp_arr else 0
 
         results.append({
-            "asin":        asin,
-            "title":       (d.get("title") or "").strip(),
-            "brand":       (d.get("brand") or "").strip(),
-            "image_url":   image_url,
+            "asin":          asin,
+            "title":         (d.get("title") or "").strip(),
+            "brand":         "",        # Deal-Endpoint gibt keine Brand
+            "image_url":     image_url,
             "current_price": current,
-            "avg30":       avg30,
-            "avg90":       avg90,
-            "avg180":      avg180,
-            "atl":         atl,
-            "sales_rank":  d.get("salesRank") or d.get("currentSalesRank") or 0,
-            "rating":      rating,
-            "reviews":     d.get("reviews") or d.get("reviewCount") or 0,
-            "is_fba":      is_fba,
-            "delta_pct":   d.get("deltaPercent") or 0,
+            "avg30":         avg30,
+            "avg90":         avg90,
+            "avg180":        avg180,
+            "atl":           atl,
+            "sales_rank":    sales_rank,
+            "rating":        rating,
+            "reviews":       reviews,
+            "is_fba":        is_fba,
+            "delta_pct":     dp,
         })
 
     return results
