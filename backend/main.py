@@ -255,6 +255,27 @@ async def refresh_deals():
     return {"message": f"{count} aktive Deals geladen"}
 
 
+@app.get("/debug/keepa-cats")
+async def debug_keepa_cats():
+    """Temporär: gibt rootCat-Verteilung aus einem Keepa /deal Abruf zurück."""
+    from keepa import fetch_keepa_deals
+    import httpx
+    from collections import Counter
+    async with httpx.AsyncClient(timeout=30) as client:
+        raw = await fetch_keepa_deals(domain=3, delta_pct=10, min_rating=35, min_reviews=10, client=client)
+    cat_counts = Counter(d.get("root_cat", 0) for d in raw)
+    samples = {}
+    for d in raw:
+        rc = d.get("root_cat", 0)
+        if rc not in samples:
+            samples[rc] = d.get("title", "")[:60]
+    return {
+        "total": len(raw),
+        "rootcat_counts": dict(cat_counts.most_common(30)),
+        "rootcat_samples": samples,
+    }
+
+
 @app.api_route("/health", methods=["GET", "HEAD"])
 async def health():
     pool = await get_pool()
