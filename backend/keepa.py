@@ -80,7 +80,7 @@ async def fetch_keepa_deals(
 
     try:
         resp = await client.get(
-            f"{KEEPA_BASE}/deals",
+            f"{KEEPA_BASE}/deal",
             params={
                 "key":       KEEPA_KEY,
                 "domainId":  domain,
