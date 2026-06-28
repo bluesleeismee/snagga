@@ -1,23 +1,23 @@
 """
-Keepa API Client — liefert echte Preishistorien, Ratings und Produktdaten.
+Keepa API Client — /deals für ASIN-Discovery, /product für Deep-Sync.
 """
 import os
+import json
 import asyncio
 import httpx
 from datetime import datetime
 
 KEEPA_KEY  = os.getenv("KEEPA_API_KEY", "")
 KEEPA_BASE = "https://api.keepa.com"
-# Keepa-Epoch: Minuten seit Unix-Epoch bis 2011-01-01 00:00 UTC
-KEEPA_EPOCH = 21564000
+# Keepa epoch: Minuten von Unix-Epoch bis 2011-01-01 00:00 UTC
+KEEPA_EPOCH = 21_564_000
 
-# Keepa domain-Codes für DACH — AT/CH haben kein eigenes Marketplace,
-# daher alles über DE (domain=3)
-COUNTRY_DOMAIN = {"DE": 3, "AT": 3, "CH": 3}
 
+# ---------------------------------------------------------------------------
+# Hilfsfunktionen
+# ---------------------------------------------------------------------------
 
 def _km_to_dt(km: int) -> datetime:
-    """Keepa-Minuten → UTC datetime."""
     return datetime.utcfromtimestamp((km + KEEPA_EPOCH) * 60)
 
 
@@ -33,7 +33,6 @@ def _parse_flat_csv(flat: list) -> list[tuple[float, datetime]]:
 
 
 def _first_pos(arr: list, *indices) -> float | None:
-    """Gibt den ersten positiven Wert aus arr an einem der gegebenen Indices zurück (in EUR)."""
     for idx in indices:
         if idx < len(arr):
             v = arr[idx]
@@ -42,13 +41,132 @@ def _first_pos(arr: list, *indices) -> float | None:
     return None
 
 
+# ---------------------------------------------------------------------------
+# /deals — ASIN-Discovery
+# ---------------------------------------------------------------------------
+
+async def fetch_keepa_deals(
+    domain:       int   = 3,
+    delta_pct:    int   = 15,
+    min_rating:   int   = 40,    # × 10, also 40 = 4.0 Sterne
+    min_reviews:  int   = 50,
+    date_range:   int   = 24,    # Stunden rückblickend
+    per_page:     int   = 150,
+    page:         int   = 0,
+    client: httpx.AsyncClient | None = None,
+) -> list[dict]:
+    """
+    Ruft den Keepa /deals Endpoint ab und gibt eine Liste von Deal-Dicts zurück.
+    Jedes Dict enthält: asin, title, brand, image_url, current_price,
+    avg30, avg90, avg180, atl, sales_rank, rating, reviews, is_fba, delta_pct
+    """
+    if not KEEPA_KEY:
+        return []
+
+    selection = {
+        "deltaPercent": delta_pct,
+        "priceTypes":   [0, 1],          # AMAZON + NEW (FBA-Proxy später prüfen)
+        "minRating":    min_rating,
+        "minReviews":   min_reviews,
+        "dateRange":    date_range,
+        "perPage":      per_page,
+        "page":         page,
+        "domainId":     domain,
+    }
+
+    own_client = client is None
+    if own_client:
+        client = httpx.AsyncClient(timeout=30)
+
+    try:
+        resp = await client.get(
+            f"{KEEPA_BASE}/deals",
+            params={
+                "key":       KEEPA_KEY,
+                "domainId":  domain,
+                "selection": json.dumps(selection),
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        print(f"  Keepa /deals Fehler: {e}")
+        return []
+    finally:
+        if own_client:
+            await client.aclose()
+
+    tokens = data.get("tokensLeft", "?")
+    raw_deals = data.get("deals", [])
+    print(f"  Keepa /deals: {len(raw_deals)} Kandidaten · {tokens} Tokens übrig")
+
+    results = []
+    for d in raw_deals:
+        asin = d.get("asin", "")
+        if not asin:
+            continue
+
+        # Preis in Cent → EUR
+        def c2e(v): return round(v / 100.0, 2) if isinstance(v, (int, float)) and v > 0 else 0.0
+
+        current   = c2e(d.get("currentPrice") or d.get("current") or 0)
+        avg30     = c2e(d.get("avg30",  0))
+        avg90     = c2e(d.get("avg90",  0))
+        avg180    = c2e(d.get("avg180", 0))
+        atl       = c2e(d.get("atl",   0))
+
+        if current <= 0:
+            continue
+
+        # Image
+        img_file = d.get("img", "") or d.get("image", "")
+        image_url = (
+            f"https://images-na.ssl-images-amazon.com/images/I/{img_file}"
+            if img_file else
+            f"https://images-na.ssl-images-amazon.com/images/P/{asin}.01.LZZZZZZZ.jpg"
+        )
+
+        # Rating × 10 → float
+        r_raw  = d.get("rating") or 0
+        rating = round(r_raw / 10.0, 1) if r_raw > 0 else 0.0
+
+        # FBA-Proxy: buyBoxSeller is Amazon oder bbIsAmazon flag
+        is_fba = bool(
+            d.get("bbIsAmazon") or
+            d.get("isFBA") or
+            d.get("priceType") == 0  # Preis kam von Amazon direkt
+        )
+
+        results.append({
+            "asin":        asin,
+            "title":       (d.get("title") or "").strip(),
+            "brand":       (d.get("brand") or "").strip(),
+            "image_url":   image_url,
+            "current_price": current,
+            "avg30":       avg30,
+            "avg90":       avg90,
+            "avg180":      avg180,
+            "atl":         atl,
+            "sales_rank":  d.get("salesRank") or d.get("currentSalesRank") or 0,
+            "rating":      rating,
+            "reviews":     d.get("reviews") or d.get("reviewCount") or 0,
+            "is_fba":      is_fba,
+            "delta_pct":   d.get("deltaPercent") or 0,
+        })
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# /product — Deep-Sync (vollständige Anreicherung)
+# ---------------------------------------------------------------------------
+
 def _parse_product(p: dict) -> dict | None:
-    """Wandelt ein Keepa-Produkt-Objekt in unser internes Format um."""
     asin = p.get("asin", "")
     if not asin:
         return None
 
-    # Preishistorie: AMAZON (index 0) > NEW (index 1)
+    # Preishistorie: AMAZON (0) > NEW (1)
     csv = p.get("csv") or []
     history: list[tuple[float, datetime]] = []
     for idx in (0, 1):
@@ -62,7 +180,6 @@ def _parse_product(p: dict) -> dict | None:
 
     current_price = history[-1][0]
 
-    # Stats-Block für Durchschnitts- und ATL-Preise
     stats  = p.get("stats") or {}
     atl    = stats.get("atl")    or []
     avg30  = stats.get("avg30")  or []
@@ -71,26 +188,40 @@ def _parse_product(p: dict) -> dict | None:
 
     all_time_low   = _first_pos(atl,    0, 1) or current_price
     avg_price      = _first_pos(avg90,  0, 1) or _first_pos(avg30, 0, 1) or current_price
-    original_price = _first_pos(avg180, 0, 1)
+    avg90_price    = _first_pos(avg90,  0, 1) or current_price
+    avg180_price   = _first_pos(avg180, 0, 1) or current_price
+    original_price = avg180_price
 
-    # Originalpreis = höchster Preis der Historienkurve, falls avg180 fehlt
-    if original_price is None or original_price <= current_price:
+    if original_price < current_price:
         prices = [h[0] for h in history if h[0] > 0]
-        original_price = max(prices) if prices else round(current_price * 1.30, 2)
+        original_price = max(prices) if prices else round(current_price * 1.25, 2)
     if original_price < current_price:
         original_price = round(current_price * 1.20, 2)
 
-    # Produktbild aus imagesCSV (kommagetrennte Dateinamen)
+    # Bild
     imgs = p.get("imagesCSV") or ""
-    first_img = imgs.split(",")[0].strip() if imgs else ""
-    image_url = (
-        f"https://images-na.ssl-images-amazon.com/images/I/{first_img}"
-        if first_img else ""
-    )
+    first = imgs.split(",")[0].strip() if imgs else ""
+    image_url = f"https://images-na.ssl-images-amazon.com/images/I/{first}" if first else ""
 
-    # Rating: Keepa speichert als Integer × 10 (z.B. 46 = 4,6 Sterne)
+    # Rating
     r_raw  = p.get("rating") or 0
     rating = round(r_raw / 10.0, 1) if r_raw > 0 else 0.0
+
+    # Sales Rank
+    sr_csv = csv[3] if len(csv) > 3 and csv[3] else []
+    sales_rank = 0
+    if sr_csv:
+        last_valid = [(sr_csv[i+1]) for i in range(0, len(sr_csv)-1, 2) if sr_csv[i+1] and sr_csv[i+1] > 0]
+        sales_rank = last_valid[-1] if last_valid else 0
+
+    # FBA-Proxy: Buy-Box-Shipping = 0
+    bb_ship_csv = csv[14] if len(csv) > 14 and csv[14] else []
+    is_fba = False
+    if bb_ship_csv:
+        last_ship = [(bb_ship_csv[i+1]) for i in range(0, len(bb_ship_csv)-1, 2)
+                     if isinstance(bb_ship_csv[i+1], (int, float)) and bb_ship_csv[i+1] >= 0]
+        if last_ship:
+            is_fba = last_ship[-1] == 0
 
     return {
         "title":          (p.get("title") or "").strip(),
@@ -100,22 +231,25 @@ def _parse_product(p: dict) -> dict | None:
         "original_price": original_price,
         "all_time_low":   all_time_low,
         "avg_price":      avg_price,
+        "avg90_price":    avg90_price,
+        "avg180_price":   avg180_price,
         "rating":         rating,
         "reviews":        p.get("reviewCount") or 0,
+        "sales_rank":     sales_rank,
+        "is_fba":         is_fba,
         "prime":          True,
-        "history":        history,  # [(preis, datetime), …]
+        "history":        history,
     }
 
 
 async def enrich_with_keepa(
-    asins: list[str],
+    asins:  list[str],
     domain: int = 3,
     client: httpx.AsyncClient | None = None,
 ) -> dict[str, dict]:
     """
-    Holt echte Produktdaten von Keepa für die gegebenen ASINs.
-    Gibt {asin: enriched_data_dict} zurück.
-    Bei fehlender KEEPA_API_KEY oder Fehler: leeres Dict.
+    Deep-Sync: vollständige Produktdaten für eine Liste von ASINs.
+    Gibt {asin: data_dict} zurück.
     """
     if not KEEPA_KEY or not asins:
         return {}
@@ -143,13 +277,13 @@ async def enrich_with_keepa(
                 resp.raise_for_status()
                 data = resp.json()
                 tokens = data.get("tokensLeft", "?")
-                print(f"  Keepa: {len(data.get('products', []))} Produkte · {tokens} Tokens übrig")
+                print(f"  Keepa /product: {len(data.get('products', []))} · {tokens} Tokens übrig")
             except Exception as e:
-                print(f"  Keepa-Fehler (chunk {start}–{start+len(chunk)}): {e}")
+                print(f"  Keepa /product Fehler (chunk {start}): {e}")
                 continue
 
             for p in data.get("products") or []:
-                asin = p.get("asin", "")
+                asin   = p.get("asin", "")
                 parsed = _parse_product(p)
                 if parsed and asin:
                     results[asin] = parsed

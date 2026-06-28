@@ -1,14 +1,49 @@
 import React, { useState, useEffect } from 'react'
 import { fmtPrice, discount, fmtAge, AGE_COLORS } from '../utils.js'
 
+const TAG_COLORS = {
+  'Allzeittiefpreis':  { bg: '#1a1a1a', text: '#fff' },
+  'Historisch günstig':{ bg: '#2d5a27', text: '#fff' },
+  'Stark gefallen':    { bg: '#8b1a1a', text: '#fff' },
+  'Seltene Gelegenheit':{ bg: '#1a3d6b', text: '#fff' },
+  'Preis gefallen':    { bg: 'var(--accent)', text: '#fff' },
+}
+
+async function shareOrCopy(deal) {
+  const url = `${window.location.origin}/?asin=${deal.asin}`
+  const text = `${deal.name} jetzt für ${(deal.current_price).toFixed(2).replace('.',',')} € auf snagga.de 🔥`
+
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: deal.name, text, url })
+      return
+    } catch (_) {}
+  }
+  try {
+    await navigator.clipboard.writeText(url)
+    return 'copied'
+  } catch (_) {}
+  // Fallback: Textfeld
+  const ta = document.createElement('textarea')
+  ta.value = url
+  document.body.appendChild(ta)
+  ta.select()
+  document.execCommand('copy')
+  document.body.removeChild(ta)
+  return 'copied'
+}
+
 export default function DealCard({ deal, onClick }) {
-  const [imgError,    setImgError]    = useState(false)
-  const [hovered,     setHovered]     = useState(false)
-  const [secondImg,   setSecondImg]   = useState(null)
+  const [imgError,  setImgError]  = useState(false)
+  const [hovered,   setHovered]   = useState(false)
+  const [secondImg, setSecondImg] = useState(null)
+  const [copied,    setCopied]    = useState(false)
+
   const disc = discount(deal.current_price, deal.original_price)
   const age  = fmtAge(deal.last_updated)
+  const tag  = deal.tag || ''
+  const tagStyle = TAG_COLORS[tag] || null
 
-  /* Preload second Amazon image variant */
   useEffect(() => {
     if (!deal.asin) return
     const url = `https://images-na.ssl-images-amazon.com/images/P/${deal.asin}.02.LZZZZZZZ.jpg`
@@ -20,6 +55,15 @@ export default function DealCard({ deal, onClick }) {
 
   const showSecond = hovered && secondImg
   const imgSrc     = showSecond ? secondImg : (deal.image_url || null)
+
+  const handleShare = async (e) => {
+    e.stopPropagation()
+    const result = await shareOrCopy(deal)
+    if (result === 'copied') {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
 
   return (
     <div
@@ -43,11 +87,27 @@ export default function DealCard({ deal, onClick }) {
         padding: 24, position: 'relative', overflow: 'hidden',
         transition: 'background 0.25s ease',
       }}>
+        {/* Discount badge */}
         {disc > 0 && (
-          <div style={{ position: 'absolute', top: 14, left: 14, zIndex: 2, background: 'var(--accent)', color: '#fff', padding: '3px 8px', fontSize: 11, fontWeight: 600, letterSpacing: 0.5 }}>
+          <div style={{
+            position: 'absolute', top: 14, left: 14, zIndex: 2,
+            background: 'var(--accent)', color: '#fff',
+            padding: '3px 8px', fontSize: 11, fontWeight: 600, letterSpacing: 0.5,
+          }}>
             –{disc}%
           </div>
         )}
+
+        {/* Top Pick star */}
+        {deal.is_top_pick && (
+          <div style={{
+            position: 'absolute', top: 14, right: 14, zIndex: 2,
+            fontSize: 15, lineHeight: 1, title: 'Top Pick',
+          }}>
+            ★
+          </div>
+        )}
+
         {imgSrc && !imgError ? (
           <img
             key={imgSrc}
@@ -65,8 +125,19 @@ export default function DealCard({ deal, onClick }) {
         )}
       </div>
 
+      {/* Tag badge */}
+      {tag && tagStyle && (
+        <div style={{
+          background: tagStyle.bg, color: tagStyle.text,
+          fontSize: 10, fontWeight: 600, letterSpacing: 0.6,
+          padding: '4px 10px', textTransform: 'uppercase',
+        }}>
+          {tag}
+        </div>
+      )}
+
       {/* Card body */}
-      <div style={{ padding: '20px 18px 16px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+      <div style={{ padding: '16px 18px 16px', display: 'flex', flexDirection: 'column', flex: 1 }}>
         <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--muted)', fontWeight: 500, marginBottom: 7 }}>
           {deal.brand || deal.category}
         </div>
@@ -98,9 +169,27 @@ export default function DealCard({ deal, onClick }) {
         </div>
 
         {/* Footer */}
-        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 11, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: 'var(--muted)', marginTop: 'auto' }}>
+        <div style={{
+          borderTop: '1px solid var(--border)', paddingTop: 11,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          fontSize: 11, color: 'var(--muted)', marginTop: 'auto',
+        }}>
           <span>{deal.category}</span>
-          {deal.prime && <span style={{ color: '#00A8E0', fontWeight: 600 }}>Prime</span>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {deal.prime && <span style={{ color: '#00A8E0', fontWeight: 600 }}>Prime</span>}
+            {/* Share button — DSGVO-konform, kein Cookie, kein Tracker */}
+            <button
+              onClick={handleShare}
+              title={copied ? 'Link kopiert!' : 'Deal teilen'}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                padding: '2px 4px', color: copied ? 'var(--accent)' : 'var(--muted)',
+                fontSize: 13, lineHeight: 1, transition: 'color 0.2s',
+              }}
+            >
+              {copied ? '✓' : '↗'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

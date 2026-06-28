@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>snagga.de — Deal-Strategie</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      line-height: 1.7;
+      padding: 48px 24px 80px;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    .header {
+      border-left: 4px solid #e05c3a;
+      padding-left: 20px;
+      margin-bottom: 48px;
+    }
+    .header h1 {
+      font-size: 32px;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: -0.5px;
+    }
+    .header .subtitle {
+      font-size: 13px;
+      color: #64748b;
+      margin-top: 4px;
+    }
+
+    /* Principle box */
+    .principle {
+      background: #1e2330;
+      border: 1px solid #2d3748;
+      border-left: 4px solid #e05c3a;
+      padding: 20px 24px;
+      margin-bottom: 48px;
+      font-size: 15px;
+    }
+    .principle p { color: #94a3b8; margin-bottom: 8px; }
+    .principle .flow {
+      font-size: 17px;
+      font-weight: 700;
+      color: #e05c3a;
+      letter-spacing: 0.5px;
+    }
+
+    /* Sections */
+    section {
+      margin-bottom: 52px;
+    }
+    h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #2d3748;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    h2 .num {
+      background: #e05c3a;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 2px;
+    }
+    h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin: 24px 0 12px;
+    }
+    p {
+      color: #94a3b8;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13.5px;
+      margin-bottom: 16px;
+    }
+    thead tr { background: #1a1f2e; }
+    thead th {
+      text-align: left;
+      padding: 10px 14px;
+      color: #64748b;
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      border-bottom: 1px solid #2d3748;
+    }
+    tbody tr { border-bottom: 1px solid #1e2330; transition: background 0.15s; }
+    tbody tr:hover { background: #1a1f2e; }
+    tbody td {
+      padding: 10px 14px;
+      color: #cbd5e1;
+      vertical-align: top;
+    }
+    tbody td:first-child { color: #e2e8f0; font-weight: 500; }
+    .tag-pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .tag-atl    { background: #14532d; color: #4ade80; }
+    .tag-hist   { background: #1e3a5f; color: #60a5fa; }
+    .tag-stark  { background: #7c2d12; color: #fb923c; }
+    .tag-selten { background: #3b1f5e; color: #c084fc; }
+    .tag-fallen { background: #1f2937; color: #9ca3af; }
+
+    /* Code blocks */
+    pre {
+      background: #1a1f2e;
+      border: 1px solid #2d3748;
+      padding: 18px 20px;
+      font-family: 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 13px;
+      color: #a5f3fc;
+      overflow-x: auto;
+      margin: 12px 0 20px;
+      line-height: 1.6;
+    }
+    code {
+      background: #1a1f2e;
+      padding: 2px 6px;
+      font-size: 12px;
+      color: #e05c3a;
+      font-family: monospace;
+    }
+
+    /* Score formula visual */
+    .score-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin: 16px 0;
+    }
+    .score-card {
+      background: #1a1f2e;
+      border: 1px solid #2d3748;
+      padding: 16px;
+      text-align: center;
+    }
+    .score-card .pct {
+      font-size: 28px;
+      font-weight: 800;
+      color: #e05c3a;
+    }
+    .score-card .label {
+      font-size: 12px;
+      color: #64748b;
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+
+    /* Pool grid */
+    .pool-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin: 12px 0;
+    }
+    .pool-card {
+      background: #1a1f2e;
+      border: 1px solid #2d3748;
+      padding: 16px 20px;
+    }
+    .pool-card .count {
+      font-size: 36px;
+      font-weight: 800;
+      color: #fff;
+    }
+    .pool-card .name {
+      font-size: 13px;
+      color: #64748b;
+      margin-top: 2px;
+    }
+    .pool-card .visible {
+      font-size: 11px;
+      margin-top: 8px;
+      padding: 2px 8px;
+      display: inline-block;
+    }
+    .visible.yes { background: #14532d; color: #4ade80; }
+    .visible.no  { background: #1f2937; color: #6b7280; }
+
+    /* Update timeline */
+    .timeline { margin: 12px 0; }
+    .timeline-item {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .timeline-dot {
+      width: 36px;
+      height: 36px;
+      background: #1a1f2e;
+      border: 2px solid #e05c3a;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: #e05c3a;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .timeline-content h4 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #e2e8f0;
+      margin-bottom: 4px;
+    }
+    .timeline-content p {
+      font-size: 13px;
+      color: #64748b;
+      margin: 0;
+    }
+
+    /* Categories */
+    .cat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 10px;
+      margin: 12px 0;
+    }
+    .cat-card {
+      background: #1a1f2e;
+      border: 1px solid #2d3748;
+      padding: 14px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #e2e8f0;
+    }
+    .cat-card .rank {
+      font-size: 11px;
+      color: #64748b;
+      margin-top: 4px;
+    }
+
+    /* Excluded */
+    .excluded-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid #1e2330;
+      font-size: 13.5px;
+    }
+    .excluded-item:last-child { border-bottom: none; }
+    .x-icon { color: #475569; font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+    .excl-name { color: #e2e8f0; font-weight: 600; }
+    .excl-reason { color: #64748b; }
+
+    /* Footer */
+    .footer {
+      margin-top: 60px;
+      padding-top: 24px;
+      border-top: 1px solid #2d3748;
+      font-size: 12px;
+      color: #334155;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <h1>snagga.de — Deal-Strategie</h1>
+    <div class="subtitle">Stand: Juni 2026 · Intern · Nicht veröffentlichen</div>
+  </div>
+
+  <div class="principle">
+    <p>snagga.de ist keine Preis-Massenplattform, sondern eine kuratierte Deal-Seite mit Qualitätsanspruch. Ziel: echte Preisvorteile sichtbar machen, Vertrauen aufbauen, hohe Klickwahrscheinlichkeit erzeugen.</p>
+    <div class="flow">prüfen → bewerten → ranken → kuratieren → anzeigen</div>
+  </div>
+
+  <!-- 1. Markt & Scope -->
+  <section>
+    <h2><span class="num">01</span> Markt & Scope</h2>
+    <table>
+      <thead><tr><th>Parameter</th><th>Entscheid</th></tr></thead>
+      <tbody>
+        <tr><td>Amazon-Marketplace</td><td>Nur amazon.de (Keepa domain=3)</td></tr>
+        <tr><td>AT / CH</td><td>Kein eigener Marketplace — entfällt</td></tr>
+        <tr><td>Affiliate-Tag</td><td><code>snagga-21</code></td></tr>
+        <tr><td>Sprache</td><td>Deutsch</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 2. Datenquellen -->
+  <section>
+    <h2><span class="num">02</span> Datenquellen</h2>
+    <table>
+      <thead><tr><th>Quelle</th><th>Zweck</th><th>Kosten</th></tr></thead>
+      <tbody>
+        <tr><td>Keepa <code>/deals</code></td><td>ASIN-Discovery: welche Produkte sind gerade im Preis gefallen</td><td>wenige Tokens</td></tr>
+        <tr><td>Keepa <code>/product</code></td><td>Deep-Sync nachts: Preishistorie, ATL, Ø-Preis, Sales Rank, Rating</td><td>1–2 Tokens/ASIN</td></tr>
+        <tr><td>Amazon-Seite (Scraping)</td><td>Stündlicher Live-Preis-Check der aktiven Deals</td><td>0 Tokens</td></tr>
+      </tbody>
+    </table>
+    <p><strong style="color:#e2e8f0">CamelCamelCamel: vollständig entfernt.</strong></p>
+    <h3>Token-Budget</h3>
+    <table>
+      <thead><tr><th>Kennzahl</th><th>Wert</th></tr></thead>
+      <tbody>
+        <tr><td>Plan</td><td>20 Tokens/Minute</td></tr>
+        <tr><td>Verfügbar pro Tag</td><td>28.800 Tokens</td></tr>
+        <tr><td>Geschätzter Verbrauch</td><td>~6.000 Tokens/Tag</td></tr>
+        <tr><td>Puffer</td><td>&gt;22.000 Tokens/Tag</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 3. Hard Filters -->
+  <section>
+    <h2><span class="num">03</span> Hard Filters — Qualifikation</h2>
+    <p>Nur Produkte, die <strong style="color:#e2e8f0">alle</strong> Kriterien erfüllen, kommen in die Datenbank.</p>
+    <table>
+      <thead><tr><th>Kriterium</th><th>Bedingung</th></tr></thead>
+      <tbody>
+        <tr><td>Rating</td><td>≥ 4.0 ★</td></tr>
+        <tr><td>Reviews</td><td>≥ 50</td></tr>
+        <tr><td>Preis</td><td>≤ 85% des 90-Tage-Ø <strong>oder</strong> ≤ ATL × 1.05</td></tr>
+        <tr><td>Verkäufer</td><td>csv[0] (Amazon direkt) <strong>oder</strong> csv[1] mit Buy-Box-Shipping = 0 (FBA-Proxy)</td></tr>
+        <tr><td>Sales Rank</td><td>≤ Kategorie-Schwellwert</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Sales Rank Schwellwerte</h3>
+    <div class="cat-grid">
+      <div class="cat-card">Elektronik<div class="rank">≤ 8.000</div></div>
+      <div class="cat-card">Gaming<div class="rank">≤ 5.000</div></div>
+      <div class="cat-card">Haushalt<div class="rank">≤ 20.000</div></div>
+      <div class="cat-card">Küche<div class="rank">≤ 20.000</div></div>
+      <div class="cat-card">Sport<div class="rank">≤ 25.000</div></div>
+      <div class="cat-card">Beauty<div class="rank">≤ 30.000</div></div>
+      <div class="cat-card">Werkzeug<div class="rank">≤ 25.000</div></div>
+    </div>
+    <p>Schwellwerte werden nach den ersten echten Keepa-Daten angepasst.</p>
+
+    <h3>FBA-Proxy</h3>
+    <p>Keepa hat kein direktes <code>isFBA</code>-Feld. Proxy: <strong style="color:#e2e8f0">Buy-Box-Shipping (csv[14]) = 0</strong> → gilt als Prime/FBA-fähig. Schützt vor China-Dropshipping, lässt aber FBA-Markendeals (Anker, Philips, Samsung etc.) durch.</p>
+  </section>
+
+  <!-- 4. Deal-Score -->
+  <section>
+    <h2><span class="num">04</span> Deal-Score (0–100)</h2>
+    <div class="score-grid">
+      <div class="score-card"><div class="pct">40%</div><div class="label">Abstand zu<br>90-Tage-Ø</div></div>
+      <div class="score-card"><div class="pct">30%</div><div class="label">Abstand zum<br>All-Time-Low</div></div>
+      <div class="score-card"><div class="pct">20%</div><div class="label">Popularität<br>(Rank · Rating · Reviews)</div></div>
+      <div class="score-card"><div class="pct">10%</div><div class="label">Stabilität<br>(kein Ausreisser)</div></div>
+    </div>
+
+    <h3>Formeln</h3>
+    <pre>// Abstand 90-Tage-Ø
+faktor_avg = max(0, (avg90 - current) / avg90)
+
+// Abstand ATL
+faktor_atl = max(0, (current - atl) / avg90)   // niedriger = besser
+
+// Popularität — Sales Rank INVERTIERT und NORMIERT
+rank_faktor    = 1 - (sales_rank / max_kategorie_schwellwert)
+rating_faktor  = (rating - 4.0) / 1.0
+review_faktor  = log10(reviews) / log10(10000)
+popularitaet   = rank_faktor × 0.5 + rating_faktor × 0.3 + review_faktor × 0.2
+
+// Stabilität
+stabilitaet = 1.0   // Preis seit ≥ 24h stabil
+stabilitaet = 0.3   // Preis < 24h auf diesem Niveau (Ausreisser)
+
+// Gesamt-Score
+score = (faktor_avg × 0.40 + faktor_atl × 0.30 + popularitaet × 0.20 + stabilitaet × 0.10) × 100</pre>
+
+    <p>Score &lt; 40 → Deal wird nicht angezeigt.</p>
+  </section>
+
+  <!-- 5. Tags -->
+  <section>
+    <h2><span class="num">05</span> Tags (automatisch, max. 1 pro Deal)</h2>
+    <table>
+      <thead><tr><th>Priorität</th><th>Tag</th><th>Bedingung</th></tr></thead>
+      <tbody>
+        <tr><td>1 (höchste)</td><td><span class="tag-pill tag-atl">Allzeittiefpreis</span></td><td>current ≤ ATL × 1.02</td></tr>
+        <tr><td>2</td><td><span class="tag-pill tag-hist">Historisch günstig</span></td><td>current ≤ 80% des 180-Tage-Ø</td></tr>
+        <tr><td>3</td><td><span class="tag-pill tag-stark">Stark gefallen</span></td><td>current ≤ 70% des 90-Tage-Ø (≥30% Drop)</td></tr>
+        <tr><td>4</td><td><span class="tag-pill tag-selten">Seltene Gelegenheit</span></td><td>current ≤ ATL × 1.08</td></tr>
+        <tr><td>5 (niedrigste)</td><td><span class="tag-pill tag-fallen">Preis gefallen</span></td><td>current ≤ 85% des 90-Tage-Ø</td></tr>
+      </tbody>
+    </table>
+    <p>Kein Tag wenn keine Bedingung erfüllt. Reihenfolge nach psychologischer Dringlichkeit für den Käufer.</p>
+  </section>
+
+  <!-- 6. Volumen -->
+  <section>
+    <h2><span class="num">06</span> Volumen & Pools</h2>
+    <div class="pool-grid">
+      <div class="pool-card"><div class="count">200</div><div class="name">Aktive Deals</div><span class="visible yes">Sichtbar</span></div>
+      <div class="pool-card"><div class="count">100</div><div class="name">Backup-Deals</div><span class="visible no">Nicht sichtbar</span></div>
+      <div class="pool-card"><div class="count">10</div><div class="name">Top Picks</div><span class="visible yes">Slider + Grid</span></div>
+      <div class="pool-card"><div class="count">5–10</div><div class="name">Top Pick Reserve</div><span class="visible no">Sofort verfügbar</span></div>
+    </div>
+    <p>Kategorien werden <strong style="color:#e2e8f0">nicht gleich gross</strong> gehalten — mehr Deals in Kategorien mit mehr verfügbarer Qualität.</p>
+  </section>
+
+  <!-- 7. Top Picks -->
+  <section>
+    <h2><span class="num">07</span> Top Picks</h2>
+    <table>
+      <thead><tr><th>Parameter</th><th>Wert</th></tr></thead>
+      <tbody>
+        <tr><td>Definition</td><td>Die 10 Produkte mit dem höchsten Deal-Score aus dem aktiven Pool</td></tr>
+        <tr><td>Anzeige</td><td>Slider oben (BestPicksSlider) + Filter-Kategorie "Top Picks" im Grid</td></tr>
+        <tr><td>Auswahl</td><td>Vollautomatisch — keine manuelle Kuratierung</td></tr>
+        <tr><td>Reserve</td><td>5–10 Backup-Top-Picks für sofortigen Ersatz</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 8. Update-Logik -->
+  <section>
+    <h2><span class="num">08</span> Update-Logik</h2>
+    <div class="timeline">
+      <div class="timeline-item">
+        <div class="timeline-dot">1h</div>
+        <div class="timeline-content">
+          <h4>Stündlich — Keepa /deals + Live-Check</h4>
+          <p>Keepa /deals abrufen → Hard Filters → Score berechnen → aktive Deals via Amazon-Seite preisprüfen → Score &lt; 40 deaktivieren → Backup verifizieren und nachrücken → Top 10 neu setzen → Tags neu setzen</p>
+        </div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-dot">30m</div>
+        <div class="timeline-content">
+          <h4>Alle 30 Minuten — Top Picks Preis-Check</h4>
+          <p>Nur die 10 Top Picks werden häufiger geprüft als reguläre Deals.</p>
+        </div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-dot">03h</div>
+        <div class="timeline-content">
+          <h4>Nächtlich 03:00 Uhr — Deep-Sync via Keepa /product</h4>
+          <p>Alle 300 Deals (aktiv + Backup) vollständig aktualisiert: Sales Rank, 90-Tage-Ø, 180-Tage-Ø, ATL, Rating, Reviews, Preishistorie. Scores und Tags neu berechnet.</p>
+        </div>
+      </div>
+    </div>
+
+    <h3>Backup-Verifikation (Race Condition verhindert)</h3>
+    <pre>// Bevor ein Backup-Deal live geht:
+1. Live-Preis prüfen (Amazon-Seite)
+2. Preis noch gültig? → is_active = true
+3. Preis nicht mehr gültig? → nächstes Backup prüfen</pre>
+  </section>
+
+  <!-- 9. DB-Schema -->
+  <section>
+    <h2><span class="num">09</span> Datenbank-Erweiterungen</h2>
+    <table>
+      <thead><tr><th>Spalte</th><th>Typ</th><th>Bedeutung</th></tr></thead>
+      <tbody>
+        <tr><td><code>is_active</code></td><td>BOOLEAN</td><td>Wird gerade angezeigt</td></tr>
+        <tr><td><code>is_top_pick</code></td><td>BOOLEAN</td><td>Unter den Top 10</td></tr>
+        <tr><td><code>is_backup</code></td><td>BOOLEAN</td><td>Im Backup-Pool, nicht sichtbar</td></tr>
+        <tr><td><code>is_fba</code></td><td>BOOLEAN</td><td>FBA-Proxy erfüllt (csv[14]=0)</td></tr>
+        <tr><td><code>sales_rank</code></td><td>INTEGER</td><td>Aktueller Sales Rank aus Keepa</td></tr>
+        <tr><td><code>tag</code></td><td>TEXT</td><td>Automatisch gesetzter Tag</td></tr>
+        <tr><td><code>last_checked</code></td><td>TIMESTAMP</td><td>Wann zuletzt Preis geprüft</td></tr>
+        <tr><td><code>score_breakdown</code></td><td>TEXT (JSON)</td><td>Score-Komponenten für Debugging</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 10. Share-Button -->
+  <section>
+    <h2><span class="num">10</span> Share-Button</h2>
+    <table>
+      <thead><tr><th>Parameter</th><th>Wert</th></tr></thead>
+      <tbody>
+        <tr><td>Position</td><td>Auf jeder Deal-Card</td></tr>
+        <tr><td>Optionen</td><td>Link kopieren / WhatsApp / Telegram</td></tr>
+        <tr><td>URL-Struktur</td><td><code>snagga.de/?asin=XXXXXXXXXX</code></td></tr>
+        <tr><td>Tracking</td><td>Keines — DSGVO-konform</td></tr>
+        <tr><td>Cookie</td><td>Kein Cookie nötig</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 11. Bewusst weggelassen -->
+  <section>
+    <h2><span class="num">11</span> Bewusst weggelassen</h2>
+    <div>
+      <div class="excluded-item"><span class="x-icon">✕</span><div><span class="excl-name">Community-Deals</span> <span class="excl-reason">— für später vorgemerkt</span></div></div>
+      <div class="excluded-item"><span class="x-icon">✕</span><div><span class="excl-name">Manuelle Kuratierung</span> <span class="excl-reason">— alles datenbasiert</span></div></div>
+      <div class="excluded-item"><span class="x-icon">✕</span><div><span class="excl-name">AT / CH Filter</span> <span class="excl-reason">— kein eigener Amazon-Marketplace</span></div></div>
+      <div class="excluded-item"><span class="x-icon">✕</span><div><span class="excl-name">„Redaktionell hervorgehoben" Tag</span> <span class="excl-reason">— würde manuellen Aufwand erfordern</span></div></div>
+      <div class="excluded-item"><span class="x-icon">✕</span><div><span class="excl-name">Amazon PA API</span> <span class="excl-reason">— erfordert 3 qualifizierende Verkäufe</span></div></div>
+      <div class="excluded-item"><span class="x-icon">✕</span><div><span class="excl-name">Sales Rank als UI-Filter</span> <span class="excl-reason">— intern, Oberfläche bleibt simpel</span></div></div>
+      <div class="excluded-item"><span class="x-icon">✕</span><div><span class="excl-name">CamelCamelCamel</span> <span class="excl-reason">— vollständig durch Keepa /deals ersetzt</span></div></div>
+    </div>
+  </section>
+
+  <div class="footer">
+    snagga.de · Intern · Stand Juni 2026
+  </div>
+
+</div>
+</body>
+</html>
