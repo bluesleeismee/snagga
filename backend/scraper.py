@@ -239,7 +239,7 @@ async def fetch_and_update_deals():
                 # Preispunkt in Historik
                 await conn.execute(
                     "INSERT INTO price_history (asin, price, timestamp) VALUES ($1,$2,$3)",
-                    asin, p["current_price"], now.isoformat(),
+                    asin, p["current_price"], now,
                 )
 
                 # Simulierte Historik wenn noch keine vorhanden
@@ -248,7 +248,7 @@ async def fetch_and_update_deals():
                     sim = generate_history(asin, p["current_price"], p["avg_price"])
                     await conn.executemany(
                         "INSERT INTO price_history (asin, price, timestamp) VALUES ($1,$2,$3)",
-                        [(asin, pr, ts.isoformat()) for pr, ts in sim],
+                        [(asin, pr, ts) for pr, ts in sim],
                     )
 
     print(f"  Fertig: {len(active_pool)} aktiv, {len(backup_pool)} Backup, "
@@ -320,7 +320,7 @@ async def hourly_price_check():
                     )
                     await conn.execute(
                         "INSERT INTO price_history (asin, price, timestamp) VALUES ($1,$2,$3)",
-                        asin, live_price, now.isoformat(),
+                        asin, live_price, now,
                     )
 
     if deactivated > 0:
@@ -457,7 +457,7 @@ async def nightly_deep_sync():
                 recent = kd["history"][-365:]
                 await conn.executemany(
                     "INSERT INTO price_history (asin, price, timestamp) VALUES ($1,$2,$3)",
-                    [(asin, pr, ts.isoformat()) for pr, ts in recent],
+                    [(asin, pr, ts) for pr, ts in recent],
                 )
                 print(f"    ✓ {asin}: {len(recent)} echte Preispunkte")
 
