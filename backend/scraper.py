@@ -24,7 +24,7 @@ AFFILIATE_TAG   = "snagga-21"
 MAX_ACTIVE      = 200
 MAX_BACKUP      = 100
 TOP_PICKS_COUNT = 10
-MIN_SCORE       = 40   # Deals unter diesem Score werden nicht angezeigt
+MIN_SCORE       = 30   # Score-Schwelle (Keepa-Delta ≠ avg90-Delta → konservativ halten)
 MIN_PRICE       = 15.0  # Billigst-Artikel (Papier, Socken, …) rausfiltern
 
 # ---------------------------------------------------------------------------
@@ -256,11 +256,16 @@ async def fetch_and_update_deals():
     now = datetime.utcnow()
 
     async with httpx.AsyncClient(timeout=30) as client:
-        # ── 1. Keepa /deals ──────────────────────────────────────────────────
-        raw_deals = await fetch_keepa_deals(
-            domain=3, delta_pct=15, min_rating=40, min_reviews=50,
-            client=client,
-        )
+        # ── 1. Keepa /deals (2 Seiten à 150 = bis zu 300 Kandidaten) ────────
+        raw_deals = []
+        for page in range(2):
+            page_deals = await fetch_keepa_deals(
+                domain=3, delta_pct=15, min_rating=40, min_reviews=50,
+                page=page, client=client,
+            )
+            raw_deals.extend(page_deals)
+            if not page_deals:
+                break
 
         if not raw_deals:
             print("  Keepa /deals lieferte keine Daten — Abbruch.")
