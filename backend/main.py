@@ -325,6 +325,68 @@ async def debug_keepa_cats():
     }
 
 
+@app.get("/debug/category-tree")
+async def debug_category_tree():
+    """Holt den kompletten Amazon-DE-Kategoriebaum von Keepa."""
+    import os, httpx
+    KEEPA_KEY = os.getenv("KEEPA_API_KEY", "")
+    if not KEEPA_KEY:
+        return {"error": "no key"}
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        # Erst: alle Root-Kategorien (catId=0)
+        r = await client.get("https://api.keepa.com/category",
+                             params={"key": KEEPA_KEY, "domain": 3, "category": 0, "parents": 0})
+        r.raise_for_status()
+        root_data = r.json()
+
+    root_cats = root_data.get("categories", {})
+
+    # Kompakte Ausgabe: id → {name, children}
+    tree = {}
+    for cat_id, cat in root_cats.items():
+        tree[cat_id] = {
+            "name": cat.get("name", ""),
+            "children": cat.get("children", []),
+        }
+
+    return {
+        "tokens_left": root_data.get("tokensLeft"),
+        "root_category_count": len(tree),
+        "categories": tree,
+    }
+
+
+@app.get("/debug/category-children/{cat_id}")
+async def debug_category_children(cat_id: int):
+    """Holt Unterkategorien einer bestimmten Kategorie."""
+    import os, httpx
+    KEEPA_KEY = os.getenv("KEEPA_API_KEY", "")
+    if not KEEPA_KEY:
+        return {"error": "no key"}
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.get("https://api.keepa.com/category",
+                             params={"key": KEEPA_KEY, "domain": 3, "category": cat_id, "parents": 1})
+        r.raise_for_status()
+        data = r.json()
+
+    cats = data.get("categories", {})
+    result = {}
+    for cid, cat in cats.items():
+        result[cid] = {
+            "name": cat.get("name", ""),
+            "parent": cat.get("parent", 0),
+            "children": cat.get("children", []),
+        }
+
+    return {
+        "tokens_left": data.get("tokensLeft"),
+        "count": len(result),
+        "categories": result,
+    }
+
+
 @app.api_route("/health", methods=["GET", "HEAD"])
 async def health():
     pool = await get_pool()
