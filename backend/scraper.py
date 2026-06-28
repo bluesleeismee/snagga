@@ -134,7 +134,7 @@ async def fetch_and_update_deals():
         # ── 1. Keepa /deals ──────────────────────────────────────────────────
         raw_deals = await fetch_keepa_deals(
             domain=3, delta_pct=15, min_rating=40, min_reviews=50,
-            date_range=24, per_page=150, client=client,
+            client=client,
         )
 
         if not raw_deals:
