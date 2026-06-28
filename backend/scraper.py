@@ -158,9 +158,12 @@ EXCLUDE_KEYWORDS = [
     "lebensmittel", "kaffee bohnen", "tee ", "gewürze",
     # Intime / erotische Produkte (filterErotic greift nicht immer)
     "gleitgel", "lubricant", "intim", "kondome", "vibrator",
-    # Deko / Heimtextilien die nichts bringen
-    "tapisserie", "wandteppich", "vorhang ", "gardine", "jalousie",
+    # Deko / Heimtextilien / Handwerk die nichts bringen
+    "tapisserie", "wandteppich", "vorhang ", "gardine", "jalousie", "rollo ",
+    "doppelrollo", "flächenvorhang",
     "vase ", "glasvase", "blumenvase", "kerzenhalter", "bilderrahmen",
+    "häkelnadel", "stricknadel", "häkelset", "wollnadel", "strickgarn",
+    "nähgarn", "nähnadel", "stoff ", "fleece ", "filznadel",
     # Medizin / Teststreifen
     "teststreifen", "blutzucker", "blutdruck",
     # US-Importprodukte ohne DE-Relevanz
