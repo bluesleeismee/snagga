@@ -32,54 +32,94 @@ MIN_PRICE       = 15.0  # Billigst-Artikel (Papier, Socken, …) rausfiltern
 # Aus Debug-Endpoint /debug/keepa-cats ermittelt (150 Deals, 2026-06-28)
 # ---------------------------------------------------------------------------
 ROOTCAT_MAP: dict[int, str] = {
-    # Küche, Haushalt & Wohnen (bestätigt: 23 Deals, Pfannen etc.)
-    3167641:    "Küche, Haushalt & Wohnen",
-    3375251:    "Küche, Haushalt & Wohnen",
-    3667441:    "Küche, Haushalt & Wohnen",
-    # Baumarkt (bestätigt: 10 Deals, Bohrmaschine etc.)
-    80084031:   "Baumarkt",
-    80084:      "Baumarkt",
-    # Elektronik & Foto (bestätigt: 4 Deals, LNB-Tuner etc.)
-    562066:     "Elektronik & Foto",
-    569604:     "Elektronik & Foto",
-    4185211:    "Elektronik & Foto",
-    # Computer & Zubehör (bestätigt: MSI Monitor)
-    340843031:  "Computer & Zubehör",
-    541966:     "Computer & Zubehör",
-    # Drogerie & Körperpflege (bestätigt: Rasierer, Shampoo)
-    64187031:   "Drogerie & Körperpflege",
-    84230031:   "Drogerie & Körperpflege",
-    16435051:   "Drogerie & Körperpflege",
-    64117011:   "Drogerie & Körperpflege",
-    # Sport & Freizeit (Kandidat, noch unbestätigt)
-    192416031:  "Sport & Freizeit",
-    16435731:   "Sport & Freizeit",
-    # Kamera & Foto
-    571860:     "Kamera & Foto",
-    # Games
-    296676011:  "Games",
+    # Auto & Motorrad (78191031 war fälschlich in EXCLUDE_ROOTCATS!)
+    78191031:    "Auto & Motorrad",
+    79899031:    "Auto & Motorrad",
+    80931031:    "Auto & Motorrad",
+    77:          "Auto & Motorrad",
+    # Baumarkt
+    80084031:    "Baumarkt",
+    80084:       "Baumarkt",
+    80085031:    "Baumarkt",
+    84144031:    "Baumarkt",
+    83122031:    "Baumarkt",
+    # Garten (10925031 war fälschlich in EXCLUDE_ROOTCATS als Gewerbe!)
+    10925031:    "Baumarkt",
+    10925241:    "Baumarkt",
+    10930941:    "Baumarkt",
+    124540011:   "Baumarkt",
+    # Computer & Zubehör
+    340843031:   "Computer & Zubehör",
+    340844031:   "Computer & Zubehör",
+    368180031:   "Computer & Zubehör",
+    368181031:   "Computer & Zubehör",
+    368182031:   "Computer & Zubehör",
+    541966:      "Computer & Zubehör",
+    # Drogerie & Körperpflege + Kosmetik
+    64187031:    "Drogerie & Körperpflege",
+    64257031:    "Drogerie & Körperpflege",
+    5787997031:  "Drogerie & Körperpflege",
+    65633031:    "Drogerie & Körperpflege",
+    64980031:    "Drogerie & Körperpflege",
+    64117011:    "Drogerie & Körperpflege",
+    84230031:    "Drogerie & Körperpflege",
+    84231031:    "Drogerie & Körperpflege",
+    129371031:   "Drogerie & Körperpflege",
+    129369031:   "Drogerie & Körperpflege",
+    129368031:   "Drogerie & Körperpflege",
     # Elektro-Großgeräte
-    3197571:    "Elektro-Großgeräte",
-    # Musikinstrumente
-    3382071:    "Musikinstrumente & DJ-Equipment",
-    # Auto & Motorrad (12950651 war FALSCH = Spielzeug!)
-    77:         "Auto & Motorrad",
+    908823031:   "Elektro-Großgeräte",
+    908824031:   "Elektro-Großgeräte",
+    908825031:   "Elektro-Großgeräte",
+    # Elektronik & Foto
+    562066:      "Elektronik & Foto",
+    569604:      "Elektronik & Foto",
+    578112:      "Elektronik & Foto",
+    725718:      "Elektronik & Foto",
+    124538011:   "Elektronik & Foto",
+    4185211:     "Elektronik & Foto",
+    # Games
+    300992:      "Games",
+    541708:      "Games",
+    526742:      "Games",
+    124544011:   "Games",
+    296676011:   "Games",
+    # Kamera & Foto
+    571860:      "Kamera & Foto",
+    # Beleuchtung + Küche, Haushalt & Wohnen
+    213083031:   "Küche, Haushalt & Wohnen",
+    213084031:   "Küche, Haushalt & Wohnen",
+    227218031:   "Küche, Haushalt & Wohnen",
+    3167641:     "Küche, Haushalt & Wohnen",
+    3375251:     "Küche, Haushalt & Wohnen",
+    3667441:     "Küche, Haushalt & Wohnen",
+    3169011:     "Küche, Haushalt & Wohnen",
+    3312441:     "Küche, Haushalt & Wohnen",
+    3842901:     "Küche, Haushalt & Wohnen",
+    # Musikinstrumente & DJ-Equipment
+    340849031:   "Musikinstrumente & DJ-Equipment",
+    340850031:   "Musikinstrumente & DJ-Equipment",
+    3382071:     "Musikinstrumente & DJ-Equipment",
+    # Sport & Freizeit (16435051 war fälschlich als Drogerie eingetragen!)
+    16435051:    "Sport & Freizeit",
+    16435121:    "Sport & Freizeit",
+    16435061:    "Sport & Freizeit",
+    16435111:    "Sport & Freizeit",
+    16435731:    "Sport & Freizeit",
 }
 
 # Explizit ausschließen (rootCat → None, egal was Keywords sagen)
 EXCLUDE_ROOTCATS: set[int] = {
-    11961464031,  # Bekleidung / Fashion (37% aller Keepa-Deals!)
-    78191031,     # Bekleidung (weitere Kategorie)
+    11961464031,  # Bekleidung / Fashion
     340846031,    # Lebensmittel & Getränke
-    12950651,     # Spielzeug (ich hatte das fälschlich als Auto)
+    12950651,     # Spielzeug
     186606,       # Bücher
     340852031,    # Heimtier
     284266,       # Film/Video/DVD
-    192416031,    # Bürobedarf (Stempelträger → kein Sport)
     255882,       # Musik-Tonträger (Vinyl, CDs)
     355007011,    # Taschen & Accessoires
-    5866098031,   # Gewerbe/Präzisionslager
-    10925031,     # Gewerbe, Industrie & Wissenschaft
+    5866098031,   # Gewerbe/Industrie (Präzisionslager etc.)
+    192416031,    # Bürobedarf (Stempel, Büromaterial)
 }
 
 # Keyword-Fallback NUR für bekannte Produkte (exhaustiv, kein Catch-all)

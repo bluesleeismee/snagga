@@ -65,30 +65,45 @@ async def fetch_keepa_deals(
     # Keepa Deal-Finder: priceTypes als Integer (0 = alle Typen)
     # deltaPercentRange: [min, max], negative = Preissenkung in %
     # dateRange: 0=24h, 1=2 Tage, ... 6=7 Tage
-    # Bekannte Junk-Kategorien auf API-Ebene ausschließen (spart Tokens + verbessert Qualität)
-    # IDs ermittelt via /debug/keepa-cats (2026-06-28, DE domain)
-    EXCLUDE_CAT_IDS = [
-        11961464031,  # Bekleidung/Fashion
-        78191031,     # Bekleidung (weitere)
-        340846031,    # Lebensmittel & Getränke
-        12950651,     # Spielzeug
-        186606,       # Bücher
-        340852031,    # Heimtier
-        284266,       # Film/Video/DVD
-        255882,       # Musik-Tonträger (Vinyl/CD)
+    # Whitelist: nur Deals aus diesen Amazon-DE Kategorien (root + Level-1-Subcats)
+    # IDs ermittelt via /debug/category-children (2026-06-28, DE domain)
+    INCLUDE_CAT_IDS = [
+        # Auto & Motorrad
+        78191031, 79899031, 80931031,
+        # Baumarkt + Garten (10925031 war fälschlich als Gewerbe markiert)
+        80084031, 80085031, 84144031, 83122031,
+        10925031, 10925241, 10930941, 124540011,
+        # Computer & Zubehör
+        340843031, 340844031, 368180031, 368181031, 368182031,
+        # Drogerie & Körperpflege + Kosmetik
+        64187031, 64257031, 5787997031, 65633031, 64980031,
+        84230031, 84231031, 129371031, 129369031, 129368031,
+        # Elektro-Großgeräte
+        908823031, 908824031, 908825031,
+        # Elektronik & Foto
+        562066, 569604, 578112, 725718, 124538011,
+        # Games
+        300992, 541708, 526742, 124544011,
+        # Beleuchtung + Küche, Haushalt & Wohnen
+        213083031, 213084031, 227218031,
+        3167641, 3169011, 3312441, 3842901,
+        # Musikinstrumente & DJ-Equipment
+        340849031, 340850031,
+        # Sport & Freizeit
+        16435051, 16435121, 16435061, 16435111,
     ]
     selection = {
-        "page":               page,
-        "domainId":           domain,
-        "priceTypes":         0,                   # 0 = alle Preistypen
-        "deltaPercentRange":  [-100, -delta_pct],  # mind. X% gefallen
-        "dateRange":          0,                   # letzte 24 Stunden
-        "minRating":          min_rating,          # 40 = 4.0 Sterne (×10)
-        "hasReviews":         True,
-        "isFilterEnabled":    True,
-        "filterErotic":       True,
-        "sortType":           1,                   # 1 = nach deltaPercent
-        "excludeCategories":  EXCLUDE_CAT_IDS,
+        "page":                page,
+        "domainId":            domain,
+        "priceTypes":          0,                   # 0 = alle Preistypen
+        "deltaPercentRange":   [-100, -delta_pct],  # mind. X% gefallen
+        "dateRange":           0,                   # letzte 24 Stunden
+        "minRating":           min_rating,          # 40 = 4.0 Sterne (×10)
+        "hasReviews":          True,
+        "isFilterEnabled":     True,
+        "filterErotic":        True,
+        "sortType":            1,                   # 1 = nach deltaPercent
+        "includeCategories":   INCLUDE_CAT_IDS,    # Whitelist statt Blacklist
     }
 
     own_client = client is None
