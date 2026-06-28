@@ -257,22 +257,53 @@ async def refresh_deals():
 
 @app.get("/debug/keepa-cats")
 async def debug_keepa_cats():
-    """Temporär: gibt rootCat-Verteilung aus einem Keepa /deal Abruf zurück."""
-    from keepa import fetch_keepa_deals
-    import httpx
+    """Gibt rootCat-Verteilung + avg-Datenverfügbarkeit aus Keepa /deal zurück."""
+    import os, json, httpx
     from collections import Counter
+    KEEPA_KEY = os.getenv("KEEPA_API_KEY", "")
+    if not KEEPA_KEY:
+        return {"error": "no key"}
+
+    sel = json.dumps({"page": 0, "domainId": 3, "priceTypes": 0,
+                       "deltaPercentRange": [-100, -10], "dateRange": 0,
+                       "minRating": 35, "hasReviews": True,
+                       "isFilterEnabled": True, "filterErotic": True})
     async with httpx.AsyncClient(timeout=30) as client:
-        raw = await fetch_keepa_deals(domain=3, delta_pct=10, min_rating=35, min_reviews=10, client=client)
-    cat_counts = Counter(d.get("root_cat", 0) for d in raw)
+        r = await client.get("https://api.keepa.com/deal",
+                              params={"key": KEEPA_KEY, "selection": sel})
+        r.raise_for_status()
+        data = r.json()
+
+    raw = (data.get("deals") or {}).get("dr") or []
+    cat_counts = Counter(d.get("rootCat", 0) for d in raw)
     samples = {}
     for d in raw:
-        rc = d.get("root_cat", 0)
+        rc = d.get("rootCat", 0)
         if rc not in samples:
             samples[rc] = d.get("title", "")[:60]
+
+    # avg-Datenverfügbarkeit: welche Perioden und Indizes haben Daten?
+    avg_stats = {"any_avg90": 0, "any_avg180": 0, "any_avg365": 0}
+    idx_hits = Counter()
+    for d in raw:
+        avgs = d.get("avg") or []
+        for period_i, period_name in [(1, "avg90"), (2, "avg180"), (3, "avg365")]:
+            if period_i < len(avgs) and avgs[period_i]:
+                arr = avgs[period_i]
+                has_data = any(isinstance(v, (int, float)) and v > 0 for v in arr)
+                if has_data:
+                    avg_stats[f"any_{period_name}"] += 1
+                    for i, v in enumerate(arr):
+                        if isinstance(v, (int, float)) and v > 0:
+                            idx_hits[i] += 1
+
     return {
         "total": len(raw),
-        "rootcat_counts": dict(cat_counts.most_common(30)),
+        "tokens_left": data.get("tokensLeft"),
+        "rootcat_counts": dict(cat_counts.most_common(25)),
         "rootcat_samples": samples,
+        "avg_data_availability": avg_stats,
+        "avg_index_hits_top10": dict(idx_hits.most_common(10)),
     }
 
 
