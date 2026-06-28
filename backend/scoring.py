@@ -56,8 +56,10 @@ def passes_hard_filters(
     # Referenzpreis: avg90 bevorzugt, sonst avg180, sonst atl (avg365)
     ref = avg90 or avg180 or atl
 
-    # Preis muss deutlich unter Referenz liegen
-    if ref > 0 and current <= ref * 0.85:
+    # Preis muss mindestens 8% unter Referenz liegen (grober Einstiegsfilter)
+    # Keepa misst Delta vs. VORHERIGEN Preis, nicht vs. avg90 — deswegen locker
+    # Scoring (MIN_SCORE) macht die eigentliche Qualitäts-Filterung
+    if ref > 0 and current <= ref * 0.92:
         return True
 
     return False
