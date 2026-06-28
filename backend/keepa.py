@@ -65,6 +65,18 @@ async def fetch_keepa_deals(
     # Keepa Deal-Finder: priceTypes als Integer (0 = alle Typen)
     # deltaPercentRange: [min, max], negative = Preissenkung in %
     # dateRange: 0=24h, 1=2 Tage, ... 6=7 Tage
+    # Bekannte Junk-Kategorien auf API-Ebene ausschließen (spart Tokens + verbessert Qualität)
+    # IDs ermittelt via /debug/keepa-cats (2026-06-28, DE domain)
+    EXCLUDE_CAT_IDS = [
+        11961464031,  # Bekleidung/Fashion
+        78191031,     # Bekleidung (weitere)
+        340846031,    # Lebensmittel & Getränke
+        12950651,     # Spielzeug
+        186606,       # Bücher
+        340852031,    # Heimtier
+        284266,       # Film/Video/DVD
+        255882,       # Musik-Tonträger (Vinyl/CD)
+    ]
     selection = {
         "page":               page,
         "domainId":           domain,
@@ -76,6 +88,7 @@ async def fetch_keepa_deals(
         "isFilterEnabled":    True,
         "filterErotic":       True,
         "sortType":           1,                   # 1 = nach deltaPercent
+        "excludeCategories":  EXCLUDE_CAT_IDS,
     }
 
     own_client = client is None

@@ -29,38 +29,57 @@ MIN_PRICE       = 15.0  # Billigst-Artikel (Papier, Socken, …) rausfiltern
 
 # ---------------------------------------------------------------------------
 # Amazon-DE rootCat-ID → Snagga-Kategorie
-# IDs aus Keepa-Logs ableiten (erste Werte) und hier erweitern
+# Aus Debug-Endpoint /debug/keepa-cats ermittelt (150 Deals, 2026-06-28)
 # ---------------------------------------------------------------------------
 ROOTCAT_MAP: dict[int, str] = {
-    # Elektronik & Foto
+    # Küche, Haushalt & Wohnen (bestätigt: 23 Deals, Pfannen etc.)
+    3167641:    "Küche, Haushalt & Wohnen",
+    3375251:    "Küche, Haushalt & Wohnen",
+    3667441:    "Küche, Haushalt & Wohnen",
+    # Baumarkt (bestätigt: 10 Deals, Bohrmaschine etc.)
+    80084031:   "Baumarkt",
+    80084:      "Baumarkt",
+    # Elektronik & Foto (bestätigt: 4 Deals, LNB-Tuner etc.)
+    562066:     "Elektronik & Foto",
     569604:     "Elektronik & Foto",
-    4185211:    "Elektronik & Foto",     # Zubehör & Kabel
-    # Computer & Zubehör
+    4185211:    "Elektronik & Foto",
+    # Computer & Zubehör (bestätigt: MSI Monitor)
     340843031:  "Computer & Zubehör",
     541966:     "Computer & Zubehör",
+    # Drogerie & Körperpflege (bestätigt: Rasierer, Shampoo)
+    64187031:   "Drogerie & Körperpflege",
+    84230031:   "Drogerie & Körperpflege",
+    16435051:   "Drogerie & Körperpflege",
+    64117011:   "Drogerie & Körperpflege",
+    # Sport & Freizeit (Kandidat, noch unbestätigt)
+    192416031:  "Sport & Freizeit",
+    16435731:   "Sport & Freizeit",
     # Kamera & Foto
     571860:     "Kamera & Foto",
-    # Games (Video-Spiele)
+    # Games
     296676011:  "Games",
-    12950511:   "Games",
-    # Baumarkt
-    80084:      "Baumarkt",
-    # Drogerie & Körperpflege
-    64117011:   "Drogerie & Körperpflege",
-    # Küche, Haushalt & Wohnen
-    3667441:    "Küche, Haushalt & Wohnen",
-    3375251:    "Küche, Haushalt & Wohnen",  # Haushalt
     # Elektro-Großgeräte
     3197571:    "Elektro-Großgeräte",
-    # Sport & Freizeit
-    16435731:   "Sport & Freizeit",
-    14:         "Sport & Freizeit",
     # Musikinstrumente
     3382071:    "Musikinstrumente & DJ-Equipment",
-    # Auto & Motorrad
-    12950651:   "Auto & Motorrad",
+    # Auto & Motorrad (12950651 war FALSCH = Spielzeug!)
     77:         "Auto & Motorrad",
-    # Gewerbe weggelassen – bringt B2B-Schrott
+}
+
+# Explizit ausschließen (rootCat → None, egal was Keywords sagen)
+EXCLUDE_ROOTCATS: set[int] = {
+    11961464031,  # Bekleidung / Fashion (37% aller Keepa-Deals!)
+    78191031,     # Bekleidung (weitere Kategorie)
+    340846031,    # Lebensmittel & Getränke
+    12950651,     # Spielzeug (ich hatte das fälschlich als Auto)
+    186606,       # Bücher
+    340852031,    # Heimtier
+    284266,       # Film/Video/DVD
+    192416031,    # Bürobedarf (Stempelträger → kein Sport)
+    255882,       # Musik-Tonträger (Vinyl, CDs)
+    355007011,    # Taschen & Accessoires
+    5866098031,   # Gewerbe/Präzisionslager
+    10925031,     # Gewerbe, Industrie & Wissenschaft
 }
 
 # Keyword-Fallback NUR für bekannte Produkte (exhaustiv, kein Catch-all)
@@ -143,24 +162,28 @@ EXCLUDE_KEYWORDS = [
 def classify_category(title: str, root_cat: int = 0) -> str | None:
     """
     Gibt Kategorie zurück oder None wenn das Produkt nicht angezeigt werden soll.
-    Reihenfolge: rootCat-Map → Keyword-Fallback → ablehnen.
+    Reihenfolge: rootCat Exclude → rootCat Map → Keyword-Fallback → ablehnen.
     """
     title_l = title.lower()
 
-    # Ausschluss-Keywords zuerst (egal was rootCat sagt)
+    # 1. rootCat-Ausschluss (bekannte Junk-Kategorien wie Fashion, Bücher, Toys)
+    if root_cat and root_cat in EXCLUDE_ROOTCATS:
+        return None
+
+    # 2. Titel-Ausschluss-Keywords (Sicherheitsnetz für unbekannte rootCats)
     if any(kw in title_l for kw in EXCLUDE_KEYWORDS):
         return None
 
-    # rootCat-Mapping (zuverlässig wenn vorhanden)
+    # 3. rootCat-Mapping (zuverlässig wenn ID bekannt)
     if root_cat and root_cat in ROOTCAT_MAP:
         return ROOTCAT_MAP[root_cat]
 
-    # Keyword-Fallback (exhaustiv — kein Catch-all mehr)
+    # 4. Keyword-Fallback (exhaustiv — kein Catch-all mehr)
     for cat, keywords in KEYWORD_MAP.items():
         if any(kw in title_l for kw in keywords):
             return cat
 
-    # Kein Match → ablehnen
+    # 5. Kein Match → ablehnen
     return None
 
 
