@@ -357,7 +357,7 @@ async def fetch_and_update_deals():
                 "rating":         rating,
                 "reviews":        reviews,
                 "prime":          True,
-                "last_updated":   now.isoformat(),
+                "last_updated":   now,
                 "affiliate_url":  f"https://www.amazon.de/dp/{asin}?tag={AFFILIATE_TAG}",
                 "_history":       history,
             })
@@ -408,7 +408,7 @@ async def fetch_and_update_deals():
             # Aktuellen Preispunkt eintragen
             await conn.execute(
                 "INSERT INTO price_history (asin, price, timestamp) VALUES ($1, $2, $3)",
-                asin, p["current_price"], p["last_updated"],
+                asin, p["current_price"], p["last_updated"].isoformat(),
             )
 
             # Keepa-Historik: einmalig bei neuen Produkten (≤ 2 vorhandene Punkte)
