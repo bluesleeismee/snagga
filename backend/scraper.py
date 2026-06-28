@@ -327,8 +327,19 @@ async def fetch_and_update_deals():
         db = await get_pool()
         async with db.acquire() as conn:
 
-            # Alle bisherigen Deals deaktivieren
-            await conn.execute("UPDATE products SET is_active=false, is_backup=false, is_top_pick=false")
+            # Nur Top-Picks zurücksetzen; is_active/is_backup bleiben erhalten
+            # (Deals akkumulieren — hourly_price_check deaktiviert abgelaufene Deals)
+            await conn.execute("UPDATE products SET is_top_pick=false")
+
+            # Neue ASINs aus diesem Run als aktiv setzen
+            new_asins = {p["asin"] for p in active_pool + backup_pool}
+            # Deals die älter als 72h sind und NICHT im neuen Run auftauchen → deaktivieren
+            await conn.execute(
+                "UPDATE products SET is_active=false, is_backup=false "
+                "WHERE last_updated < NOW() - INTERVAL '72 hours' "
+                "AND asin != ALL($1::text[])",
+                list(new_asins),
+            )
 
             for i, p in enumerate(active_pool + backup_pool):
                 is_active   = i < len(active_pool)
