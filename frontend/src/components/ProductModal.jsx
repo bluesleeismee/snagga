@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { fmtPrice, discount, fmtAge, AGE_COLORS } from '../utils.js'
+import { fmtPrice, discount, fmtAge, AGE_COLORS, fmtReviews } from '../utils.js'
 import { useBreakpoint } from '../hooks/useBreakpoint.js'
 
 function useProductImages(asin, primaryUrl) {
@@ -289,22 +289,34 @@ export default function ProductModal({ deal, onClose }) {
             </div>
 
             {/* Stats */}
-            {(deal.prime || deal.last_updated) && (
-              <div style={{ display: 'flex', gap: 24, marginBottom: 24, fontSize: 13, alignItems: 'flex-start' }}>
-                {deal.prime && (
-                  <div>
-                    <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, letterSpacing: 0.5, marginBottom: 3 }}>VERSAND</div>
-                    <div style={{ fontWeight: 600, color: '#00A8E0' }}>Prime</div>
+            <div style={{ display: 'flex', gap: 24, marginBottom: 24, fontSize: 13, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              {deal.prime && (
+                <div>
+                  <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, letterSpacing: 0.5, marginBottom: 3 }}>VERSAND</div>
+                  <div style={{ fontWeight: 600, color: '#00A8E0' }}>Prime</div>
+                </div>
+              )}
+              {deal.rating > 0 && (
+                <div>
+                  <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, letterSpacing: 0.5, marginBottom: 3 }}>BEWERTUNG</div>
+                  <div style={{ fontWeight: 600, color: 'var(--text)' }}>
+                    {deal.rating.toFixed(1)} <span style={{ color: '#F5A623' }}>★</span>
                   </div>
-                )}
-                {deal.last_updated && (() => { const age = fmtAge(deal.last_updated); return age ? (
-                  <div style={{ marginLeft: 'auto' }}>
-                    <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, letterSpacing: 0.5, marginBottom: 3 }}>AKTUALISIERT</div>
-                    <div style={{ fontWeight: 600, color: AGE_COLORS[age.level] }}>{age.text}</div>
-                  </div>
-                ) : null })()}
-              </div>
-            )}
+                </div>
+              )}
+              {fmtReviews(deal.reviews) && (
+                <div>
+                  <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, letterSpacing: 0.5, marginBottom: 3 }}>REVIEWS</div>
+                  <div style={{ fontWeight: 600, color: 'var(--text)' }}>{fmtReviews(deal.reviews)}</div>
+                </div>
+              )}
+              {deal.last_updated && (() => { const age = fmtAge(deal.last_updated); return age ? (
+                <div style={{ marginLeft: 'auto' }}>
+                  <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, letterSpacing: 0.5, marginBottom: 3 }}>AKTUALISIERT</div>
+                  <div style={{ fontWeight: 600, color: AGE_COLORS[age.level] }}>{age.text}</div>
+                </div>
+              ) : null })()}
+            </div>
 
             <a
               href={cartUrl}

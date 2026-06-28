@@ -1,5 +1,5 @@
 """
-CamelCamelCamel RSS Parser + Deal Scoring
+CamelCamelCamel RSS Parser + Keepa-Anreicherung + Deal-Scoring
 Läuft täglich um 03:00 Uhr und befüllt die PostgreSQL-Datenbank.
 """
 import re
@@ -11,6 +11,7 @@ import feedparser
 from datetime import datetime, timedelta
 
 from database import get_pool
+from keepa import enrich_with_keepa
 
 # ---------------------------------------------------------------------------
 # Konfiguration
@@ -96,33 +97,38 @@ def parse_prices(title: str, description: str) -> tuple[float, float]:
 
 
 def seeded_random(asin: str, offset: float = 0.0) -> float:
-    """Deterministischer Zufallswert 0–1 basierend auf ASIN."""
+    """Deterministischer Zufallswert 0–1 basierend auf ASIN (Fallback)."""
     h = int(hashlib.md5((asin + str(offset)).encode()).hexdigest(), 16)
     return (h % 10000) / 10000.0
 
 
 def calculate_score(current: float, original: float, asin: str) -> tuple[int, float, float]:
-    """Berechnet (deal_score, all_time_low, avg_price)."""
+    """Berechnet (deal_score, all_time_low, avg_price) mit simulierten Werten (Fallback)."""
     if original <= 0 or current <= 0:
         return 50, current, current
-    # Simulierte Preishistorie basierend auf Original
     r = seeded_random(asin)
-    all_time_low = round(original * (0.58 + r * 0.18), 2)   # 58–76 % des Originals
-    avg_price    = round(original * (0.87 + seeded_random(asin, 1) * 0.10), 2)  # 87–97 %
-
+    all_time_low = round(original * (0.58 + r * 0.18), 2)
+    avg_price    = round(original * (0.87 + seeded_random(asin, 1) * 0.10), 2)
     if current < all_time_low:
         all_time_low = current
-
     denom = avg_price - all_time_low
     if denom <= 0:
         denom = 0.01
     score = 100 - ((current - all_time_low) / denom * 100)
-    score = max(0, min(100, int(score)))
-    return score, all_time_low, avg_price
+    return max(0, min(100, int(score))), all_time_low, avg_price
 
 
-def generate_history(asin: str, current: float, avg: float, days: int = 60) -> list[tuple[float, str]]:
-    """Generiert simulierte Preishistorie für den Mini-Chart."""
+def calculate_score_real(current: float, all_time_low: float, avg_price: float) -> int:
+    """Deal-Score mit echten Keepa-Daten."""
+    denom = avg_price - all_time_low
+    if denom <= 0:
+        denom = 0.01
+    score = 100 - ((current - all_time_low) / denom * 100)
+    return max(0, min(100, int(score)))
+
+
+def generate_history(asin: str, current: float, avg: float, days: int = 60) -> list[tuple[float, datetime]]:
+    """Generiert simulierte Preishistorie als Fallback."""
     random.seed(asin)
     now = datetime.utcnow()
     history = []
@@ -139,7 +145,7 @@ def generate_history(asin: str, current: float, avg: float, days: int = 60) -> l
 
 
 # ---------------------------------------------------------------------------
-# Amazon Produktbild via og:image
+# Amazon Produktbild via og:image (Fallback wenn Keepa kein Bild liefert)
 # ---------------------------------------------------------------------------
 
 AMAZON_HEADERS = {
@@ -151,17 +157,14 @@ AMAZON_HEADERS = {
 FALLBACK_IMG_PATTERN = re.compile(r"images-na\.ssl-images-amazon\.com/images/P/")
 
 async def fetch_amazon_image(asin: str, client: httpx.AsyncClient) -> str:
-    """Holt die og:image URL von der Amazon-Produktseite."""
     try:
         url = f"https://www.amazon.de/dp/{asin}"
         resp = await client.get(url, headers=AMAZON_HEADERS, follow_redirects=True, timeout=10)
         if resp.status_code != 200:
             return ""
-        # og:image extrahieren
         m = re.search(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\'](https://[^"\']+)["\']', resp.text)
         if m:
             return m.group(1)
-        # Fallback: data-old-hires oder landingImage
         m = re.search(r'"large":"(https://m\.media-amazon\.com/images/I/[^"]+)"', resp.text)
         if m:
             return m.group(1)
@@ -171,21 +174,21 @@ async def fetch_amazon_image(asin: str, client: httpx.AsyncClient) -> str:
 
 
 async def enrich_images(products: list[dict], client: httpx.AsyncClient) -> None:
-    """Ergänzt fehlende oder Fallback-Bild-URLs für alle Produkte."""
+    """Ergänzt fehlende Produktbilder via Amazon-Seite (Fallback)."""
     needs_image = [p for p in products if not p["image_url"] or FALLBACK_IMG_PATTERN.search(p["image_url"])]
     if not needs_image:
         return
-    print(f"  Hole Bilder für {len(needs_image)} Produkte …")
+    print(f"  Hole Bilder für {len(needs_image)} Produkte via Amazon …")
     for p in needs_image:
         img = await fetch_amazon_image(p["asin"], client)
         if img:
             p["image_url"] = img
             print(f"    ✓ {p['asin']}: {img[:60]}…")
-        await asyncio.sleep(1.2)  # Rate-Limiting — 1 Request/Sekunde
+        await asyncio.sleep(1.2)
 
 
 # ---------------------------------------------------------------------------
-# Seed-Daten (Fallback wenn RSS nicht erreichbar)
+# Seed-Daten (Fallback wenn RSS und Keepa nicht erreichbar)
 # ---------------------------------------------------------------------------
 
 def get_seed_data() -> list[dict]:
@@ -224,6 +227,7 @@ def get_seed_data() -> list[dict]:
             "deal_score": score, "rating": rating, "reviews": reviews,
             "prime": True, "last_updated": now,
             "affiliate_url": f"https://www.amazon.de/dp/{asin}?tag={AFFILIATE_TAG}",
+            "_history": [],
         })
     return products
 
@@ -233,32 +237,38 @@ def get_seed_data() -> list[dict]:
 # ---------------------------------------------------------------------------
 
 async def fetch_and_update_deals():
-    """Ruft CCC RSS ab und aktualisiert die DB. Fallback auf Seed-Daten."""
+    """
+    1. CCC-RSS-Feeds parsen → ASINs sammeln
+    2. Keepa API: echte Preisdaten, Ratings, Bilder
+    3. Deal-Score berechnen, filtern (≥ 40)
+    4. PostgreSQL-DB aktualisieren
+    """
     print(f"[{datetime.utcnow().isoformat()}] Starte Deal-Update …")
-    products: list[dict] = []
+    rss_products: list[dict] = []
     seen_asins: set[str] = set()
 
     headers = {"User-Agent": "Mozilla/5.0 (compatible; Snagga/1.0)"}
     async with httpx.AsyncClient(timeout=30, headers=headers, follow_redirects=True) as client:
+
+        # ── 1. RSS-Feeds parsen ──────────────────────────────────────────────
         for url in RSS_FEEDS:
             try:
                 resp = await client.get(url)
                 feed = feedparser.parse(resp.text)
-                entries = feed.entries
 
-                for entry in entries[:60]:
-                    link  = getattr(entry, "link", "")
-                    asin  = extract_asin(link)
+                for entry in feed.entries[:60]:
+                    link = getattr(entry, "link", "")
+                    asin = extract_asin(link)
                     if not asin or asin in seen_asins:
                         continue
                     seen_asins.add(asin)
 
                     title = getattr(entry, "title", "")
                     desc  = getattr(entry, "description", "") or getattr(entry, "summary", "")
-
-                    # Produktname: Alles vor dem ersten " - " (CCC fügt oft "Best price …" an)
-                    name = re.sub(r"\s*[-–]\s*(Best price|Lowest|Dropped|Gesunken|New low).*", "",
-                                  title, flags=re.IGNORECASE).strip() or title[:100]
+                    name  = re.sub(
+                        r"\s*[-–]\s*(Best price|Lowest|Dropped|Gesunken|New low).*",
+                        "", title, flags=re.IGNORECASE,
+                    ).strip() or title[:100]
 
                     current, original = parse_prices(title, desc)
                     if current <= 0 or original <= 0:
@@ -266,82 +276,156 @@ async def fetch_and_update_deals():
                     if original < current:
                         original = current * 1.25
 
-                    score, low, avg = calculate_score(current, original, asin)
-                    if score < 40:
-                        continue
-
-                    products.append({
-                        "asin": asin, "name": name, "brand": "",
-                        "image_url": f"https://images-na.ssl-images-amazon.com/images/P/{asin}.01.LZZZZZZZ.jpg",
-                        "category": classify_category(name),
-                        "current_price": current, "original_price": original,
-                        "all_time_low": low, "avg_price": avg,
-                        "deal_score": score,
-                        "rating": round(3.8 + seeded_random(asin, 2) * 1.1, 1),
-                        "reviews": int(50 + seeded_random(asin, 3) * 4950),
-                        "prime": 1,
-                        "last_updated": datetime.utcnow().isoformat(),
-                        "affiliate_url": f"https://www.amazon.de/dp/{asin}?tag={AFFILIATE_TAG}",
+                    rss_products.append({
+                        "asin":           asin,
+                        "name":           name,
+                        "brand":          "",
+                        "image_url":      f"https://images-na.ssl-images-amazon.com/images/P/{asin}.01.LZZZZZZZ.jpg",
+                        "category":       classify_category(name),
+                        "current_price":  current,
+                        "original_price": original,
+                        "_history":       [],
                     })
 
-                if products:
-                    print(f"  {len(products)} Produkte von {url}")
+                if rss_products:
+                    print(f"  {len(rss_products)} ASINs aus RSS: {url}")
                     break
 
             except Exception as e:
                 print(f"  Feed {url} fehlgeschlagen: {e}")
 
+        # ── 2. Keepa-Anreicherung ────────────────────────────────────────────
+        if rss_products:
+            all_asins = [p["asin"] for p in rss_products]
+            keepa_data = await enrich_with_keepa(all_asins, domain=3, client=client)
+            print(f"  Keepa: {len(keepa_data)}/{len(all_asins)} Produkte angereichert")
+        else:
+            keepa_data = {}
+
+        # ── 3. Daten zusammenführen & Score berechnen ────────────────────────
+        now = datetime.utcnow()
+        products: list[dict] = []
+
+        for p in rss_products:
+            asin = p["asin"]
+            kd   = keepa_data.get(asin)
+
+            if kd:
+                # Echte Keepa-Daten
+                name           = kd["title"] or p["name"]
+                brand          = kd["brand"]
+                image_url      = kd["image_url"] or p["image_url"]
+                current_price  = kd["current_price"]
+                original_price = kd["original_price"]
+                all_time_low   = kd["all_time_low"]
+                avg_price      = kd["avg_price"]
+                rating         = kd["rating"]
+                reviews        = kd["reviews"]
+                history        = kd["history"]
+                score          = calculate_score_real(current_price, all_time_low, avg_price)
+            else:
+                # Fallback: RSS-Daten + simulierte Werte
+                name           = p["name"]
+                brand          = ""
+                image_url      = p["image_url"]
+                current_price  = p["current_price"]
+                original_price = p["original_price"]
+                score, all_time_low, avg_price = calculate_score(current_price, original_price, asin)
+                rating         = round(3.8 + seeded_random(asin, 2) * 1.1, 1)
+                reviews        = int(50 + seeded_random(asin, 3) * 4950)
+                history        = []
+
+            if score < 40:
+                continue
+
+            products.append({
+                "asin":           asin,
+                "name":           name[:200],
+                "brand":          brand,
+                "image_url":      image_url,
+                "category":       classify_category(name),
+                "current_price":  current_price,
+                "original_price": original_price,
+                "all_time_low":   all_time_low,
+                "avg_price":      avg_price,
+                "deal_score":     score,
+                "rating":         rating,
+                "reviews":        reviews,
+                "prime":          True,
+                "last_updated":   now.isoformat(),
+                "affiliate_url":  f"https://www.amazon.de/dp/{asin}?tag={AFFILIATE_TAG}",
+                "_history":       history,
+            })
+
+        # Fallback-Bilder via Amazon-Seite scrapen wenn nötig
+        await enrich_images(products, client)
+
+    # Kein RSS und kein Keepa → Seed-Daten
     if not products:
-        print("  RSS nicht erreichbar — nutze Seed-Daten")
+        print("  Keine Daten aus RSS/Keepa — nutze Seed-Daten")
         products = get_seed_data()
 
-    # In PostgreSQL schreiben
+    # ── 4. PostgreSQL aktualisieren ──────────────────────────────────────────
     db = await get_pool()
     async with db.acquire() as conn:
         for p in products:
+            asin    = p["asin"]
+            history = p.pop("_history", [])
+
             await conn.execute("""
                 INSERT INTO products
-                (asin, name, brand, image_url, category, current_price, original_price,
-                 all_time_low, avg_price, deal_score, rating, reviews, prime,
-                 last_updated, affiliate_url)
+                  (asin, name, brand, image_url, category, current_price, original_price,
+                   all_time_low, avg_price, deal_score, rating, reviews, prime,
+                   last_updated, affiliate_url)
                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
                 ON CONFLICT (asin) DO UPDATE SET
-                    name          = EXCLUDED.name,
-                    brand         = EXCLUDED.brand,
-                    image_url     = EXCLUDED.image_url,
-                    category      = EXCLUDED.category,
-                    current_price = EXCLUDED.current_price,
-                    original_price= EXCLUDED.original_price,
-                    all_time_low  = EXCLUDED.all_time_low,
-                    avg_price     = EXCLUDED.avg_price,
-                    deal_score    = EXCLUDED.deal_score,
-                    rating        = EXCLUDED.rating,
-                    reviews       = EXCLUDED.reviews,
-                    prime         = EXCLUDED.prime,
-                    last_updated  = EXCLUDED.last_updated,
-                    affiliate_url = EXCLUDED.affiliate_url
+                    name           = EXCLUDED.name,
+                    brand          = EXCLUDED.brand,
+                    image_url      = EXCLUDED.image_url,
+                    category       = EXCLUDED.category,
+                    current_price  = EXCLUDED.current_price,
+                    original_price = EXCLUDED.original_price,
+                    all_time_low   = EXCLUDED.all_time_low,
+                    avg_price      = EXCLUDED.avg_price,
+                    deal_score     = EXCLUDED.deal_score,
+                    rating         = EXCLUDED.rating,
+                    reviews        = EXCLUDED.reviews,
+                    prime          = EXCLUDED.prime,
+                    last_updated   = EXCLUDED.last_updated,
+                    affiliate_url  = EXCLUDED.affiliate_url
             """,
-                p["asin"], p["name"], p["brand"], p["image_url"], p["category"],
+                asin, p["name"], p["brand"], p["image_url"], p["category"],
                 p["current_price"], p["original_price"], p["all_time_low"], p["avg_price"],
                 p["deal_score"], p["rating"], p["reviews"], p["prime"],
                 p["last_updated"], p["affiliate_url"],
             )
 
-            # Aktuellen Preispunkt hinzufügen
+            # Aktuellen Preispunkt eintragen
             await conn.execute(
                 "INSERT INTO price_history (asin, price, timestamp) VALUES ($1, $2, $3)",
-                p["asin"], p["current_price"], p["last_updated"],
+                asin, p["current_price"], p["last_updated"],
             )
 
-            # Simulierte Historie nur für neue Produkte
-            count = await conn.fetchval(
-                "SELECT COUNT(*) FROM price_history WHERE asin=$1", p["asin"]
+            # Keepa-Historik: einmalig bei neuen Produkten (≤ 2 vorhandene Punkte)
+            existing = await conn.fetchval(
+                "SELECT COUNT(*) FROM price_history WHERE asin=$1", asin
             )
-            if count <= 1:
-                history = generate_history(p["asin"], p["current_price"], p["avg_price"])
+
+            if history and existing <= 2:
+                # Echte Keepa-Historie (max. letzte 365 Tage)
+                recent = history[-365:]
                 await conn.executemany(
                     "INSERT INTO price_history (asin, price, timestamp) VALUES ($1, $2, $3)",
-                    [(p["asin"], price, ts) for price, ts in history],
+                    [(asin, price, ts.isoformat()) for price, ts in recent],
+                )
+                print(f"    ✓ {asin}: {len(recent)} echte Preispunkte")
+
+            elif not history and existing <= 1:
+                # Kein Keepa → simulierte Historie als Fallback
+                sim = generate_history(asin, p["current_price"], p["avg_price"])
+                await conn.executemany(
+                    "INSERT INTO price_history (asin, price, timestamp) VALUES ($1, $2, $3)",
+                    [(asin, price, ts.isoformat()) for price, ts in sim],
                 )
 
     print(f"  Fertig: {len(products)} Produkte gespeichert.")

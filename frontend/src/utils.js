@@ -50,3 +50,10 @@ export const AGE_COLORS = {
   stale: '#888888',
 }
 
+/** Anzahl Bewertungen → "1.234" oder "12,3T" */
+export function fmtReviews(n) {
+  if (!n || n <= 0) return null
+  if (n >= 1000) return (n / 1000).toFixed(1).replace('.', ',') + 'T'
+  return n.toString()
+}
+
