@@ -46,32 +46,36 @@ def _first_pos(arr: list, *indices) -> float | None:
 # ---------------------------------------------------------------------------
 
 async def fetch_keepa_deals(
-    domain:       int   = 3,
-    delta_pct:    int   = 15,
-    min_rating:   int   = 40,    # × 10, also 40 = 4.0 Sterne
-    min_reviews:  int   = 50,
-    date_range:   int   = 24,    # Stunden rückblickend
-    per_page:     int   = 150,
-    page:         int   = 0,
+    domain:      int   = 3,
+    delta_pct:   int   = 15,    # mind. X% Preissenkung
+    min_rating:  int   = 40,    # 4.0 Sterne × 10
+    min_reviews: int   = 50,    # nach Empfang gefiltert
+    page:        int   = 0,
     client: httpx.AsyncClient | None = None,
 ) -> list[dict]:
     """
-    Ruft den Keepa /deals Endpoint ab und gibt eine Liste von Deal-Dicts zurück.
-    Jedes Dict enthält: asin, title, brand, image_url, current_price,
-    avg30, avg90, avg180, atl, sales_rank, rating, reviews, is_fba, delta_pct
+    Ruft den Keepa /deal Endpoint ab.
+    Gibt Liste von Deal-Dicts zurück: asin, title, brand, image_url,
+    current_price, avg30, avg90, avg180, atl, sales_rank, rating, reviews,
+    is_fba, delta_pct
     """
     if not KEEPA_KEY:
         return []
 
+    # Nur offiziell gültige Felder (aus DEAL_REQUEST_KEYS der keepa lib):
+    # deltaPercentRange: [min, max] — negative Werte = Preissenkung
+    # dateRange: 0=24h, 1=2 Tage, 2=3 Tage, ... 6=7 Tage
     selection = {
-        "deltaPercent": delta_pct,
-        "priceTypes":   [0, 1],          # AMAZON + NEW (FBA-Proxy später prüfen)
-        "minRating":    min_rating,
-        "minReviews":   min_reviews,
-        "dateRange":    date_range,
-        "perPage":      per_page,
-        "page":         page,
-        "domainId":     domain,
+        "page":               page,
+        "domainId":           domain,
+        "priceTypes":         [0, 1],              # 0=Amazon, 1=New
+        "deltaPercentRange":  [-100, -delta_pct],  # mind. X% gefallen
+        "dateRange":          0,                   # letzte 24 Stunden
+        "minRating":          min_rating,          # z.B. 40 = 4.0 Sterne
+        "hasReviews":         True,
+        "isFilterEnabled":    True,
+        "filterErotic":       True,
+        "sortType":           1,                   # 1 = nach deltaPercent sortiert
     }
 
     own_client = client is None
@@ -83,22 +87,23 @@ async def fetch_keepa_deals(
             f"{KEEPA_BASE}/deal",
             params={
                 "key":       KEEPA_KEY,
-                "domainId":  domain,
-                "selection": json.dumps(selection),
+                "selection": json.dumps(selection, separators=(',', ':')),
             },
         )
         resp.raise_for_status()
         data = resp.json()
     except Exception as e:
-        print(f"  Keepa /deals Fehler: {e}")
+        print(f"  Keepa /deal Fehler: {e}")
         return []
     finally:
         if own_client:
             await client.aclose()
 
-    tokens = data.get("tokensLeft", "?")
-    raw_deals = data.get("deals", [])
-    print(f"  Keepa /deals: {len(raw_deals)} Kandidaten · {tokens} Tokens übrig")
+    tokens    = data.get("tokensLeft", "?")
+    # Response-Struktur: data["deals"]["dr"] = Array der Deal-Objekte
+    deals_obj = data.get("deals") or {}
+    raw_deals = deals_obj.get("dr") or []
+    print(f"  Keepa /deal: {len(raw_deals)} Kandidaten · {tokens} Tokens übrig")
 
     results = []
     for d in raw_deals:
