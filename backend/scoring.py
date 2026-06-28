@@ -36,6 +36,7 @@ def passes_hard_filters(
     current:    float,
     avg90:      float,
     atl:        float,
+    avg180:     float = 0,
 ) -> bool:
     """Gibt True zurück wenn das Produkt alle Mindestanforderungen erfüllt."""
     if rating < 4.0:
@@ -47,16 +48,19 @@ def passes_hard_filters(
     if sales_rank > 0 and sales_rank > max_rank:
         return False
 
-    # Preis deutlich unter 90-Tage-Ø oder nahe ATL
-    price_ok = False
-    if avg90 > 0 and current <= avg90 * 0.85:
-        price_ok = True
-    if atl > 0 and current <= atl * 1.05:
-        price_ok = True
-    if not price_ok:
+    # Mindestens avg90 oder avg180 muss vorhanden sein (Preishistorie-Pflicht)
+    # Produkte ohne Preishistorie sind oft Fake-Deals oder Import-Nischenartikel
+    if avg90 <= 0 and avg180 <= 0:
         return False
 
-    return True
+    # Referenzpreis: avg90 bevorzugt, sonst avg180, sonst atl (avg365)
+    ref = avg90 or avg180 or atl
+
+    # Preis muss deutlich unter Referenz liegen
+    if ref > 0 and current <= ref * 0.85:
+        return True
+
+    return False
 
 
 # ---------------------------------------------------------------------------

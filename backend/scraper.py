@@ -156,6 +156,15 @@ EXCLUDE_KEYWORDS = [
     "schuhe ", "sneaker ", "handtuch", "bettwäsche", "kissen ", "decke ",
     "nahrungsergänzung", "protein pulver", "vitamine", "kapsel ",
     "lebensmittel", "kaffee bohnen", "tee ", "gewürze",
+    # Intime / erotische Produkte (filterErotic greift nicht immer)
+    "gleitgel", "lubricant", "intim", "kondome", "vibrator",
+    # Deko / Heimtextilien die nichts bringen
+    "tapisserie", "wandteppich", "vorhang ", "gardine", "jalousie",
+    "vase ", "glasvase", "blumenvase", "kerzenhalter", "bilderrahmen",
+    # Medizin / Teststreifen
+    "teststreifen", "blutzucker", "blutdruck",
+    # US-Importprodukte ohne DE-Relevanz
+    "toskanische bronze", "pfister ",
 ]
 
 
@@ -274,7 +283,7 @@ async def fetch_and_update_deals():
 
             if not passes_hard_filters(
                 d["rating"], d["reviews"], d["sales_rank"], cat,
-                d["current_price"], d["avg90"], d["atl"],
+                d["current_price"], d["avg90"], d["atl"], d["avg180"],
             ):
                 skipped_filter += 1
                 continue
