@@ -297,10 +297,15 @@ async def fetch_and_update_deals():
         # ── 2. Keepa-Anreicherung ────────────────────────────────────────────
         if rss_products:
             all_asins = [p["asin"] for p in rss_products]
-            keepa_data = await enrich_with_keepa(all_asins, domain=3, client=client)
-            print(f"  Keepa: {len(keepa_data)}/{len(all_asins)} Produkte angereichert")
         else:
-            keepa_data = {}
+            # RSS ausgefallen → Seed-ASINs mit Keepa anreichern
+            print("  RSS ausgefallen — versuche Keepa mit Seed-ASINs …")
+            seed = get_seed_data()
+            all_asins = [p["asin"] for p in seed]
+            rss_products = seed
+
+        keepa_data = await enrich_with_keepa(all_asins, domain=3, client=client)
+        print(f"  Keepa: {len(keepa_data)}/{len(all_asins)} Produkte angereichert")
 
         # ── 3. Daten zusammenführen & Score berechnen ────────────────────────
         now = datetime.utcnow()
@@ -360,9 +365,9 @@ async def fetch_and_update_deals():
         # Fallback-Bilder via Amazon-Seite scrapen wenn nötig
         await enrich_images(products, client)
 
-    # Kein RSS und kein Keepa → Seed-Daten
+    # Alles ausgefallen → Seed-Daten ohne Anreicherung
     if not products:
-        print("  Keine Daten aus RSS/Keepa — nutze Seed-Daten")
+        print("  Alles ausgefallen — nutze rohe Seed-Daten")
         products = get_seed_data()
 
     # ── 4. PostgreSQL aktualisieren ──────────────────────────────────────────
