@@ -297,6 +297,23 @@ async def debug_keepa_cats():
                         if isinstance(v, (int, float)) and v > 0:
                             idx_hits[i] += 1
 
+    # 5 Beispiel-Deals mit avg90-Rohdaten (Indizes 0,1,3,10,16,17,18)
+    sample_deals = []
+    for d in raw[:10]:
+        avgs = d.get("avg") or []
+        cur = d.get("current") or []
+        avg90_arr = avgs[1] if len(avgs) > 1 else []
+        def cv(arr, i): return arr[i] if arr and i < len(arr) and isinstance(arr[i], (int,float)) and arr[i] > 0 else None
+        sample_deals.append({
+            "asin": d.get("asin"),
+            "title": (d.get("title") or "")[:40],
+            "rootCat": d.get("rootCat"),
+            "cur_0": cv(cur, 0), "cur_18": cv(cur, 18), "cur_10": cv(cur, 10),
+            "avg90_0": cv(avg90_arr, 0), "avg90_18": cv(avg90_arr, 18),
+            "avg90_1": cv(avg90_arr, 1), "avg90_10": cv(avg90_arr, 10),
+            "avg90_16": cv(avg90_arr, 16), "avg90_17": cv(avg90_arr, 17),
+        })
+
     return {
         "total": len(raw),
         "tokens_left": data.get("tokensLeft"),
@@ -304,6 +321,7 @@ async def debug_keepa_cats():
         "rootcat_samples": samples,
         "avg_data_availability": avg_stats,
         "avg_index_hits_top10": dict(idx_hits.most_common(10)),
+        "sample_deals_raw": sample_deals,
     }
 
 
