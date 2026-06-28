@@ -121,6 +121,10 @@ async def fetch_keepa_deals(
             return v if isinstance(v, (int, float)) and v > 0 else 0
         return 0
 
+    def _cv_best(arr):
+        """Bester Preis aus Keepa-Array: BuyBox > Amazon > NEW_FBA (in Cent)."""
+        return _cv(arr, IDX_BUYBOX) or _cv(arr, IDX_AMAZON) or _cv(arr, IDX_NEW_FBA)
+
     def c2e(v):
         """Cent → EUR, 0 wenn ungültig."""
         return round(v / 100.0, 2) if v > 0 else 0.0
@@ -140,12 +144,13 @@ async def fetch_keepa_deals(
             continue
 
         # avg[] = Liste von Perioden-Arrays: [30d, 90d, 180d, 365d]
+        # Jedes Perioden-Array ist ein Preis-Typ-Array → besten verfügbaren Preis nehmen
         avg_arr = d.get("avg") or []
-        avg30  = c2e(_cv(avg_arr[0], IDX_AMAZON) if len(avg_arr) > 0 else 0)
-        avg90  = c2e(_cv(avg_arr[1], IDX_AMAZON) if len(avg_arr) > 1 else 0)
-        avg180 = c2e(_cv(avg_arr[2], IDX_AMAZON) if len(avg_arr) > 2 else 0)
+        avg30  = c2e(_cv_best(avg_arr[0]) if len(avg_arr) > 0 else 0)
+        avg90  = c2e(_cv_best(avg_arr[1]) if len(avg_arr) > 1 else 0)
+        avg180 = c2e(_cv_best(avg_arr[2]) if len(avg_arr) > 2 else 0)
         # 365d-Ø als ATL-Proxy (besser als nichts)
-        atl = c2e(_cv(avg_arr[3], IDX_AMAZON) if len(avg_arr) > 3 else 0) or avg180
+        atl = c2e(_cv_best(avg_arr[3]) if len(avg_arr) > 3 else 0) or avg180
 
         # Rating: current[16] ist Rating × 10 (z.B. 45 = 4.5 Sterne)
         rating  = round(_cv(cur_arr, IDX_RATING) / 10.0, 1)
@@ -167,7 +172,7 @@ async def fetch_keepa_deals(
 
         # deltaPercent: auch ein Array [30d, 90d, 180d, 365d] von Preis-Typ-Arrays
         dp_arr = d.get("deltaPercent") or []
-        dp = _cv(dp_arr[0], IDX_AMAZON) if dp_arr else 0
+        dp = _cv_best(dp_arr[0]) if dp_arr else 0
 
         results.append({
             "asin":          asin,
