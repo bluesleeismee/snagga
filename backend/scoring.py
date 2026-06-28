@@ -155,20 +155,23 @@ def determine_tag(
     (atl_confirmed=True, kommt aus /product Deep-Sync).
     Aus /deal-Daten steht nur avg365 als Proxy — das reicht NICHT für den Tag.
     """
+    # avg90 || avg180 als bester verfügbarer Referenzpreis
+    ref = avg90 or avg180
+
     # Echter ATL nur wenn durch Deep-Sync bestätigt
     if atl_confirmed and atl > 0 and current <= atl * 1.03:
         return "Allzeittiefpreis"
 
-    # Stark unter 6-Monats-Durchschnitt → historisch günstig
-    if avg180 > 0 and current <= avg180 * 0.78:
+    # Deutlich unter 6-Monats-Durchschnitt
+    if avg180 > 0 and current <= avg180 * 0.80:
         return "Historisch günstig"
 
-    # Stark unter 3-Monats-Durchschnitt
-    if avg90 > 0 and current <= avg90 * 0.72:
+    # Deutlich unter Referenzpreis
+    if ref > 0 and current <= ref * 0.70:
         return "Stark gefallen"
 
-    # Moderat unter 3-Monats-Durchschnitt
-    if avg90 > 0 and current <= avg90 * 0.87:
+    # Moderat unter Referenzpreis (inkl. Fallback avg180 wenn avg90 fehlt)
+    if ref > 0 and current <= ref * 0.85:
         return "Preis gefallen"
 
     return ""
