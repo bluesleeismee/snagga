@@ -245,7 +245,13 @@ async def refresh_deals():
         wait = int(REFRESH_COOLDOWN - (now - _last_refresh))
         raise HTTPException(status_code=429, detail=f"Bitte {wait}s warten.")
     _last_refresh = now
-    count = await fetch_and_update_deals()
+    import traceback
+    try:
+        count = await fetch_and_update_deals()
+    except Exception as exc:
+        err = traceback.format_exc()
+        print(f"[REFRESH ERROR] {err}")
+        raise HTTPException(status_code=500, detail=str(exc))
     cache_clear()
     return {"message": f"{count} aktive Deals geladen"}
 
