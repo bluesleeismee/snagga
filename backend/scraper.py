@@ -27,6 +27,14 @@ TOP_PICKS_COUNT = 10
 MIN_SCORE       = 30
 MIN_PRICE       = 20.0
 
+CATEGORY_MIN_PRICE: dict[str, float] = {
+    "Elektronik & Foto":                 25.0,
+    "Computer & Zubehör":                25.0,
+    "Elektro-Großgeräte":                50.0,
+    "Kamera & Foto":                     30.0,
+    "Musikinstrumente & DJ-Equipment":   30.0,
+}
+
 # ---------------------------------------------------------------------------
 # Amazon-DE rootCat-ID → Snagga-Kategorie
 # Aus Debug-Endpoint /debug/keepa-cats ermittelt (150 Deals, 2026-06-28)
@@ -332,6 +340,11 @@ async def fetch_and_update_deals():
                     continue
                 d["category"] = cat
 
+                cat_min = CATEGORY_MIN_PRICE.get(cat, MIN_PRICE)
+                if d["current_price"] < cat_min:
+                    skipped_price += 1
+                    continue
+
                 if not passes_hard_filters(
                     d["rating"], d["reviews"], d["sales_rank"], cat,
                     d["current_price"], d["avg90"], d["atl"], d["avg180"],
@@ -344,6 +357,7 @@ async def fetch_and_update_deals():
                     d["sales_rank"], cat,
                     d["rating"], d["reviews"],
                     price_updated=None,
+                    title=d["title"] or "",
                 )
                 if score < MIN_SCORE:
                     skipped_score += 1

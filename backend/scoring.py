@@ -3,6 +3,7 @@ Deal-Scoring, Hard-Filter und Tag-Logik für snagga.de
 """
 import math
 import json
+import re
 from datetime import datetime
 
 # ---------------------------------------------------------------------------
@@ -22,6 +23,31 @@ CATEGORY_MAX_RANK: dict[str, int] = {
     "Musikinstrumente & DJ-Equipment": 15_000,
     "Auto & Motorrad":            10_000,
 }
+
+
+# ---------------------------------------------------------------------------
+# Specificity Penalty
+# ---------------------------------------------------------------------------
+
+def specificity_penalty(title: str) -> int:
+    """
+    Straft Nischenprodukte durch Score-Abzug statt Hard-Block.
+    Ein gutes Universal-Produkt mit leicht spezifischem Titel kommt noch durch.
+    """
+    t = title.lower()
+    p = 0
+
+    if re.search(r'\b(passend für|kompatibel mit|ersatzteil)\b', t):
+        p += 40
+    if re.search(r'\bfür (nissan|bmw|mercedes|vw|volkswagen|audi|ford|opel|toyota|honda|peugeot|renault|seat|skoda|hyundai|kia|fiat|volvo|mazda|suzuki)\b', t):
+        p += 35
+    if re.search(r'\b(oem |original-|artikel-nr|art\.nr)\b', t):
+        p += 25
+    # 2+ vierstellige Nummernblöcke im Titel deuten auf Modellcodes hin
+    if len(re.findall(r'\b\d{4,}\b', t)) >= 2:
+        p += 20
+
+    return min(p, 60)
 
 
 # ---------------------------------------------------------------------------
@@ -62,10 +88,17 @@ def passes_hard_filters(
     below90  = ref90  is None or current <= ref90  * 0.92
     below180 = ref180 is None or current <= ref180 * 0.92
 
-    if below90 and below180:
-        return True
+    if not (below90 and below180):
+        return False
 
-    return False
+    # avg365 als langfristiger Anker (atl aus /deal = avg365):
+    # Wenn avg180 deutlich über avg365 liegt, war avg180 durch einen länger andauernden
+    # Spike inflated. Dann muss current auch unter avg365 liegen.
+    if atl > 0 and avg180 > 0 and atl < avg180 * 0.80:
+        if current > atl * 0.95:
+            return False
+
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -81,6 +114,7 @@ def calculate_deal_score(
     rating:        float,
     reviews:       int,
     price_updated: datetime | None = None,
+    title:         str = "",
 ) -> tuple[int, str]:
     """
     Berechnet Deal-Score (0–100) nach der Strategie-Formel:
@@ -134,14 +168,18 @@ def calculate_deal_score(
 
     # ── Gesamt ──────────────────────────────────────────────────────────────
     raw = f_avg * 0.40 + f_atl * 0.30 + f_pop * 0.20 + f_stab * 0.10
-    score = max(0, min(100, int(raw * 100)))
+    base_score = max(0, min(100, int(raw * 100)))
+
+    penalty = specificity_penalty(title) if title else 0
+    score   = max(0, base_score - penalty)
 
     breakdown = json.dumps({
-        "avg90": round(f_avg, 3),
-        "atl":   round(f_atl, 3),
-        "pop":   round(f_pop, 3),
-        "stab":  round(f_stab, 3),
-        "rank":  round(rank_f, 3),
+        "avg90":   round(f_avg, 3),
+        "atl":     round(f_atl, 3),
+        "pop":     round(f_pop, 3),
+        "stab":    round(f_stab, 3),
+        "rank":    round(rank_f, 3),
+        "penalty": penalty,
     })
     return score, breakdown
 

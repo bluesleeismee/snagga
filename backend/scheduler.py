@@ -7,7 +7,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from scraper import fetch_and_update_deals, hourly_price_check, nightly_deep_sync
+from scraper import fetch_and_update_deals, nightly_deep_sync
 
 SERVICE_URL = os.getenv("RENDER_EXTERNAL_URL", "https://snagga.onrender.com")
 
@@ -36,14 +36,8 @@ def create_scheduler() -> AsyncIOScheduler:
         misfire_grace_time=600,
     )
 
-    # Stündlicher Preis-Check der aktiven Deals (30 Min versetzt)
-    scheduler.add_job(
-        hourly_price_check,
-        IntervalTrigger(hours=1, start_date="2024-01-01 00:35:00"),
-        id="hourly_price_check",
-        replace_existing=True,
-        misfire_grace_time=600,
-    )
+    # hourly_price_check deaktiviert: Amazon blockiert Bot-Requests,
+    # check_live_price() gibt immer None zurück — keine Wirkung, kostet nur Ressourcen.
 
     # Keep-alive: alle 10 Minuten /health pingen damit Render nicht einschläft
     scheduler.add_job(
