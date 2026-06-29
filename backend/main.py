@@ -125,22 +125,12 @@ app.add_middleware(
 
 
 # ---------------------------------------------------------------------------
-# Hilfsfunktion: DB-Zeile → Product
+# Hilfsfunktionen: DB-Zeilen → Products
 # ---------------------------------------------------------------------------
 
-async def row_to_product(row, conn, history_limit: int = 30) -> Product:
-    asin = row["asin"]
-    ph_rows = await conn.fetch(
-        "SELECT price FROM price_history WHERE asin=$1 ORDER BY timestamp DESC LIMIT $2",
-        asin, history_limit,
-    )
-    prices = [r["price"] for r in reversed(ph_rows)]
-    if not prices:
-        prices = generate_history(asin, row["current_price"], row["avg_price"])
-        prices = [p for p, _ in prices[-30:]]
-
+def _row_to_product(row, prices: list[float]) -> Product:
     return Product(
-        asin=asin, name=row["name"], brand=row["brand"],
+        asin=row["asin"], name=row["name"], brand=row["brand"],
         image_url=row["image_url"], category=row["category"],
         current_price=row["current_price"], original_price=row["original_price"],
         all_time_low=row["all_time_low"], avg_price=row["avg_price"],
@@ -154,6 +144,46 @@ async def row_to_product(row, conn, history_limit: int = 30) -> Product:
         sales_rank=int(row["sales_rank"]) if "sales_rank"   in row.keys() else 0,
         tag=row["tag"]                   if "tag"           in row.keys() else "",
     )
+
+
+async def rows_to_products(rows, conn, history_limit: int = 30) -> list[Product]:
+    """Lädt Preishistorien für alle Deals in einer einzigen DB-Abfrage (statt N)."""
+    if not rows:
+        return []
+    asins = [row["asin"] for row in rows]
+    ph_rows = await conn.fetch(
+        "SELECT asin, price FROM price_history "
+        "WHERE asin = ANY($1) ORDER BY asin, timestamp DESC",
+        asins,
+    )
+    # Gruppieren nach ASIN, nur die neuesten `history_limit` Punkte
+    history_map: dict[str, list[float]] = {}
+    for ph in ph_rows:
+        bucket = history_map.setdefault(ph["asin"], [])
+        if len(bucket) < history_limit:
+            bucket.append(ph["price"])
+
+    result = []
+    for row in rows:
+        asin = row["asin"]
+        prices = list(reversed(history_map.get(asin, [])))
+        if not prices:
+            prices = [p for p, _ in generate_history(asin, row["current_price"], row["avg_price"])[-30:]]
+        result.append(_row_to_product(row, prices))
+    return result
+
+
+async def row_to_product(row, conn, history_limit: int = 30) -> Product:
+    """Einzelner Deal (Detailansicht) — behält eigene Abfrage für history_limit=180."""
+    asin = row["asin"]
+    ph_rows = await conn.fetch(
+        "SELECT price FROM price_history WHERE asin=$1 ORDER BY timestamp DESC LIMIT $2",
+        asin, history_limit,
+    )
+    prices = list(reversed([r["price"] for r in ph_rows]))
+    if not prices:
+        prices = [p for p, _ in generate_history(asin, row["current_price"], row["avg_price"])[-30:]]
+    return _row_to_product(row, prices)
 
 
 # ---------------------------------------------------------------------------
@@ -206,7 +236,7 @@ async def get_deals(
         rows = await conn.fetch(
             f"SELECT * FROM products {where} ORDER BY {order} LIMIT ${idx}", *params
         )
-        result = [await row_to_product(r, conn) for r in rows]
+        result = await rows_to_products(rows, conn)
 
     cache_set(cache_key, result)
     return result
