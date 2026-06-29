@@ -37,6 +37,9 @@ def cache_get(key: str):
 
 
 def cache_set(key: str, data):
+    if len(_cache) > 40:
+        oldest = min(_cache, key=lambda k: _cache[k]["ts"])
+        del _cache[oldest]
     _cache[key] = {"data": data, "ts": time.time()}
 
 

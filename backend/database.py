@@ -74,7 +74,7 @@ async def create_pool() -> asyncpg.Pool:
     pool = await asyncpg.create_pool(
         DATABASE_URL,
         min_size=1,
-        max_size=10,
+        max_size=3,
         ssl=ssl_ctx,
     )
     return pool

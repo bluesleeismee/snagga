@@ -299,61 +299,61 @@ async def fetch_and_update_deals():
     now = datetime.utcnow()
 
     async with httpx.AsyncClient(timeout=30) as client:
-        # ── 1. Keepa /deals (2 Seiten à 150 = bis zu 300 Kandidaten) ────────
-        raw_deals = []
+        # ── 1. Keepa /deals (3 Seiten à 150 Kandidaten) ─────────────────────
+        # Jede Seite wird sofort gefiltert — nie alle 450 gleichzeitig im RAM
+        candidates = []
+        skipped_cat = skipped_price = skipped_filter = skipped_score = 0
+        got_any = False
+
         for page in range(3):
             page_deals = await fetch_keepa_deals(
                 domain=3, delta_pct=15, min_rating=40, min_reviews=50,
                 page=page, client=client,
             )
-            raw_deals.extend(page_deals)
             if not page_deals:
                 break
+            got_any = True
 
-        if not raw_deals:
+            # ── 2. Hard Filters + Scoring (direkt pro Seite) ─────────────────
+            for d in page_deals:
+                if d["current_price"] < MIN_PRICE:
+                    skipped_price += 1
+                    continue
+
+                cat = classify_category(d["title"] or d["brand"], d.get("root_cat", 0))
+                if cat is None:
+                    skipped_cat += 1
+                    continue
+                d["category"] = cat
+
+                if not passes_hard_filters(
+                    d["rating"], d["reviews"], d["sales_rank"], cat,
+                    d["current_price"], d["avg90"], d["atl"], d["avg180"],
+                ):
+                    skipped_filter += 1
+                    continue
+
+                score, breakdown = calculate_deal_score(
+                    d["current_price"], d["avg90"], d["atl"],
+                    d["sales_rank"], cat,
+                    d["rating"], d["reviews"],
+                    price_updated=None,
+                )
+                if score < MIN_SCORE:
+                    skipped_score += 1
+                    continue
+
+                d["deal_score"]      = score
+                d["score_breakdown"] = breakdown
+                d["tag"]             = determine_tag(d["current_price"], d["atl"], d["avg90"], d["avg180"], atl_confirmed=False)
+                d["original_price"]  = max(d["avg90"] or d["current_price"] * 1.25,
+                                           d["current_price"] * 1.10)
+                d["avg_price"]       = d["avg90"] or d["current_price"]
+                candidates.append(d)
+
+        if not got_any:
             print("  Keepa /deals lieferte keine Daten — Abbruch.")
             return 0
-
-        # ── 2. Hard Filters + Scoring ────────────────────────────────────────
-        candidates = []
-        skipped_cat = skipped_price = skipped_filter = skipped_score = 0
-        for d in raw_deals:
-            # Mindestpreis
-            if d["current_price"] < MIN_PRICE:
-                skipped_price += 1
-                continue
-
-            cat = classify_category(d["title"] or d["brand"], d.get("root_cat", 0))
-            if cat is None:
-                skipped_cat += 1
-                continue
-            d["category"] = cat
-
-            if not passes_hard_filters(
-                d["rating"], d["reviews"], d["sales_rank"], cat,
-                d["current_price"], d["avg90"], d["atl"], d["avg180"],
-            ):
-                skipped_filter += 1
-                continue
-
-            score, breakdown = calculate_deal_score(
-                d["current_price"], d["avg90"], d["atl"],
-                d["sales_rank"], cat,
-                d["rating"], d["reviews"],
-                price_updated=None,  # Timestamp unbekannt aus /deals
-            )
-            if score < MIN_SCORE:
-                skipped_score += 1
-                continue
-
-            d["deal_score"]      = score
-            d["score_breakdown"] = breakdown
-            # atl_confirmed=False: /deal gibt nur avg365, kein echter ATL
-            d["tag"]             = determine_tag(d["current_price"], d["atl"], d["avg90"], d["avg180"], atl_confirmed=False)
-            d["original_price"]  = max(d["avg90"] or d["current_price"] * 1.25,
-                                       d["current_price"] * 1.10)
-            d["avg_price"]       = d["avg90"] or d["current_price"]
-            candidates.append(d)
 
         # Sortieren nach Score
         candidates.sort(key=lambda x: x["deal_score"], reverse=True)
@@ -370,18 +370,25 @@ async def fetch_and_update_deals():
         db = await get_pool()
         async with db.acquire() as conn:
 
-            # Nur Top-Picks zurücksetzen; is_active/is_backup bleiben erhalten
-            # (Deals akkumulieren — hourly_price_check deaktiviert abgelaufene Deals)
             await conn.execute("UPDATE products SET is_top_pick=false")
 
-            # Neue ASINs aus diesem Run als aktiv setzen
+            # Deals > 72h die nicht im aktuellen Run sind → deaktivieren
             new_asins = {p["asin"] for p in active_pool + backup_pool}
-            # Deals die älter als 72h sind und NICHT im neuen Run auftauchen → deaktivieren
             await conn.execute(
                 "UPDATE products SET is_active=false, is_backup=false "
                 "WHERE last_updated < NOW() - INTERVAL '72 hours' "
                 "AND asin != ALL($1::text[])",
                 list(new_asins),
+            )
+
+            # MAX_ACTIVE in DB erzwingen: überzählige ältere aktive Deals deaktivieren
+            await conn.execute(
+                "UPDATE products SET is_active=false, is_top_pick=false "
+                "WHERE is_active=true AND asin NOT IN ("
+                "  SELECT asin FROM products WHERE is_active=true "
+                "  ORDER BY deal_score DESC LIMIT $1"
+                ")",
+                MAX_ACTIVE,
             )
 
             for i, p in enumerate(active_pool + backup_pool):
@@ -436,13 +443,11 @@ async def fetch_and_update_deals():
                     p["sales_rank"] or 0, p["tag"], p["score_breakdown"],
                 )
 
-                # Preispunkt in Historik
                 await conn.execute(
                     "INSERT INTO price_history (asin, price, timestamp) VALUES ($1,$2,$3)",
                     asin, p["current_price"], now,
                 )
 
-                # Simulierte Historik wenn noch keine vorhanden
                 count = await conn.fetchval("SELECT COUNT(*) FROM price_history WHERE asin=$1", asin)
                 if count <= 1:
                     sim = generate_history(asin, p["current_price"], p["avg_price"])
