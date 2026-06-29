@@ -3,22 +3,7 @@ import { fmtPrice, discount, fmtAge, AGE_COLORS, fmtReviews } from '../utils.js'
 import { useBreakpoint } from '../hooks/useBreakpoint.js'
 
 function useProductImages(asin, primaryUrl) {
-  const [images, setImages] = useState([])
-  useEffect(() => {
-    if (!asin) return
-    const candidates = [1, 2, 3, 4, 5].map(
-      n => `https://images-na.ssl-images-amazon.com/images/P/${asin}.0${n}.LZZZZZZZ.jpg`
-    )
-    const loaded = []
-    let settled = 0
-    candidates.forEach((url, i) => {
-      const img = new Image()
-      img.onload  = () => { if (img.naturalWidth > 10) loaded[i] = url; settled++; if (settled === candidates.length) setImages(loaded.filter(Boolean)) }
-      img.onerror = () => { settled++; if (settled === candidates.length) setImages(loaded.filter(Boolean)) }
-      img.src = url
-    })
-  }, [asin])
-  return images.length > 0 ? images : (primaryUrl ? [primaryUrl] : [])
+  return primaryUrl ? [primaryUrl] : []
 }
 
 export default function ProductModal({ deal, onClose }) {
