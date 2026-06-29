@@ -20,7 +20,7 @@ CATEGORY_MAX_RANK: dict[str, int] = {
     "Elektro-Großgeräte":         10_000,
     "Sport & Freizeit":           25_000,
     "Musikinstrumente & DJ-Equipment": 15_000,
-    "Auto & Motorrad":            20_000,
+    "Auto & Motorrad":            10_000,
 }
 
 
@@ -41,25 +41,28 @@ def passes_hard_filters(
     """Gibt True zurück wenn das Produkt alle Mindestanforderungen erfüllt."""
     if rating < 4.0:
         return False
-    if reviews < 50:
+
+    # Allgemein: mind. 100 Reviews; Auto & Motorrad: 500 (filtert Modell-Nischenteile)
+    min_reviews = 500 if category == "Auto & Motorrad" else 100
+    if reviews < min_reviews:
         return False
 
     max_rank = CATEGORY_MAX_RANK.get(category, 30_000)
     if sales_rank > 0 and sales_rank > max_rank:
         return False
 
-    # Mindestens avg90 oder avg180 muss vorhanden sein (Preishistorie-Pflicht)
-    # Produkte ohne Preishistorie sind oft Fake-Deals oder Import-Nischenartikel
     if avg90 <= 0 and avg180 <= 0:
         return False
 
-    # Referenzpreis: avg90 bevorzugt, sonst avg180, sonst atl (avg365)
-    ref = avg90 or avg180 or atl
+    # Anti-Spike: current muss unter avg90 UND avg180 liegen
+    # Verhindert Fake-Deals durch kurze Preisspikes (normal €30 → spike €60 → zurück €30)
+    ref90  = avg90  if avg90  > 0 else None
+    ref180 = avg180 if avg180 > 0 else None
 
-    # Preis muss mindestens 8% unter Referenz liegen (grober Einstiegsfilter)
-    # Keepa misst Delta vs. VORHERIGEN Preis, nicht vs. avg90 — deswegen locker
-    # Scoring (MIN_SCORE) macht die eigentliche Qualitäts-Filterung
-    if ref > 0 and current <= ref * 0.92:
+    below90  = ref90  is None or current <= ref90  * 0.92
+    below180 = ref180 is None or current <= ref180 * 0.92
+
+    if below90 and below180:
         return True
 
     return False

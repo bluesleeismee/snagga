@@ -21,11 +21,11 @@ from scoring import (
 )
 
 AFFILIATE_TAG   = "snagga-21"
-MAX_ACTIVE      = 200
-MAX_BACKUP      = 100
+MAX_ACTIVE      = 100
+MAX_BACKUP      = 50
 TOP_PICKS_COUNT = 10
-MIN_SCORE       = 30   # Score-Schwelle (Keepa-Delta ≠ avg90-Delta → konservativ halten)
-MIN_PRICE       = 15.0  # Billigst-Artikel (Papier, Socken, …) rausfiltern
+MIN_SCORE       = 30
+MIN_PRICE       = 20.0
 
 # ---------------------------------------------------------------------------
 # Amazon-DE rootCat-ID → Snagga-Kategorie
@@ -198,6 +198,12 @@ EXCLUDE_KEYWORDS = [
     "lebensmittel", "kaffee bohnen", "tee ", "gewürze",
     # Intime / erotische Produkte (filterErotic greift nicht immer)
     "gleitgel", "lubricant", "intim", "kondome", "vibrator",
+    # Modell-/fahrzeugspezifische Teile (z.B. Sonnenblende für Nissan XY)
+    "passend für", "kompatibel mit", "ersatzteil", "oem ", "original-",
+    "für nissan", "für bmw", "für mercedes", "für vw ", "für volkswagen",
+    "für audi", "für ford", "für opel", "für toyota", "für honda",
+    "für peugeot", "für renault", "für seat", "für skoda", "für hyundai",
+    "für kia", "für fiat", "für volvo", "für mazda", "für suzuki",
     # Deko / Heimtextilien / Handwerk die nichts bringen
     "tapisserie", "wandteppich", "vorhang ", "gardine", "jalousie", "rollo ",
     "doppelrollo", "flächenvorhang",
@@ -372,11 +378,11 @@ async def fetch_and_update_deals():
 
             await conn.execute("UPDATE products SET is_top_pick=false")
 
-            # Deals > 72h die nicht im aktuellen Run sind → deaktivieren
+            # Deals > 24h die nicht im aktuellen Run sind → deaktivieren
             new_asins = {p["asin"] for p in active_pool + backup_pool}
             await conn.execute(
                 "UPDATE products SET is_active=false, is_backup=false "
-                "WHERE last_updated < NOW() - INTERVAL '72 hours' "
+                "WHERE last_updated < NOW() - INTERVAL '24 hours' "
                 "AND asin != ALL($1::text[])",
                 list(new_asins),
             )
