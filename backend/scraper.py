@@ -285,9 +285,10 @@ async def hourly_keepa_price_check():
     Prüft die Preise aktiver Deals via Keepa /product (history=0).
 
     Gestaffelt (Token-Budget-Schutz bei bis zu 500 aktiven Deals):
-      - Top Picks + "Allzeittiefpreis"-Deals → jede Stunde
+      - Top Picks + "Allzeittiefpreis"-Deals + volatile Deals → jede Stunde
       - alle übrigen → nur wenn seit ≥ 3h nicht geprüft
     Preis nicht mehr gut → sofort deaktivieren.
+    Volatil (≥3 Preissprünge >3%) + schwacher Rabatt → deaktivieren.
     Preis weiterhin gut → current_price aktualisieren UND last_updated refreshen,
     damit dauerhaft günstige Deals nicht durch die 4h-Ablauffalle fallen.
     """
@@ -301,6 +302,7 @@ async def hourly_keepa_price_check():
             "category, rating, reviews, sales_rank FROM products "
             "WHERE is_active=true AND ("
             "  is_top_pick = true "
+            "  OR is_volatile = true "
             "  OR tag = 'Allzeittiefpreis' "
             "  OR last_checked IS NULL "
             "  OR last_checked < NOW() - INTERVAL '3 hours'"
@@ -318,7 +320,11 @@ async def hourly_keepa_price_check():
         print("  Keepa Preis-Check: keine Preisdaten erhalten — Abbruch")
         return
 
-    deactivated = 0
+    # Volatilität: Anzahl Preissprünge >3% über die letzten 12 gespeicherten Punkte.
+    # Reihenfolge per id (monoton) statt Zeitstempel (price_history.timestamp ist TEXT).
+    move_counts = await _count_price_moves(asins)
+
+    deactivated = volatile_cnt = 0
     async with db.acquire() as conn:
         for row in active:
             asin       = row["asin"]
@@ -329,8 +335,14 @@ async def hourly_keepa_price_check():
             avg90  = row["avg90_price"]  or 0.0
             avg180 = row["avg180_price"] or 0.0
             atl    = row["all_time_low"] or 0.0
+            volatile = move_counts.get(asin, 0) >= 3
+            if volatile:
+                volatile_cnt += 1
 
-            if not passes_hard_filters(
+            # Volatil UND schwacher Rabatt (kaum unter avg90) → faul, raus.
+            weak_volatile = volatile and avg90 > 0 and live_price > avg90 * 0.95
+
+            if weak_volatile or not passes_hard_filters(
                 row["rating"], row["reviews"], row["sales_rank"] or 0,
                 row["category"], live_price, avg90, atl, avg180,
             ):
@@ -350,10 +362,12 @@ async def hourly_keepa_price_check():
                 tag = determine_tag(live_price, atl, avg90, avg180, atl_confirmed=False)
                 # last_updated wird mit-refresht: bestätigt-gute Deals laufen nicht aus,
                 # auch wenn Keepa sie nicht mehr als "frischen" Deal im /deal-Stream meldet.
+                # is_volatile steuert die Prüf-Frequenz (volatil → stündlich statt 3h).
                 await conn.execute(
-                    "UPDATE products SET current_price=$2, deal_score=$3, "
-                    "tag=$4, last_checked=$5, last_updated=$5, score_breakdown=$6 WHERE asin=$1",
-                    asin, live_price, score, tag, now, breakdown,
+                    "UPDATE products SET current_price=$2, deal_score=$3, tag=$4, "
+                    "last_checked=$5, last_updated=$5, score_breakdown=$6, is_volatile=$7 "
+                    "WHERE asin=$1",
+                    asin, live_price, score, tag, now, breakdown, volatile,
                 )
                 await conn.execute(
                     "INSERT INTO price_history (asin, price, timestamp) VALUES ($1,$2,$3)",
@@ -364,7 +378,35 @@ async def hourly_keepa_price_check():
         await _promote_backups_simple(deactivated)
 
     await _recalculate_top_picks()
-    print(f"  Keepa Preis-Check fertig: {deactivated} deaktiviert, {len(current_prices)} geprüft.")
+    print(f"  Keepa Preis-Check fertig: {deactivated} deaktiviert "
+          f"({volatile_cnt} volatil), {len(current_prices)} geprüft.")
+
+
+async def _count_price_moves(asins: list[str], window: int = 12, threshold: float = 0.03) -> dict[str, int]:
+    """
+    Zählt pro ASIN die Preissprünge > `threshold` über die letzten `window` Punkte.
+    Sortiert per id (monoton steigend = chronologisch), unabhängig vom TEXT-Zeitstempel.
+    """
+    if not asins:
+        return {}
+    db = await get_pool()
+    async with db.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT asin, price FROM ("
+            "  SELECT asin, price, id, "
+            "         row_number() OVER (PARTITION BY asin ORDER BY id DESC) AS rn "
+            "  FROM price_history WHERE asin = ANY($1)"
+            ") t WHERE rn <= $2 ORDER BY asin, id ASC",
+            asins, window,
+        )
+    moves: dict[str, int] = {}
+    prev: dict[str, float] = {}
+    for r in rows:
+        a, p = r["asin"], r["price"]
+        if a in prev and prev[a] > 0 and abs(p - prev[a]) / prev[a] > threshold:
+            moves[a] = moves.get(a, 0) + 1
+        prev[a] = p
+    return moves
 
 
 async def _promote_backups_simple(count: int):

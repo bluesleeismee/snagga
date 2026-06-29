@@ -629,6 +629,20 @@ final_score = base_score - <span class="fn">specificity_penalty</span>(title)  <
     <strong>Maximale Verzögerung:</strong> Ein Preis steigt um 14:30 Uhr. Der nächste Preis-Check läuft um 15:30 Uhr und erkennt die Erhöhung sofort. Der Deal ist innerhalb von maximal <strong>1 Stunde</strong> offline.
   </div>
 
+  <h3>Volatilitäts-Erkennung</h3>
+  <p>Manche Produkte springen innert kurzer Zeit mehrfach im Preis („Yo-Yo"-Preise) — beim Klick ist der angezeigte Preis dann oft veraltet. Beim Preis-Check zählt snagga.de pro Deal die Preissprünge (&gt;3%) über die letzten 12 gespeicherten Preispunkte:</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Zustand</th><th>Kriterium</th><th>Folge</th></tr></thead>
+      <tbody>
+        <tr><td><span class="badge badge-amber">Volatil</span></td><td>≥ 3 Sprünge &gt;3% in den letzten 12 Punkten</td><td>Wird ab sofort <strong>stündlich</strong> geprüft (statt alle 3h)</td></tr>
+        <tr><td><span class="badge badge-red">Volatil + schwach</span></td><td>Volatil UND Preis &gt; avg90 × 0.95 (kaum Rabatt)</td><td>Sofort <strong>deaktiviert</strong> — fauler Deal</td></tr>
+        <tr><td><span class="badge badge-green">Stabil</span></td><td>Wenig Bewegung</td><td>Normaler 3h-Takt</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Stabilisiert sich ein volatiler Deal wieder (keine Sprünge mehr), fällt er automatisch in den 3h-Takt zurück. Volatile Deals werden nicht generell gefiltert — nur die mit gleichzeitig schwachem Rabatt — damit der Pool gross bleibt.</p>
+
   <h3>Was passiert wenn Keepa keine Daten zurückgibt?</h3>
   <p>Wenn der komplette Preis-Check fehlschlägt (Keepa-API-Fehler, Timeout), bricht die Funktion vorzeitig ab ohne die DB zu verändern. Deals bleiben aktiv. Beim nächsten Run wird es erneut versucht.</p>
 </div>
