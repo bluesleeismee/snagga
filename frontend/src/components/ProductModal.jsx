@@ -13,8 +13,8 @@ function useProductImages(asin, primaryUrl) {
     let settled = 0
     candidates.forEach((url, i) => {
       const img = new Image()
-      img.onload  = () => { loaded[i] = url; settled++; if (settled === candidates.length) setImages(loaded.filter(Boolean)) }
-      img.onerror = () => { settled++;             if (settled === candidates.length) setImages(loaded.filter(Boolean)) }
+      img.onload  = () => { if (img.naturalWidth > 10) loaded[i] = url; settled++; if (settled === candidates.length) setImages(loaded.filter(Boolean)) }
+      img.onerror = () => { settled++; if (settled === candidates.length) setImages(loaded.filter(Boolean)) }
       img.src = url
     })
   }, [asin])
