@@ -200,6 +200,7 @@ export default function DealsPage() {
   const [selectedCountry, setSelectedCountry] = useState('DE')
   const [search,       setSearch]       = useState('')
   const [deals,        setDeals]        = useState(() => lsGet(LS_DEALS) || [])
+  const [visibleCount, setVisibleCount] = useState(60)
   const [bestPicks,    setBestPicks]    = useState(() => lsGet(LS_PICKS) || [])
   const [loading,      setLoading]      = useState(deals.length === 0)
   const [theme,        setTheme]        = useState(() => localStorage.getItem('sng_theme') || 'light')
@@ -238,9 +239,10 @@ export default function DealsPage() {
     const isDefault = selectedCat === 'Alle' && sortBy === 'score' && !search
     if (!isDefault) setLoading(true)
     setError(null)
-    api.deals({ category: selectedCat, sort_by: sortBy, search: search || undefined, limit: 100 })
+    api.deals({ category: selectedCat, sort_by: sortBy, search: search || undefined, limit: 500 })
       .then(data => {
         setDeals(data)
+        setVisibleCount(60)
         setLoading(false)
         if (isDefault) lsSet(LS_DEALS, data)
       })
@@ -497,9 +499,27 @@ export default function DealsPage() {
         {/* ── GRID ── */}
         {!loading && !error && deals.length > 0 && (
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: isMobile ? 14 : 24 }}>
-            {deals.map(deal => (
+            {deals.slice(0, visibleCount).map(deal => (
               <DealCard key={deal.asin} deal={deal} onClick={() => openDeal(deal)} />
             ))}
+          </div>
+        )}
+
+        {/* ── Mehr anzeigen ── */}
+        {!loading && !error && deals.length > visibleCount && (
+          <div style={{ textAlign: 'center', marginTop: 32 }}>
+            <button
+              onClick={() => setVisibleCount(c => c + 60)}
+              style={{
+                padding: '12px 32px', fontSize: 14, fontWeight: 600,
+                background: 'var(--accent)', color: '#fff', border: 'none',
+                borderRadius: 2, cursor: 'pointer', transition: 'opacity 0.15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.opacity = '0.88'}
+              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+            >
+              Mehr anzeigen ({deals.length - visibleCount} weitere)
+            </button>
           </div>
         )}
 

@@ -147,30 +147,16 @@ def _row_to_product(row, prices: list[float]) -> Product:
 
 
 async def rows_to_products(rows, conn, history_limit: int = 30) -> list[Product]:
-    """Lädt Preishistorien für alle Deals in einer einzigen DB-Abfrage (statt N)."""
-    if not rows:
-        return []
-    asins = [row["asin"] for row in rows]
-    ph_rows = await conn.fetch(
-        "SELECT asin, price FROM price_history "
-        "WHERE asin = ANY($1) ORDER BY asin, timestamp DESC",
-        asins,
-    )
-    # Gruppieren nach ASIN, nur die neuesten `history_limit` Punkte
-    history_map: dict[str, list[float]] = {}
-    for ph in ph_rows:
-        bucket = history_map.setdefault(ph["asin"], [])
-        if len(bucket) < history_limit:
-            bucket.append(ph["price"])
+    """
+    Listen-Ansicht — OHNE Preishistorie.
 
-    result = []
-    for row in rows:
-        asin = row["asin"]
-        prices = list(reversed(history_map.get(asin, [])))
-        if not prices:
-            prices = [p for p, _ in generate_history(asin, row["current_price"], row["avg_price"])[-30:]]
-        result.append(_row_to_product(row, prices))
-    return result
+    Das Frontend (DealCard, ProductModal) rendert keinen Preisverlauf, daher wird
+    price_history in der Liste NICHT geladen. Bei bis zu 500 Deals würde das sonst
+    zehntausende price_history-Zeilen in den RAM ziehen (frühere OOM-Ursache auf
+    Render Free 512MB). Die Detailabfrage /product/{asin} lädt bei Bedarf weiterhin
+    die volle Historie.
+    """
+    return [_row_to_product(row, []) for row in rows]
 
 
 async def row_to_product(row, conn, history_limit: int = 30) -> Product:
@@ -194,7 +180,7 @@ async def row_to_product(row, conn, history_limit: int = 30) -> Product:
 async def get_deals(
     category: Optional[str] = Query(None),
     sort_by:  str           = Query("score", pattern="^(score|discount|price_asc|price_desc|newest)$"),
-    limit:    int           = Query(50, ge=1, le=200),
+    limit:    int           = Query(60, ge=1, le=600),
     search:   Optional[str] = Query(None),
 ):
     cache_key = f"deals:{category}:{sort_by}:{limit}:{search}"

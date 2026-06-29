@@ -21,11 +21,13 @@ from scoring import (
 )
 
 AFFILIATE_TAG   = "snagga-21"
-MAX_ACTIVE      = 100
-MAX_BACKUP      = 50
+MAX_ACTIVE      = 500
+MAX_BACKUP      = 150
 TOP_PICKS_COUNT = 10
 MIN_SCORE       = 30
 MIN_PRICE       = 20.0
+DEAL_PAGES      = 16    # 16 × 150 = 2.400 Kandidaten/Run
+DEEPSYNC_LIMIT  = 150   # Deep-Sync nur Top-N nach Score (Token-Budget-Schutz)
 
 CATEGORY_MIN_PRICE: dict[str, float] = {
     "Elektronik & Foto":                 25.0,
@@ -224,6 +226,14 @@ EXCLUDE_KEYWORDS = [
     "toskanische bronze", "pfister ",
 ]
 
+# Pre-compiled Regex-Sets (einmal beim Import, statt pro Produkt zu schleifen).
+# Spart CPU auf dem schmalen Render-Server bei 2.400 Produkten/Run.
+_EXCLUDE_RE = re.compile("|".join(re.escape(kw) for kw in EXCLUDE_KEYWORDS))
+_KEYWORD_RE: dict[str, "re.Pattern"] = {
+    cat: re.compile("|".join(re.escape(kw) for kw in kws))
+    for cat, kws in KEYWORD_MAP.items()
+}
+
 
 def classify_category(title: str, root_cat: int = 0) -> str | None:
     """
@@ -237,7 +247,7 @@ def classify_category(title: str, root_cat: int = 0) -> str | None:
         return None
 
     # 2. Titel-Ausschluss-Keywords (Sicherheitsnetz für unbekannte rootCats)
-    if any(kw in title_l for kw in EXCLUDE_KEYWORDS):
+    if _EXCLUDE_RE.search(title_l):
         return None
 
     # 3. rootCat-Mapping (zuverlässig wenn ID bekannt)
@@ -245,8 +255,8 @@ def classify_category(title: str, root_cat: int = 0) -> str | None:
         return ROOTCAT_MAP[root_cat]
 
     # 4. Keyword-Fallback (exhaustiv — kein Catch-all mehr)
-    for cat, keywords in KEYWORD_MAP.items():
-        if any(kw in title_l for kw in keywords):
+    for cat, pattern in _KEYWORD_RE.items():
+        if pattern.search(title_l):
             return cat
 
     # 5. Kein Match → ablehnen
@@ -272,9 +282,14 @@ def generate_history(asin: str, current: float, avg: float, days: int = 60) -> l
 
 async def hourly_keepa_price_check():
     """
-    Prüft die aktuellen Preise aller aktiven Deals via Keepa /product (history=0).
-    Deals deren Preis nicht mehr gut ist → sofort deaktivieren.
-    Deals mit gutem Preis → current_price + price_history aktualisieren.
+    Prüft die Preise aktiver Deals via Keepa /product (history=0).
+
+    Gestaffelt (Token-Budget-Schutz bei bis zu 500 aktiven Deals):
+      - Top Picks + "Allzeittiefpreis"-Deals → jede Stunde
+      - alle übrigen → nur wenn seit ≥ 3h nicht geprüft
+    Preis nicht mehr gut → sofort deaktivieren.
+    Preis weiterhin gut → current_price aktualisieren UND last_updated refreshen,
+    damit dauerhaft günstige Deals nicht durch die 4h-Ablauffalle fallen.
     """
     print(f"[{datetime.utcnow().isoformat()}] Keepa Preis-Check …")
     db  = await get_pool()
@@ -283,10 +298,17 @@ async def hourly_keepa_price_check():
     async with db.acquire() as conn:
         active = await conn.fetch(
             "SELECT asin, current_price, avg90_price, avg180_price, all_time_low, "
-            "category, rating, reviews, sales_rank FROM products WHERE is_active=true"
+            "category, rating, reviews, sales_rank FROM products "
+            "WHERE is_active=true AND ("
+            "  is_top_pick = true "
+            "  OR tag = 'Allzeittiefpreis' "
+            "  OR last_checked IS NULL "
+            "  OR last_checked < NOW() - INTERVAL '3 hours'"
+            ")"
         )
 
     if not active:
+        print("  Keepa Preis-Check: nichts fällig.")
         return
 
     asins         = [row["asin"] for row in active]
@@ -326,9 +348,11 @@ async def hourly_keepa_price_check():
                     price_updated=now,
                 )
                 tag = determine_tag(live_price, atl, avg90, avg180, atl_confirmed=False)
+                # last_updated wird mit-refresht: bestätigt-gute Deals laufen nicht aus,
+                # auch wenn Keepa sie nicht mehr als "frischen" Deal im /deal-Stream meldet.
                 await conn.execute(
                     "UPDATE products SET current_price=$2, deal_score=$3, "
-                    "tag=$4, last_checked=$5, score_breakdown=$6 WHERE asin=$1",
+                    "tag=$4, last_checked=$5, last_updated=$5, score_breakdown=$6 WHERE asin=$1",
                     asin, live_price, score, tag, now, breakdown,
                 )
                 await conn.execute(
@@ -379,7 +403,7 @@ async def fetch_and_update_deals():
         skipped_cat = skipped_price = skipped_filter = skipped_score = 0
         got_any = False
 
-        for page in range(8):
+        for page in range(DEAL_PAGES):
             page_deals = await fetch_keepa_deals(
                 domain=3, delta_pct=15, min_rating=40, min_reviews=50,
                 page=page, client=client,
@@ -561,15 +585,23 @@ async def _recalculate_top_picks():
 
 async def nightly_deep_sync():
     """
-    Aktualisiert alle aktiven + Backup-Deals vollständig via Keepa /product:
-    Preishistorie, Sales Rank, Ø-Preise, ATL, Rating, Reviews, Bilder.
+    Aktualisiert die Top-Deals vollständig via Keepa /product:
+    Preishistorie, Sales Rank, Ø-Preise, echter ATL, Rating, Reviews, Bilder.
+
+    Begrenzt auf die Top-DEEPSYNC_LIMIT aktiven Deals nach Score. Bei 500 aktiven
+    Deals würde ein voller Deep-Sync (~10 Tokens/ASIN) das Token-Budget sprengen
+    (~6.500 Tokens). Die übrigen Deals bleiben mit /deal- + Preis-Check-Daten aktuell;
+    nur der echte ATL ("Allzeittiefpreis"-Tag) fehlt ihnen — das ist für die
+    niedriger gerankten Deals akzeptabel.
     """
     print(f"[{datetime.utcnow().isoformat()}] Nachtlicher Deep-Sync …")
     db = await get_pool()
 
     async with db.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT asin FROM products WHERE is_active=true OR is_backup=true"
+            "SELECT asin FROM products WHERE is_active=true "
+            "ORDER BY deal_score DESC LIMIT $1",
+            DEEPSYNC_LIMIT,
         )
     asins = [r["asin"] for r in rows]
     if not asins:

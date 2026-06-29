@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>snagga.de — Pipeline-Dokumentation</title>
+<style>
+  :root {
+    --bg: #f8f7f4;
+    --surface: #ffffff;
+    --border: #e2e0d8;
+    --text: #1a1a18;
+    --muted: #6b6860;
+    --green: #3B6D11; --green-bg: #EAF3DE;
+    --amber: #854F0B; --amber-bg: #FAEEDA;
+    --red: #A32D2D;   --red-bg: #FCEBEB;
+    --blue: #185FA5;  --blue-bg: #E6F1FB;
+    --purple: #3C3489; --purple-bg: #EEEDFE;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+         background: var(--bg); color: var(--text); line-height: 1.7; font-size: 15px; }
+  .page { max-width: 980px; margin: 0 auto; padding: 40px 24px 80px; }
+
+  /* Header */
+  .doc-header { border-bottom: 2px solid var(--border); padding-bottom: 24px; margin-bottom: 40px; }
+  .doc-header h1 { font-size: 28px; font-weight: 600; letter-spacing: -0.5px; }
+  .doc-header .meta { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .doc-header .subtitle { font-size: 16px; color: var(--muted); margin-top: 8px; max-width: 680px; }
+
+  /* TOC */
+  .toc { background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+         padding: 20px 24px; margin-bottom: 40px; }
+  .toc h3 { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase;
+             letter-spacing: 0.05em; margin-bottom: 12px; }
+  .toc ol { padding-left: 20px; }
+  .toc li { margin-bottom: 4px; }
+  .toc a { color: var(--blue); text-decoration: none; font-size: 14px; }
+  .toc a:hover { text-decoration: underline; }
+
+  /* Sections */
+  .section { margin-bottom: 48px; }
+  h2 { font-size: 22px; font-weight: 600; margin-bottom: 6px; padding-top: 8px;
+       border-top: 2px solid var(--border); padding-bottom: 0; }
+  h2 .section-num { color: var(--muted); font-weight: 400; margin-right: 8px; }
+  .section-intro { color: var(--muted); font-size: 14px; margin-bottom: 20px; margin-top: 4px; }
+  h3 { font-size: 16px; font-weight: 600; margin: 24px 0 10px; }
+  h4 { font-size: 14px; font-weight: 600; margin: 16px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  p { margin-bottom: 12px; }
+
+  /* Cards & Boxes */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; margin-bottom: 16px; }
+  .card-grid { display: grid; gap: 12px; margin-bottom: 16px; }
+  .card-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+  .card-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .card-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+               padding: 16px 20px; }
+  .stat-card .label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .stat-card .value { font-size: 24px; font-weight: 600; }
+  .stat-card .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  /* Badges */
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px;
+           border-radius: 99px; white-space: nowrap; vertical-align: middle; }
+  .badge-green  { background: var(--green-bg);  color: var(--green); }
+  .badge-amber  { background: var(--amber-bg);  color: var(--amber); }
+  .badge-red    { background: var(--red-bg);    color: var(--red); }
+  .badge-blue   { background: var(--blue-bg);   color: var(--blue); }
+  .badge-purple { background: var(--purple-bg); color: var(--purple); }
+  .badge-gray   { background: #f0ede6; color: var(--muted); }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 16px; }
+  th { background: #f3f1ec; text-align: left; padding: 8px 12px; font-weight: 600;
+       font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted);
+       border-bottom: 1px solid var(--border); }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: #fafaf8; }
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 20px; }
+
+  /* Code */
+  code { font-family: "SF Mono", "Fira Code", Consolas, monospace; font-size: 12.5px;
+         background: #f0ede6; padding: 2px 5px; border-radius: 4px; }
+  pre { background: #1e1e1e; color: #d4d4d4; border-radius: 8px; padding: 16px 20px;
+        overflow-x: auto; font-size: 13px; line-height: 1.6; margin-bottom: 16px; }
+  pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+  .kw  { color: #569cd6; } /* keyword */
+  .str { color: #ce9178; } /* string */
+  .num { color: #b5cea8; } /* number */
+  .cmt { color: #6a9955; } /* comment */
+  .fn  { color: #dcdcaa; } /* function */
+
+  /* Alert boxes */
+  .alert { border-radius: 8px; padding: 14px 18px; margin-bottom: 16px; border-left: 4px solid; font-size: 14px; }
+  .alert-green  { background: var(--green-bg);  border-color: var(--green);  color: #27500A; }
+  .alert-amber  { background: var(--amber-bg);  border-color: var(--amber);  color: var(--amber); }
+  .alert-red    { background: var(--red-bg);    border-color: var(--red);    color: var(--red); }
+  .alert-blue   { background: var(--blue-bg);   border-color: var(--blue);   color: var(--blue); }
+  .alert strong { font-weight: 600; }
+
+  /* Pipeline Flow */
+  .pipeline { display: flex; flex-direction: column; gap: 0; margin: 20px 0; }
+  .pipeline-step { display: grid; grid-template-columns: 48px 1fr; gap: 0; }
+  .pipeline-left { display: flex; flex-direction: column; align-items: center; }
+  .pipeline-dot  { width: 36px; height: 36px; border-radius: 50%; display: flex;
+                   align-items: center; justify-content: center; font-weight: 700;
+                   font-size: 13px; flex-shrink: 0; }
+  .pipeline-line { flex: 1; width: 2px; background: var(--border); min-height: 20px; }
+  .pipeline-content { background: var(--surface); border: 1px solid var(--border);
+                      border-radius: 10px; padding: 16px 20px; margin: 0 0 12px 16px; }
+  .pipeline-content h4 { margin: 0 0 4px; font-size: 15px; font-weight: 600;
+                          color: var(--text); text-transform: none; letter-spacing: 0; }
+  .pipeline-content p  { margin: 0; font-size: 13px; color: var(--muted); }
+  .pipeline-content .detail { margin-top: 8px; font-size: 13px; color: var(--text); }
+
+  /* Filter steps */
+  .filter-step { display: flex; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--border); align-items: flex-start; }
+  .filter-step:last-child { border-bottom: none; }
+  .filter-num { width: 28px; height: 28px; border-radius: 50%; background: var(--text);
+                color: white; font-size: 12px; font-weight: 700; display: flex;
+                align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+  .filter-body h4 { margin: 0 0 4px; font-size: 14px; font-weight: 600; text-transform: none;
+                    letter-spacing: 0; color: var(--text); }
+  .filter-body p  { margin: 0; font-size: 13px; color: var(--muted); }
+
+  /* Timeline */
+  .timeline { margin: 16px 0; }
+  .tl-item { display: grid; grid-template-columns: 80px 1fr; gap: 16px; margin-bottom: 12px; }
+  .tl-time { font-size: 12px; font-weight: 700; color: var(--muted); text-align: right;
+             padding-top: 2px; }
+  .tl-body { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+             padding: 10px 14px; font-size: 13px; }
+  .tl-body strong { display: block; font-size: 14px; margin-bottom: 2px; }
+
+  /* Score formula */
+  .formula { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 16px 0; }
+  .formula-part { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+                  padding: 14px; text-align: center; }
+  .formula-pct { font-size: 26px; font-weight: 700; }
+  .formula-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .formula-detail { font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+
+  /* Token bar */
+  .token-bar-wrap { background: #f0ede6; border-radius: 99px; height: 10px; overflow: hidden; margin: 6px 0 2px; }
+  .token-bar { height: 100%; border-radius: 99px; }
+
+  @media (max-width: 640px) {
+    .card-grid.cols-2, .card-grid.cols-3, .card-grid.cols-4 { grid-template-columns: 1fr; }
+    .formula { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- ══════════════════════════════════════════════════════════════
+     HEADER
+══════════════════════════════════════════════════════════════ -->
+<div class="doc-header">
+  <h1>snagga.de — Deal-Pipeline Dokumentation</h1>
+  <p class="meta">Stand: 29. Juni 2026 &nbsp;·&nbsp; Interne technische Referenz &nbsp;·&nbsp; Version 2.0</p>
+  <p class="subtitle">Vollständige Beschreibung wie snagga.de Amazon-Deals erkennt, filtert, bewertet und aktuell hält — verständlich für Einsteiger und Entwickler.</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     TOC
+══════════════════════════════════════════════════════════════ -->
+<div class="toc">
+  <h3>Inhalt</h3>
+  <ol>
+    <li><a href="#was-ist">Was ist diese Pipeline?</a></li>
+    <li><a href="#keepa">Was ist Keepa?</a></li>
+    <li><a href="#uebersicht">Architektur-Übersicht</a></li>
+    <li><a href="#discovery">Job 1 — Discovery (stündlich :05)</a></li>
+    <li><a href="#filterung">Job 2 — Filter-Pipeline (lokal)</a></li>
+    <li><a href="#scoring">Deal-Score Berechnung</a></li>
+    <li><a href="#preischeck">Job 3 — Preis-Check (stündlich :30)</a></li>
+    <li><a href="#deepsync">Job 4 — Deep-Sync (nächtlich 03:00)</a></li>
+    <li><a href="#lebenszyklus">Deal-Lebenszyklus</a></li>
+    <li><a href="#tokens">Token-Budget</a></li>
+    <li><a href="#referenz">Filter-Referenz (alle Schwellenwerte)</a></li>
+  </ol>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════
+     1. WAS IST DIESE PIPELINE
+══════════════════════════════════════════════════════════════ -->
+<div class="section" id="was-ist">
+  <h2><span class="section-num">1</span>Was ist diese Pipeline?</h2>
+  <p class="section-intro">Für Einsteiger — die Grundidee in einfachen Worten.</p>
+
+  <p>snagga.de zeigt Nutzern Produkte auf Amazon.de, die <strong>gerade deutlich günstiger sind als üblich</strong>. Das Ziel: echte Deals finden, nicht Werbung zeigen.</p>
+
+  <p>Das Problem: Amazon hat Millionen Produkte. Manuell nach Preissenkungen zu suchen ist unmöglich. Stattdessen nutzen wir <strong>Keepa</strong> — einen Dienst der Amazon-Preise rund um die Uhr überwacht und uns fertig aufbereitete Preissenkungen liefert.</p>
+
+  <p>Aber Keepa liefert auch Schrott: Nischenteile für spezifische Automodelle, Produkte bei denen der Preis künstlich erhöht und dann wieder gesenkt wurde (Fake-Deals), oder Produkte mit wenigen Bewertungen. Deshalb hat snagga.de eine mehrstufige <strong>Filter-Pipeline</strong>, die nur wirklich gute Deals durchlässt.</p>
+
+  <div class="card-grid cols-3">
+    <div class="stat-card">
+      <div class="label">Kandidaten pro Stunde</div>
+      <div class="value" style="color: var(--blue)">2.400</div>
+      <div class="sub">16 Seiten × 150 von Keepa</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Pass-Rate (ca.)</div>
+      <div class="value" style="color: var(--amber)">~15%</div>
+      <div class="sub">~360 qualifizierte Deals/Std.</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Max. aktive Deals</div>
+      <div class="value" style="color: var(--green)">500</div>
+      <div class="sub">+ 150 Backup-Deals</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════
+     2. WAS IST KEEPA
+══════════════════════════════════════════════════════════════ -->
+<div class="section" id="keepa">
+  <h2><span class="section-num">2</span>Was ist Keepa?</h2>
+  <p class="section-intro">Der externe Datendienst, auf dem die gesamte Pipeline aufbaut.</p>
+
+  <p><strong>Keepa</strong> ist ein Berliner Dienst der seit 2012 die Preise von hunderten Millionen Amazon-Produkten weltweit aufzeichnet — mehrmals täglich. Keepa speichert damit die vollständige Preishistorie jedes Produkts.</p>
+
+  <p>Keepa bietet eine <strong>API</strong> (Programmierschnittstelle) mit der wir direkt nach Preissenkungen suchen können. Für snagga.de nutzen wir zwei Endpunkte:</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Endpunkt</th><th>Zweck</th><th>Kosten</th><th>Wann</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>/deal</code></td>
+          <td>Suche nach aktuellen Preissenkungen. Keepa filtert bereits nach unseren Kriterien und liefert bis zu 150 Kandidaten pro Seite.</td>
+          <td>~1 Token / Seite</td>
+          <td>Stündlich, 8 Seiten</td>
+        </tr>
+        <tr>
+          <td><code>/product</code> (minimal)</td>
+          <td>Aktueller Preis für bekannte ASINs. Nur der Preis, keine Historiedaten.</td>
+          <td>~2–3 Tokens / ASIN</td>
+          <td>Stündlich, alle aktiven Deals</td>
+        </tr>
+        <tr>
+          <td><code>/product</code> (vollständig)</td>
+          <td>Vollständige Produktdaten: Preishistorie, ATL, Sales Rank, Bilder, Rating.</td>
+          <td>~10 Tokens / ASIN</td>
+          <td>Nächtlich 03:00</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="alert alert-blue">
+    <strong>Token-System:</strong> Keepa nutzt ein Token-System statt einfacher API-Limits. Tokens regenerieren mit 20/Minute = 1.200/Stunde = 28.800/Tag. Bei unserem Plan (€49/Mon.) verbrauchen wir ca. 22% des Budgets. Der API-Key wird als Render-Umgebungsvariable gespeichert — nie im Code.
+  </div>
+
+  <h3>Keepa Daten-Indices (technisch)</h3>
+  <p>Keepa liefert Preise als Arrays. Jeder Index entspricht einem Preistyp:</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Index</th><th>Typ</th><th>Verwendung bei snagga</th></tr></thead>
+      <tbody>
+        <tr><td><code>0</code></td><td>Amazon Direktpreis</td><td>Fallback-Preis</td></tr>
+        <tr><td><code>3</code></td><td>Sales Rank</td><td>Popularitätsfilter</td></tr>
+        <tr><td><code>10</code></td><td>New FBA (Verkäufer mit Lager bei Amazon)</td><td>Fallback-Preis</td></tr>
+        <tr><td><code>16</code></td><td>Rating × 10 (z.B. 45 = 4.5 Sterne)</td><td>Qualitätsfilter</td></tr>
+        <tr><td><code>17</code></td><td>Anzahl Bewertungen</td><td>Qualitätsfilter</td></tr>
+        <tr><td><code>18</code></td><td>Buy Box Preis (bevorzugt)</td><td>Hauptpreis</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Preis-Hierarchie: <code>BuyBox (18) → Amazon Direkt (0) → New FBA (10)</code> — der erste verfügbare Wert wird verwendet.</p>
+
+  <h3>Durchschnitts-Arrays</h3>
+  <p>Im <code>/deal</code>-Response gibt Keepa <code>avg[]</code> zurück: ein Array mit vier Zeitperioden-Arrays, je mit den gleichen Preistyp-Indices:</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Position</th><th>Bedeutung</th><th>Verwendung</th></tr></thead>
+      <tbody>
+        <tr><td><code>avg[0]</code></td><td>30-Tage-Durchschnitt</td><td>Nicht direkt genutzt</td></tr>
+        <tr><td><code>avg[1]</code></td><td>90-Tage-Durchschnitt (avg90)</td><td>Anti-Spike, Scoring</td></tr>
+        <tr><td><code>avg[2]</code></td><td>180-Tage-Durchschnitt (avg180)</td><td>Anti-Spike, Tags</td></tr>
+        <tr><td><code>avg[3]</code></td><td>365-Tage-Durchschnitt (als ATL-Proxy)</td><td>Langfrist-Anker</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════
+     3. ARCHITEKTUR-ÜBERSICHT
+══════════════════════════════════════════════════════════════ -->
+<div class="section" id="uebersicht">
+  <h2><span class="section-num">3</span>Architektur-Übersicht</h2>
+  <p class="section-intro">Vier Jobs laufen automatisch im Hintergrund auf dem Render-Server.</p>
+
+  <div class="timeline">
+    <div class="tl-item">
+      <div class="tl-time">Stündlich<br>:05 Uhr</div>
+      <div class="tl-body" style="border-left: 3px solid var(--blue);">
+        <strong>Job 1 — Discovery</strong>
+        Keepa <code>/deal</code> wird 16× abgerufen (16 Seiten à 150 = 2.400 Kandidaten). Sofort gefiltert und bewertet. Neue Deals in DB gespeichert. <span class="badge badge-blue">16 Tokens</span>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-time">Stündlich<br>:30 Uhr</div>
+      <div class="tl-body" style="border-left: 3px solid var(--green);">
+        <strong>Job 2 — Preis-Check (gestaffelt)</strong>
+        Top Picks + Allzeittief-Deals stündlich, übrige Deals alle 3h — via Keepa <code>/product</code> (minimal). Preis gestiegen → sofort deaktiviert. Bestätigt-gut → <code>last_updated</code> refresht. <span class="badge badge-green">~400 Tokens</span>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-time">Nächtlich<br>03:00 Uhr</div>
+      <div class="tl-body" style="border-left: 3px solid var(--purple);">
+        <strong>Job 3 — Deep-Sync</strong>
+        Vollständige Produktdaten für die Top 150 aktiven Deals (nach Score). Echter ATL, Preishistorie, Bilder, Rating. Vergabe von "Allzeittiefpreis"-Tag. <span class="badge badge-purple">~1.500 Tokens</span>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-time">Stündlich<br>nach :05</div>
+      <div class="tl-body" style="border-left: 3px solid var(--amber);">
+        <strong>Automatisch — Ablauf</strong>
+        Deals die seit über 4 Stunden nicht mehr in Keepa-Ergebnissen auftauchen werden deaktiviert (Preis wahrscheinlich wieder gestiegen). <span class="badge badge-gray">0 Tokens</span>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-time">Alle<br>10 Min.</div>
+      <div class="tl-body" style="border-left: 3px solid #888;">
+        <strong>Keep-Alive Ping</strong>
+        Render Free-Tier schläft nach 15 Min. Inaktivität. Ein interner <code>/health</code>-Ping verhindert das. <span class="badge badge-gray">0 Tokens</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════
+     4. DISCOVERY
+══════════════════════════════════════════════════════════════ -->
+<div class="section" id="discovery">
+  <h2><span class="section-num">4</span>Job 1 — Discovery (stündlich :05)</h2>
+  <p class="section-intro">Keepa sucht nach neuen Deals gemäss unserer Kriterienliste.</p>
+
+  <h3>Was schicken wir an Keepa?</h3>
+  <p>Der <code>/deal</code>-Endpunkt erhält eine sogenannte <code>selection</code> — ein JSON-Objekt mit allen Filterkriterien die Keepa <em>serverseitig</em> anwendet, bevor Daten zu uns übertragen werden:</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Parameter</th><th>Wert</th><th>Bedeutung</th></tr></thead>
+      <tbody>
+        <tr><td><code>domainId</code></td><td><code>3</code></td><td>Amazon.de (Deutschland)</td></tr>
+        <tr><td><code>deltaPercentRange</code></td><td><code>[-100, -15]</code></td><td>Mindestens 15% Preissenkung gegenüber dem vorherigen Preis</td></tr>
+        <tr><td><code>dateRange</code></td><td><code>2</code> (= letzte 3 Tage)</td><td>Nur Preissenkungen der letzten 3 Tage</td></tr>
+        <tr><td><code>minRating</code></td><td><code>40</code> (= 4.0 Sterne)</td><td>Keepa-seitig: nur Produkte mit ≥ 4.0 Sterne</td></tr>
+        <tr><td><code>minReviews</code></td><td><code>100</code></td><td>Keepa-seitig: nur Produkte mit ≥ 100 Bewertungen</td></tr>
+        <tr><td><code>priceRange</code></td><td><code>[2000, -1]</code></td><td>Mindestpreis €20 (2000 Cent), kein Maximum</td></tr>
+        <tr><td><code>hasReviews</code></td><td><code>true</code></td><td>Muss Bewertungen haben</td></tr>
+        <tr><td><code>filterErotic</code></td><td><code>true</code></td><td>Erotik-Produkte herausfiltern</td></tr>
+        <tr><td><code>sortType</code></td><td><code>1</code></td><td>Sortiert nach stärkstem Preisfall (beste Deals zuerst)</td></tr>
+        <tr><td><code>includeCategories</code></td><td>~30 Kategorie-IDs</td><td>Whitelist: nur Produkte aus erlaubten Amazon-Kategorien</td></tr>
+        <tr><td><code>page</code></td><td><code>0</code> bis <code>7</code></td><td>Pagination — wir rufen 8 Seiten à 150 = 1.200 Kandidaten ab</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="alert alert-amber">
+    <strong>Wichtig — deltaPercent Falle:</strong> Keepa misst den Preisfall gegenüber dem <em>vorherigen gespeicherten Preis</em>, nicht gegenüber dem historischen Durchschnitt. Ein Produkt das normal €30 kostet, künstlich auf €60 angehoben wurde, und dann wieder auf €30 fällt, zeigt Keepa als "–50% Deal". Deshalb hat snagga.de einen eigenen Anti-Spike-Filter (siehe Abschnitt 5).
+  </div>
+
+  <h3>Kategorie-Whitelist (includeCategories)</h3>
+  <p>Statt alle Amazon-Kategorien zuzulassen und Junk-Kategorien zu sperren (Blacklist), erlauben wir nur konkrete Kategorie-IDs (Whitelist). Die IDs wurden manuell via Debug-Endpoint verifiziert:</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Kategorie</th><th>Root-IDs (Beispiele)</th></tr></thead>
+      <tbody>
+        <tr><td>Auto &amp; Motorrad</td><td><code>78191031, 79899031, 80931031</code></td></tr>
+        <tr><td>Baumarkt + Garten</td><td><code>80084031, 80085031, 10925031, 10925241</code></td></tr>
+        <tr><td>Computer &amp; Zubehör</td><td><code>340843031, 368180031, 368181031</code></td></tr>
+        <tr><td>Drogerie &amp; Körperpflege</td><td><code>64187031, 64257031, 84230031</code></td></tr>
+        <tr><td>Elektro-Großgeräte</td><td><code>908823031, 908824031, 908825031</code></td></tr>
+        <tr><td>Elektronik &amp; Foto</td><td><code>562066, 569604, 578112, 725718</code></td></tr>
+        <tr><td>Games</td><td><code>300992, 541708, 526742</code></td></tr>
+        <tr><td>Küche, Haushalt &amp; Wohnen</td><td><code>213083031, 3167641, 3169011</code></td></tr>
+        <tr><td>Musikinstrumente &amp; DJ</td><td><code>340849031, 340850031</code></td></tr>
+        <tr><td>Sport &amp; Freizeit</td><td><code>16435051, 16435121, 16435061</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Warum 8 Seiten?</h3>
+  <p>Keepa sortiert Deals nach stärkstem Preisfall. Seite 0 enthält die 150 besten Deals des Tages, Seite 7 die schwächeren. Da wir unsere eigene Filter-Pipeline haben, holen wir bewusst mehr Kandidaten — unsere Filter entscheiden dann über Qualität. Der Token-Verbrauch ist minimal: 8 Token pro Stunde.</p>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════
+     5. FILTER-PIPELINE
+══════════════════════════════════════════════════════════════ -->
+<div class="section" id="filterung">
+  <h2><span class="section-num">5</span>Job 1 — Filter-Pipeline (lokal, nach Keepa-Response)</h2>
+  <p class="section-intro">Jeder der 1.200 Kandidaten durchläuft diese 6 Stufen. Scheitert er an einer Stufe, wird er verworfen.</p>
+
+  <div class="card">
+    <div class="filter-step">
+      <div class="filter-num">1</div>
+      <div class="filter-body">
+        <h4>Mindestpreis</h4>
+        <p>Globaler Floor: €20. Zusätzlich kategoriespezifische Floors: Elektronik/Computer ≥ €25, Kamera ≥ €30, Musikinstrumente ≥ €30, Elektro-Großgeräte ≥ €50. Unter diesen Grenzen handelt es sich fast immer um billiges Zubehör, nicht das Hauptprodukt.</p>
+      </div>
+    </div>
+
+    <div class="filter-step">
+      <div class="filter-num">2</div>
+      <div class="filter-body">
+        <h4>Kategorie-Klassifikation</h4>
+        <p>Jedes Produkt wird einer snagga-Kategorie zugeordnet. Drei Methoden in Reihenfolge: (1) rootCat-ID direkt in <code>ROOTCAT_MAP</code> nachschlagen, (2) Keyword-Matching im Titel als Fallback, (3) Ablehnen wenn kein Match. Explizit ausgeschlossene Kategorien (Bücher, Kleidung, Spielzeug, Lebensmittel usw.) werden sofort verworfen.</p>
+      </div>
+    </div>
+
+    <div class="filter-step">
+      <div class="filter-num">3</div>
+      <div class="filter-body">
+        <h4>Ausschluss-Keywords im Titel</h4>
+        <p>Titel-Blacklist prüft auf explizit unerwünschte Inhalte: Unterwäsche, Bücher, Spielzeug, Druckerpapier, Bettwäsche, Nahrungsergänzung, intime Produkte, Deko-Textilien, Strickgarn etc. Diese können durch rootCat-Mapping durchschlüpfen.</p>
+      </div>
+    </div>
+
+    <div class="filter-step">
+      <div class="filter-num">4</div>
+      <div class="filter-body">
+        <h4>Hard Filters (Rating, Reviews, Sales Rank)</h4>
+        <p>Mindest-Rating: ≥ 4.0 Sterne. Mindest-Bewertungen: ≥ 100 (Auto &amp; Motorrad: ≥ 500, da Nischenteile für Automodelle oft wenige Reviews haben). Maximaler Sales Rank (kategoriespezifisch) — Produkte die in ihrer Kategorie zu weit hinten sind, sind zu unbekannt für snagga.</p>
+      </div>
+    </div>
+
+    <div class="filter-step">
+      <div class="filter-num">5</div>
+      <div class="filter-body">
+        <h4>Anti-Spike Filter (dreistufig)</h4>
+        <p>Das Herzstück gegen Fake-Deals. Drei Bedingungen müssen alle erfüllt sein:</p>
+        <p style="margin-top: 8px;"><strong>Stufe A:</strong> Aktueller Preis ≤ avg90 × 0.92 (mind. 8% unter 90-Tage-Durchschnitt)</p>
+        <p><strong>Stufe B:</strong> Aktueller Preis ≤ avg180 × 0.92 (mind. 8% unter 180-Tage-Durchschnitt)</p>
+        <p><strong>Stufe C (neu):</strong> Wenn avg365 deutlich tiefer als avg180 ist (avg365 &lt; avg180 × 0.80), muss der aktuelle Preis auch ≤ avg365 × 0.95 sein. Schützt gegen Spikes die mehrere Monate dauerten.</p>
+      </div>
+    </div>
+
+    <div class="filter-step">
+      <div class="filter-num">6</div>
+      <div class="filter-body">
+        <h4>Deal-Score &amp; Minimum</h4>
+        <p>Jedes Produkt erhält einen Score von 0–100 (Details in Abschnitt 6). Zusätzlich wird eine <strong>Specificity Penalty</strong> abgezogen für nischenspezifische Produkte. Mindest-Score: 30. Produkte darunter werden verworfen.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>Anti-Spike — Beispiele</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Szenario</th><th>Normaler Preis</th><th>avg90</th><th>avg180</th><th>Aktuell</th><th>Ergebnis</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Echter Deal (normaler Preisfall)</td>
+          <td>€50</td><td>€50</td><td>€50</td><td>€35</td>
+          <td><span class="badge badge-green">Akzeptiert</span></td>
+        </tr>
+        <tr>
+          <td>Kurzzeit-Spike (€30 → €60 → €30)</td>
+          <td>€30</td><td>€50 (inflated)</td><td>€32</td><td>€30</td>
+          <td><span class="badge badge-red">Abgelehnt</span> avg90 × 0.92 = €46, €30 ≤ €46 ✓ aber avg180 × 0.92 = €29.4, €30 &gt; €29.4 ✗</td>
+        </tr>
+        <tr>
+          <td>Langzeit-Spike (3 Monate erhöht)</td>
+          <td>€30</td><td>€75 (inflated)</td><td>€60 (inflated)</td><td>€30</td>
+          <td><span class="badge badge-red">Abgelehnt</span> avg365 = €31 &lt; avg180 × 0.80 = €48, daher Stufe C: €30 ≤ €31 × 0.95 = €29.4 ✗</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Specificity Penalty</h3>
+  <p>Statt Nischenprodukte hart zu blockieren, ziehen wir Punkte vom Deal-Score ab. So kann ein sehr gutes Universalprodukt mit leicht spezifischem Titel noch bestehen, ein schwaches Nischenprodukt jedoch nicht:</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Muster im Titel</th><th>Abzug</th><th>Beispiel</th></tr></thead>
+      <tbody>
+        <tr><td>"passend für", "kompatibel mit", "ersatzteil"</td><td>–40 Punkte</td><td>"Ersatzteil kompatibel mit Bosch PSB"</td></tr>
+        <tr><td>"für Nissan/BMW/VW/Audi/Ford/..." (Automarken)</td><td>–35 Punkte</td><td>"Sonnenblende für Nissan Qashqai"</td></tr>
+        <tr><td>"oem", "original-", "artikel-nr", "art.nr"</td><td>–25 Punkte</td><td>"OEM Ersatzteil Art.Nr. 12345"</td></tr>
+        <tr><td>2+ vierstellige Nummern im Titel (Modellcodes)</td><td>–20 Punkte</td><td>"Dichtung 1234 5678 für Modell XY"</td></tr>
+        <tr><td><strong>Maximum Abzug</strong></td><td>–60 Punkte</td><td>Cap: nie mehr als 60 Punkte abziehen</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>Beispiel:</strong> "Sonnenblende für Nissan Qashqai" mit Deal-Score 55 → 55 − 35 = 20 → <span class="badge badge-red">Abgelehnt</span> (unter Min-Score 30). Gleiche Sonnenblende universal mit Score 65 → 65 − 0 = 65 → <span class="badge badge-green">Akzeptiert</span>.</p>
+
+  <h3>Kategorie-Klassifikation im Detail</h3>
+  <p>Die Klassifikation läuft in 4 Schritten. Scheitert Schritt 1, wird Schritt 2 versucht usw.:</p>
+  <pre><code><span class="cmt"># Schritt 1: Produkt in expliziter Ausschluss-Liste?</span>
+<span class="kw">if</span> root_cat <span class="kw">in</span> EXCLUDE_ROOTCATS:
+    <span class="kw">return</span> <span class="kw">None</span>  <span class="cmt"># → verwerfen</span>
+
+<span class="cmt"># Schritt 2: Ausschluss-Keyword im Titel?</span>
+<span class="kw">if</span> any(kw <span class="kw">in</span> title_lower <span class="kw">for</span> kw <span class="kw">in</span> EXCLUDE_KEYWORDS):
+    <span class="kw">return</span> <span class="kw">None</span>  <span class="cmt"># → verwerfen</span>
+
+<span class="cmt"># Schritt 3: Amazon-Kategorie-ID bekannt?</span>
+<span class="kw">if</span> root_cat <span class="kw">in</span> ROOTCAT_MAP:
+    <span class="kw">return</span> ROOTCAT_MAP[root_cat]  <span class="cmt"># → direkte Zuordnung (zuverlässigste Methode)</span>
+
+<span class="cmt"># Schritt 4: Keyword-Fallback im Titel</span>
+<span class="kw">for</span> cat, keywords <span class="kw">in</span> KEYWORD_MAP.items():
+    <span class="kw">if</span> any(kw <span class="kw">in</span> title_lower <span class="kw">for</span> kw <span class="kw">in</span> keywords):
+        <span class="kw">return</span> cat
+
+<span class="kw">return</span> <span class="kw">None</span>  <span class="cmt"># → kein Match → verwerfen</span></code></pre>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════
+     6. SCORING
+══════════════════════════════════════════════════════════════ -->
+<div class="section" id="scoring">
+  <h2><span class="section-num">6</span>Deal-Score Berechnung</h2>
+  <p class="section-intro">Jeder Deal erhält einen Score 0–100. Dieser bestimmt Sortierung und ob ein Deal überhaupt angezeigt wird (Minimum: 30).</p>
+
+  <div class="formula">
+    <div class="formula-part">
+      <div class="formula-pct" style="color: var(--blue)">40%</div>
+      <div class="formula-label">Preisabstand</div>
+      <div class="formula-detail">Wie weit liegt der aktuelle Preis unter dem 90-Tage-Durchschnitt? Je mehr, desto besser.</div>
+    </div>
+    <div class="formula-part">
+      <div class="formula-pct" style="color: var(--green)">30%</div>
+      <div class="formula-label">ATL-Nähe</div>
+      <div class="formula-detail">Wie nah ist der Preis am Allzeittief? ATL = 100%, avg90 = 0%. Linear interpoliert.</div>
+    </div>
+    <div class="formula-part">
+      <div class="formula-pct" style="color: var(--amber)">20%</div>
+      <div class="formula-label">Popularität</div>
+      <div class="formula-detail">Sales Rank (50%), Rating (30%), Anzahl Reviews (20%) — normiert pro Kategorie.</div>
+    </div>
+    <div class="formula-part">
+      <div class="formula-pct" style="color: var(--muted)">10%</div>
+      <div class="formula-label">Stabilität</div>
+      <div class="formula-detail">Deal seit ≥24h aktiv = 100%. Neuer Deal = 30%. Verhindert dass sehr neue Deals sofort Top-Picks werden.</div>
+    </div>
+  </div>
+
+  <pre><code><span class="cmt"># Formel (vereinfacht):</span>
+raw_score = (
+    f_avg90_distance * <span class="num">0.40</span> +    <span class="cmt"># Abstand zu avg90</span>
+    f_atl_distance   * <span class="num">0.30</span> +    <span class="cmt"># Abstand zum Allzeittief</span>
+    f_popularity     * <span class="num">0.20</span> +    <span class="cmt"># Sales Rank + Rating + Reviews</span>
+    f_stability      * <span class="num">0.10</span>     <span class="cmt"># Wie lange bereits aktiv</span>
+)
+base_score = int(raw_score * <span class="num">100</span>)     <span class="cmt"># 0–100</span>
+final_score = base_score - <span class="fn">specificity_penalty</span>(title)  <span class="cmt"># Abzug für Nischenprodukte</span></code></pre>
+
+  <h3>Tags (Preisauszeichnung)</h3>
+  <p>Jedem Deal wird maximal ein Tag vergeben — der höchstwertige der zutrifft:</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Tag</th><th>Bedingung</th><th>Quelle</th></tr></thead>
+      <tbody>
+        <tr><td><span class="badge badge-purple">Allzeittiefpreis</span></td><td>Preis ≤ ATL × 1.03</td><td>Nur nach Deep-Sync (echter ATL aus vollständiger Historie)</td></tr>
+        <tr><td><span class="badge badge-blue">Historisch günstig</span></td><td>Preis ≤ avg180 × 0.80</td><td>20%+ unter 6-Monats-Durchschnitt</td></tr>
+        <tr><td><span class="badge badge-green">Stark gefallen</span></td><td>Preis ≤ avg90 × 0.70</td><td>30%+ unter 90-Tage-Durchschnitt</td></tr>
+        <tr><td><span class="badge badge-amber">Preis gefallen</span></td><td>Preis ≤ avg90 × 0.85</td><td>15%+ unter 90-Tage-Durchschnitt</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="alert alert-amber">
+    <strong>"Allzeittiefpreis" ist streng geschützt:</strong> Dieser Tag wird nur vergeben wenn der echte ATL durch den nächtlichen Deep-Sync bestätigt wurde. Aus /deal-Daten steht nur avg365 als Proxy — das reicht für diesen Tag nicht. So wird kein falscher "Allzeittiefpreis" angezeigt.
+  </div>
+
+  <h3>Kategoriespezifische Sales Rank Limits</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Kategorie</th><th>Max. Sales Rank</th><th>Begründung</th></tr></thead>
+      <tbody>
+        <tr><td>Games</td><td>5.000</td><td>Populärer Markt, Nischen früh ausfiltern</td></tr>
+        <tr><td>Elektronik &amp; Foto</td><td>8.000</td><td>Großer Markt, nur Mainstream-Produkte</td></tr>
+        <tr><td>Computer &amp; Zubehör</td><td>8.000</td><td>Analog Elektronik</td></tr>
+        <tr><td>Kamera &amp; Foto</td><td>10.000</td><td>Kleinerer Markt</td></tr>
+        <tr><td>Auto &amp; Motorrad</td><td>10.000</td><td>Viele Nischenteile, strenger Filter nötig</td></tr>
+        <tr><td>Elektro-Großgeräte</td><td>10.000</td><td>Wenige Produkte im Markt</td></tr>
+        <tr><td>Musikinstrumente</td><td>15.000</td><td>Spezialmarkt</td></tr>
+        <tr><td>Küche, Haushalt</td><td>20.000</td><td>Breiter Markt</td></tr>
+        <tr><td>Sport &amp; Freizeit</td><td>25.000</td><td>Sehr breiter Markt</td></tr>
+        <tr><td>Baumarkt, Drogerie</td><td>30.000</td><td>Breitester Markt</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════
+     7. PREIS-CHECK
+══════════════════════════════════════════════════════════════ -->
+<div class="section" id="preischeck">
+  <h2><span class="section-num">7</span>Job 3 — Preis-Check (stündlich :30)</h2>
+  <p class="section-intro">Sicherstellt dass angezeigte Deals nicht veraltete Preise haben.</p>
+
+  <p>Früher versuchte snagga.de die Amazon-Produktseite direkt zu scrapen um aktuelle Preise zu holen. <strong>Das funktioniert nicht</strong> — Amazon blockiert automatische Anfragen. Fast jede Anfrage lieferte kein Ergebnis.</p>
+
+  <p>Die Lösung: Wir fragen <strong>Keepa</strong> nach dem aktuellen Preis. Keepa überwacht Amazon ohnehin laufend und hat immer aktuelle Preise.</p>
+
+  <h3>Ablauf</h3>
+  <pre><code><span class="num">1.</span> Alle aktiven Deals aus DB laden (ASIN + avg90 + avg180 + ATL)
+<span class="num">2.</span> Keepa /product aufrufen: history=0, stats=1 → nur aktueller Preis (~2–3 Tokens/ASIN)
+<span class="num">3.</span> Für jeden Deal mit Keepa-Preis:
+   - passes_hard_filters() prüfen mit neuem Preis
+   - Preis nicht mehr gut → is_active=false, sofort deaktiviert
+   - Preis noch gut → current_price in DB aktualisieren + price_history Eintrag
+<span class="num">4.</span> Wenn Deals deaktiviert: beste Backup-Deals nachrücken lassen
+<span class="num">5.</span> Top-10 Picks neu berechnen</code></pre>
+
+  <div class="alert alert-green">
+    <strong>Maximale Verzögerung:</strong> Ein Preis steigt um 14:30 Uhr. Der nächste Preis-Check läuft um 15:30 Uhr und erkennt die Erhöhung sofort. Der Deal ist innerhalb von maximal <strong>1 Stunde</strong> offline.
+  </div>
+
+  <h3>Was passiert wenn Keepa keine Daten zurückgibt?</h3>
+  <p>Wenn der komplette Preis-Check fehlschlägt (Keepa-API-Fehler, Timeout), bricht die Funktion vorzeitig ab ohne die DB zu verändern. Deals bleiben aktiv. Beim nächsten Run wird es erneut versucht.</p>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════
+     8. DEEP-SYNC
+══════════════════════════════════════════════════════════════ -->
+<div class="section" id="deepsync">
+  <h2><span class="section-num">8</span>Job 4 — Deep-Sync (nächtlich 03:00)</h2>
+  <p class="section-intro">Einmal täglich werden alle aktiven Deals vollständig aktualisiert.</p>
+
+  <p>Der stündliche Preis-Check holt nur den aktuellen Preis. Der nächtliche Deep-Sync holt <strong>alle</strong> verfügbaren Daten für jeden aktiven Deal via Keepa <code>/product</code> mit <code>history=1, stats=1</code>:</p>
+
+  <div class="card-grid cols-2">
+    <div class="card">
+      <h4>Was aktualisiert wird</h4>
+      <ul style="font-size: 14px; padding-left: 18px; line-height: 2;">
+        <li>Vollständige Preishistorie (bis zu 365 Tage)</li>
+        <li>Echter Allzeittief-Preis (ATL)</li>
+        <li>Aktueller Sales Rank</li>
+        <li>Produktbild (falls besser verfügbar)</li>
+        <li>Rating und Anzahl Bewertungen</li>
+        <li>Deal-Score und Tag (mit echtem ATL)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Besonderheiten</h4>
+      <ul style="font-size: 14px; padding-left: 18px; line-height: 2;">
+        <li>"Allzeittiefpreis"-Tag wird nur hier vergeben</li>
+        <li>Preishistorie wird einmalig befüllt (wenn ≤ 2 echte Punkte vorhanden)</li>
+        <li>Deals mit Score &lt; 30 nach Deep-Sync werden deaktiviert</li>
+        <li>Verarbeitung in Batches à 100 ASINs</li>
+        <li>~1.000 Tokens für 100 Produkte</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════
+     9. DEAL-LEBENSZYKLUS
+══════════════════════════════════════════════════════════════ -->
+<div class="section" id="lebenszyklus">
+  <h2><span class="section-num">9</span>Deal-Lebenszyklus</h2>
+  <p class="section-intro">Wie ein Deal auf snagga.de entsteht, bleibt und verschwindet.</p>
+
+  <div class="pipeline">
+    <div class="pipeline-step">
+      <div class="pipeline-left">
+        <div class="pipeline-dot" style="background: var(--blue-bg); color: var(--blue);">1</div>
+        <div class="pipeline-line"></div>
+      </div>
+      <div class="pipeline-content">
+        <h4>Entdeckung</h4>
+        <p>Keepa /deal meldet einen Preisfall ≥15% in den letzten 3 Tagen. Produkt besteht alle Filter (Kategorie, Preis, Anti-Spike, Score ≥30).</p>
+        <div class="detail"><span class="badge badge-blue">is_active = true</span> &nbsp; Deal erscheint auf snagga.de</div>
+      </div>
+    </div>
+
+    <div class="pipeline-step">
+      <div class="pipeline-left">
+        <div class="pipeline-dot" style="background: var(--green-bg); color: var(--green);">2</div>
+        <div class="pipeline-line"></div>
+      </div>
+      <div class="pipeline-content">
+        <h4>Aktiv (Stunden bis Tage)</h4>
+        <p>Jede Stunde um :05 erscheint der Deal erneut in Keepa-Ergebnissen → <code>last_updated</code> wird aktualisiert. Jede Stunde um :30 wird der aktuelle Preis via Keepa /product verifiziert.</p>
+        <div class="detail"><span class="badge badge-green">last_updated refreshed</span> &nbsp; Preis bleibt aktuell</div>
+      </div>
+    </div>
+
+    <div class="pipeline-step">
+      <div class="pipeline-left">
+        <div class="pipeline-dot" style="background: var(--amber-bg); color: var(--amber);">3</div>
+        <div class="pipeline-line"></div>
+      </div>
+      <div class="pipeline-content">
+        <h4>Preis steigt wieder</h4>
+        <p>Zwei mögliche Wege zur Deaktivierung:</p>
+        <div class="detail">
+          <strong>Weg A (schnell):</strong> Stündlicher Preis-Check um :30 erkennt erhöhten Preis → sofort deaktiviert. Max. Verzögerung: <strong>1 Stunde</strong>.<br><br>
+          <strong>Weg B (Fallback):</strong> Produkt taucht nicht mehr in Keepa /deal Ergebnissen auf → <code>last_updated</code> wird nicht mehr aktualisiert → nach <strong>4 Stunden</strong> automatisch deaktiviert.
+        </div>
+      </div>
+    </div>
+
+    <div class="pipeline-step">
+      <div class="pipeline-left">
+        <div class="pipeline-dot" style="background: var(--red-bg); color: var(--red);">4</div>
+      </div>
+      <div class="pipeline-content">
+        <h4>Deaktiviert</h4>
+        <p>Deal ist offline. Bleibt in der DB gespeichert (für Preishistorie), aber <code>is_active = false</code>. Wenn der Preis später wieder sinkt, kann das Produkt in einem neuen Run wieder aufgenommen werden (ON CONFLICT DO UPDATE in der DB).</p>
+        <div class="detail"><span class="badge badge-red">is_active = false</span> &nbsp; Nicht mehr sichtbar</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Limits und Kapazität</h3>
+  <div class="card-grid cols-3">
+    <div class="stat-card">
+      <div class="label">MAX_ACTIVE</div>
+      <div class="value">500</div>
+      <div class="sub">Beste 500 nach Score — sichtbar</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">MAX_BACKUP</div>
+      <div class="value">150</div>
+      <div class="sub">Reservepool — rückt vor wenn aktive deaktiviert</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">TOP_PICKS</div>
+      <div class="value">10</div>
+      <div class="sub">Die 10 besten Deals — prominent angezeigt</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════
+     10. TOKEN-BUDGET
+══════════════════════════════════════════════════════════════ -->
+<div class="section" id="tokens">
+  <h2><span class="section-num">10</span>Token-Budget</h2>
+  <p class="section-intro">Keepa Plan: API Access 20 — €49/Monat, Renewal 28. Juli 2026.</p>
+
+  <div class="card-grid cols-4">
+    <div class="stat-card">
+      <div class="label">Token-Rate</div>
+      <div class="value" style="color: var(--blue)">20/Min</div>
+      <div class="sub">= 1.200/Stunde</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Tagesbudget</div>
+      <div class="value">28.800</div>
+      <div class="sub">Tokens pro Tag</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Verbrauch/Stunde</div>
+      <div class="value" style="color: var(--green)">~416</div>
+      <div class="sub">35% des Stundenlimits</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Puffer</div>
+      <div class="value" style="color: var(--green)">65%</div>
+      <div class="sub">~18.000 Tokens/Tag frei</div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Job</th><th>Häufigkeit</th><th>Tokens/Run</th><th>Tokens/Tag</th><th>% Budget</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Discovery — Keepa /deal (16 Seiten)</td>
+          <td>24×/Tag</td>
+          <td>16</td>
+          <td>384</td>
+          <td>1.3%</td>
+        </tr>
+        <tr>
+          <td>Preis-Check — Keepa /product gestaffelt (~180 ASINs/Std)</td>
+          <td>24×/Tag</td>
+          <td>~400</td>
+          <td>~9.600</td>
+          <td>33%</td>
+        </tr>
+        <tr>
+          <td>Deep-Sync — Keepa /product vollständig (Top 150)</td>
+          <td>1×/Tag</td>
+          <td>~1.500</td>
+          <td>~1.500</td>
+          <td>5.2%</td>
+        </tr>
+        <tr style="background: #fafaf8; font-weight: 600;">
+          <td>Total</td>
+          <td>—</td>
+          <td>—</td>
+          <td>~11.500</td>
+          <td>40%</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="margin-bottom: 6px; font-size: 13px; color: var(--muted);">Token-Auslastung pro Tag (~40%)</div>
+  <div class="token-bar-wrap" style="height: 14px;">
+    <div class="token-bar" style="width: 40%; background: var(--green);"></div>
+  </div>
+  <div style="font-size: 12px; color: var(--muted); margin-top: 4px;">~11.500 von 28.800 Tokens/Tag verwendet</div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════
+     11. FILTER-REFERENZ
+══════════════════════════════════════════════════════════════ -->
+<div class="section" id="referenz">
+  <h2><span class="section-num">11</span>Filter-Referenz — alle Schwellenwerte</h2>
+  <p class="section-intro">Vollständige Übersicht aller konfigurierbaren Parameter (Stand: 29. Juni 2026).</p>
+
+  <h3>Globale Konstanten (scraper.py)</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Konstante</th><th>Wert</th><th>Bedeutung</th></tr></thead>
+      <tbody>
+        <tr><td><code>MAX_ACTIVE</code></td><td>500</td><td>Maximal aktive Deals auf snagga.de</td></tr>
+        <tr><td><code>MAX_BACKUP</code></td><td>150</td><td>Backup-Pool-Grösse</td></tr>
+        <tr><td><code>DEAL_PAGES</code></td><td>16</td><td>Keepa /deal Seiten pro Run (2.400 Kandidaten)</td></tr>
+        <tr><td><code>DEEPSYNC_LIMIT</code></td><td>150</td><td>Deep-Sync nur Top-N nach Score (Token-Schutz)</td></tr>
+        <tr><td><code>TOP_PICKS_COUNT</code></td><td>10</td><td>Anzahl Top-Picks</td></tr>
+        <tr><td><code>MIN_SCORE</code></td><td>30</td><td>Mindest Deal-Score (0–100)</td></tr>
+        <tr><td><code>MIN_PRICE</code></td><td>€20.00</td><td>Globaler Mindestpreis</td></tr>
+        <tr><td>Deal-Ablauf</td><td>4 Stunden</td><td>Deals die aus Keepa verschwinden, nach 4h deaktiviert</td></tr>
+        <tr><td><code>AFFILIATE_TAG</code></td><td>snagga-21</td><td>Amazon Affiliate-Tag für alle Links</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Kategorie-spezifische Mindestpreise</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Kategorie</th><th>Mindestpreis</th></tr></thead>
+      <tbody>
+        <tr><td>Elektro-Großgeräte</td><td>€50</td></tr>
+        <tr><td>Kamera &amp; Foto</td><td>€30</td></tr>
+        <tr><td>Musikinstrumente &amp; DJ-Equipment</td><td>€30</td></tr>
+        <tr><td>Elektronik &amp; Foto</td><td>€25</td></tr>
+        <tr><td>Computer &amp; Zubehör</td><td>€25</td></tr>
+        <tr><td>Alle anderen Kategorien</td><td>€20</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Hard-Filter Schwellenwerte (scoring.py)</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Filter</th><th>Wert</th><th>Ausnahmen</th></tr></thead>
+      <tbody>
+        <tr><td>Mindest-Rating</td><td>≥ 4.0 Sterne</td><td>—</td></tr>
+        <tr><td>Mindest-Bewertungen</td><td>≥ 100</td><td>Auto &amp; Motorrad: ≥ 500</td></tr>
+        <tr><td>Anti-Spike: avg90</td><td>current ≤ avg90 × 0.92</td><td>Wenn avg90 = 0: Bedingung ignoriert</td></tr>
+        <tr><td>Anti-Spike: avg180</td><td>current ≤ avg180 × 0.92</td><td>Wenn avg180 = 0: Bedingung ignoriert</td></tr>
+        <tr><td>Anti-Spike: avg365</td><td>Wenn avg365 &lt; avg180 × 0.80: current ≤ avg365 × 0.95</td><td>Nur aktiv wenn avg365 deutlich tiefer</td></tr>
+        <tr><td>Kein Referenzpreis</td><td>avg90 = 0 UND avg180 = 0 → ablehnen</td><td>—</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Keepa /deal Abfrage-Parameter</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Parameter</th><th>Wert</th></tr></thead>
+      <tbody>
+        <tr><td>Domain</td><td>3 (Amazon.de)</td></tr>
+        <tr><td>Mindest-Preisfall</td><td>–15% (gegenüber vorherigem Preis)</td></tr>
+        <tr><td>Zeitfenster</td><td>Letzte 3 Tage (dateRange = 2)</td></tr>
+        <tr><td>Mindest-Rating (Keepa-seitig)</td><td>≥ 4.0 Sterne (40 × 10)</td></tr>
+        <tr><td>Mindest-Reviews (Keepa-seitig)</td><td>≥ 100</td></tr>
+        <tr><td>Mindestpreis (Keepa-seitig)</td><td>€20 (2000 Cent)</td></tr>
+        <tr><td>Seiten pro Run</td><td>16 (= 2.400 Kandidaten)</td></tr>
+        <tr><td>Sortierung</td><td>Nach stärkstem Preisfall (sortType = 1)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Ausgeschlossene Amazon-Kategorien (EXCLUDE_ROOTCATS)</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Kategorie</th><th>Root-Cat-ID</th></tr></thead>
+      <tbody>
+        <tr><td>Bekleidung &amp; Fashion</td><td>11961464031</td></tr>
+        <tr><td>Lebensmittel &amp; Getränke</td><td>340846031</td></tr>
+        <tr><td>Spielzeug</td><td>12950651</td></tr>
+        <tr><td>Bücher</td><td>186606</td></tr>
+        <tr><td>Heimtierbedarf</td><td>340852031</td></tr>
+        <tr><td>Film / DVD / Video</td><td>284266</td></tr>
+        <tr><td>Musik-Tonträger (Vinyl, CDs)</td><td>255882</td></tr>
+        <tr><td>Taschen &amp; Accessoires</td><td>355007011</td></tr>
+        <tr><td>Gewerbe &amp; Industrie</td><td>5866098031</td></tr>
+        <tr><td>Bürobedarf</td><td>192416031</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+
+<!-- Footer -->
+<div style="border-top: 1px solid var(--border); padding-top: 20px; color: var(--muted); font-size: 13px;">
+  snagga.de Pipeline-Dokumentation &nbsp;·&nbsp; Stand: 29. Juni 2026 &nbsp;·&nbsp; Backend: FastAPI + PostgreSQL (Supabase) + Render Free &nbsp;·&nbsp; Keepa Plan: API Access 20 (€49/Mon.)
+</div>
+
+</div>
+</body>
+</html>
