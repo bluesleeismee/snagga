@@ -2,11 +2,22 @@
 APScheduler — stündliche Deal-Updates + nächtlicher Deep-Sync
 """
 import os
+import httpx
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from scraper import fetch_and_update_deals, hourly_price_check, nightly_deep_sync
+
+SERVICE_URL = os.getenv("RENDER_EXTERNAL_URL", "https://snagga.onrender.com")
+
+
+async def _ping():
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.get(f"{SERVICE_URL}/health")
+    except Exception:
+        pass
 
 DEEP_SYNC_HOUR   = int(os.getenv("DEEP_SYNC_HOUR",   "3"))
 DEEP_SYNC_MINUTE = int(os.getenv("DEEP_SYNC_MINUTE", "0"))
@@ -32,6 +43,14 @@ def create_scheduler() -> AsyncIOScheduler:
         id="hourly_price_check",
         replace_existing=True,
         misfire_grace_time=600,
+    )
+
+    # Keep-alive: alle 10 Minuten /health pingen damit Render nicht einschläft
+    scheduler.add_job(
+        _ping,
+        IntervalTrigger(minutes=10),
+        id="keepalive_ping",
+        replace_existing=True,
     )
 
     # Nächtlicher Deep-Sync: vollständige Keepa /product Aktualisierung
