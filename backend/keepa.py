@@ -99,6 +99,8 @@ async def fetch_keepa_deals(
         "deltaPercentRange":   [-100, -delta_pct],  # mind. X% gefallen
         "dateRange":           2,                   # letzte 3 Tage
         "minRating":           min_rating,          # 40 = 4.0 Sterne (×10)
+        "minReviews":          100,                 # mind. 100 Reviews (Keepa-seitig vorfiltern)
+        "priceRange":          [2000, -1],          # mind. €20 (2000 Cent), kein Maximum
         "hasReviews":          True,
         "isFilterEnabled":     True,
         "filterErotic":        True,
@@ -358,6 +360,101 @@ async def enrich_with_keepa(
                 parsed = _parse_product(p)
                 if parsed and asin:
                     results[asin] = parsed
+
+            if start + 100 < len(asins):
+                await asyncio.sleep(1.0)
+    finally:
+        if own_client:
+            await client.aclose()
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# /product — Minimaler Preis-Check (stündlich, günstig)
+# ---------------------------------------------------------------------------
+
+async def fetch_current_prices(
+    asins:  list[str],
+    domain: int = 3,
+    client: httpx.AsyncClient | None = None,
+) -> dict[str, float]:
+    """
+    Holt nur den aktuellen Preis für eine Liste von ASINs.
+    history=0, stats=1 → ~2–3 Tokens/ASIN statt ~10 beim Deep-Sync.
+    Gibt {asin: preis_eur} zurück.
+    """
+    if not KEEPA_KEY or not asins:
+        return {}
+
+    results: dict[str, float] = {}
+    own_client = client is None
+    if own_client:
+        client = httpx.AsyncClient(timeout=30)
+
+    try:
+        for start in range(0, len(asins), 100):
+            chunk = asins[start : start + 100]
+            try:
+                resp = await client.get(
+                    f"{KEEPA_BASE}/product",
+                    params={
+                        "key":     KEEPA_KEY,
+                        "domain":  domain,
+                        "asin":    ",".join(chunk),
+                        "stats":   1,   # aktueller Preis + Durchschnitte
+                        "history": 0,   # keine volle Preishistorie → günstiger
+                        "rating":  0,
+                        "offers":  0,
+                    },
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                tokens = data.get("tokensLeft", "?")
+                print(f"  Keepa /product (Preis-Check): {len(chunk)} ASINs · {tokens} Tokens übrig")
+            except Exception as e:
+                print(f"  Keepa /product Preis-Check Fehler: {e}")
+                continue
+
+            IDX_BUYBOX  = 18
+            IDX_AMAZON  = 0
+            IDX_NEW_FBA = 10
+
+            for p in data.get("products") or []:
+                asin = p.get("asin", "")
+                if not asin:
+                    continue
+
+                # Aktuellen Preis aus stats.current (Array nach Preis-Typ-Index)
+                stats = p.get("stats") or {}
+                cur   = stats.get("current") or []
+
+                def _pick(arr, *indices):
+                    for i in indices:
+                        if i < len(arr):
+                            v = arr[i]
+                            if isinstance(v, (int, float)) and v > 0:
+                                return round(v / 100.0, 2)
+                    return None
+
+                price = _pick(cur, IDX_BUYBOX, IDX_AMAZON, IDX_NEW_FBA)
+
+                # Fallback: letzter Eintrag in csv (auch bei history=0 vorhanden)
+                if price is None:
+                    csv = p.get("csv") or []
+                    for idx in (IDX_BUYBOX, IDX_AMAZON, IDX_NEW_FBA):
+                        if idx < len(csv) and csv[idx]:
+                            flat = csv[idx]
+                            for j in range(len(flat) - 1, 0, -2):
+                                v = flat[j]
+                                if isinstance(v, (int, float)) and v > 0:
+                                    price = round(v / 100.0, 2)
+                                    break
+                        if price is not None:
+                            break
+
+                if price is not None:
+                    results[asin] = price
 
             if start + 100 < len(asins):
                 await asyncio.sleep(1.0)

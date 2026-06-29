@@ -12,7 +12,7 @@ import httpx
 from datetime import datetime, timedelta
 
 from database import get_pool
-from keepa import fetch_keepa_deals, enrich_with_keepa
+from keepa import fetch_keepa_deals, enrich_with_keepa, fetch_current_prices
 from scoring import (
     CATEGORY_MAX_RANK,
     passes_hard_filters,
@@ -267,34 +267,94 @@ def generate_history(asin: str, current: float, avg: float, days: int = 60) -> l
 
 
 # ---------------------------------------------------------------------------
-# Live-Preis-Check via Amazon-Seite (0 Tokens)
+# Stündlicher Preis-Check via Keepa /product (minimal, ~2–3 Tokens/ASIN)
 # ---------------------------------------------------------------------------
 
-AMAZON_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
-    "Accept-Language": "de-DE,de;q=0.9",
-}
+async def hourly_keepa_price_check():
+    """
+    Prüft die aktuellen Preise aller aktiven Deals via Keepa /product (history=0).
+    Deals deren Preis nicht mehr gut ist → sofort deaktivieren.
+    Deals mit gutem Preis → current_price + price_history aktualisieren.
+    """
+    print(f"[{datetime.utcnow().isoformat()}] Keepa Preis-Check …")
+    db  = await get_pool()
+    now = datetime.utcnow()
 
-async def check_live_price(asin: str, client: httpx.AsyncClient) -> float | None:
-    """Holt den aktuellen Preis von der Amazon-Seite. Gibt None bei Fehler zurück."""
-    try:
-        resp = await client.get(
-            f"https://www.amazon.de/dp/{asin}",
-            headers=AMAZON_HEADERS, follow_redirects=True, timeout=10,
+    async with db.acquire() as conn:
+        active = await conn.fetch(
+            "SELECT asin, current_price, avg90_price, avg180_price, all_time_low, "
+            "category, rating, reviews, sales_rank FROM products WHERE is_active=true"
         )
-        if resp.status_code != 200:
-            return None
-        # Preis aus Schema.org JSON-LD oder meta
-        m = re.search(r'"price"\s*:\s*"?(\d+[.,]\d{2})"?', resp.text)
-        if m:
-            return float(m.group(1).replace(",", "."))
-        # Fallback: data-asin-price
-        m = re.search(r'data-asin-price="(\d+[.,]\d{2})"', resp.text)
-        if m:
-            return float(m.group(1).replace(",", "."))
-    except Exception:
-        pass
-    return None
+
+    if not active:
+        return
+
+    asins         = [row["asin"] for row in active]
+    current_prices = await fetch_current_prices(asins, domain=3)
+
+    if not current_prices:
+        print("  Keepa Preis-Check: keine Preisdaten erhalten — Abbruch")
+        return
+
+    deactivated = 0
+    async with db.acquire() as conn:
+        for row in active:
+            asin       = row["asin"]
+            live_price = current_prices.get(asin)
+            if live_price is None:
+                continue
+
+            avg90  = row["avg90_price"]  or 0.0
+            avg180 = row["avg180_price"] or 0.0
+            atl    = row["all_time_low"] or 0.0
+
+            if not passes_hard_filters(
+                row["rating"], row["reviews"], row["sales_rank"] or 0,
+                row["category"], live_price, avg90, atl, avg180,
+            ):
+                await conn.execute(
+                    "UPDATE products SET is_active=false, is_top_pick=false, "
+                    "current_price=$2, last_checked=$3 WHERE asin=$1",
+                    asin, live_price, now,
+                )
+                deactivated += 1
+            else:
+                score, breakdown = calculate_deal_score(
+                    live_price, avg90, atl,
+                    row["sales_rank"] or 0, row["category"],
+                    row["rating"], row["reviews"],
+                    price_updated=now,
+                )
+                tag = determine_tag(live_price, atl, avg90, avg180, atl_confirmed=False)
+                await conn.execute(
+                    "UPDATE products SET current_price=$2, deal_score=$3, "
+                    "tag=$4, last_checked=$5, score_breakdown=$6 WHERE asin=$1",
+                    asin, live_price, score, tag, now, breakdown,
+                )
+                await conn.execute(
+                    "INSERT INTO price_history (asin, price, timestamp) VALUES ($1,$2,$3)",
+                    asin, live_price, now,
+                )
+
+    if deactivated > 0:
+        await _promote_backups_simple(deactivated)
+
+    await _recalculate_top_picks()
+    print(f"  Keepa Preis-Check fertig: {deactivated} deaktiviert, {len(current_prices)} geprüft.")
+
+
+async def _promote_backups_simple(count: int):
+    """Rückt die besten Backup-Deals ohne erneute Preis-Verifikation vor."""
+    db = await get_pool()
+    async with db.acquire() as conn:
+        await conn.execute(
+            "UPDATE products SET is_active=true, is_backup=false "
+            "WHERE asin IN ("
+            "  SELECT asin FROM products WHERE is_backup=true "
+            "  ORDER BY deal_score DESC LIMIT $1"
+            ")",
+            count,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -319,7 +379,7 @@ async def fetch_and_update_deals():
         skipped_cat = skipped_price = skipped_filter = skipped_score = 0
         got_any = False
 
-        for page in range(3):
+        for page in range(8):
             page_deals = await fetch_keepa_deals(
                 domain=3, delta_pct=15, min_rating=40, min_reviews=50,
                 page=page, client=client,
@@ -396,7 +456,7 @@ async def fetch_and_update_deals():
             new_asins = {p["asin"] for p in active_pool + backup_pool}
             await conn.execute(
                 "UPDATE products SET is_active=false, is_backup=false "
-                "WHERE last_updated < NOW() - INTERVAL '24 hours' "
+                "WHERE last_updated < NOW() - INTERVAL '4 hours' "
                 "AND asin != ALL($1::text[])",
                 list(new_asins),
             )
@@ -481,124 +541,6 @@ async def fetch_and_update_deals():
     return len(active_pool)
 
 
-# ---------------------------------------------------------------------------
-# Stündlicher Preis-Check der aktiven Deals
-# ---------------------------------------------------------------------------
-
-async def hourly_price_check():
-    """
-    Prüft die aktuellen Preise aller aktiven Deals via Amazon-Seite.
-    Deals deren Preis nicht mehr gut ist → deaktivieren, Backup nachrücken.
-    """
-    print(f"[{datetime.utcnow().isoformat()}] Stündlicher Preis-Check …")
-    db  = await get_pool()
-    now = datetime.utcnow()
-
-    async with db.acquire() as conn:
-        active = await conn.fetch(
-            "SELECT asin, current_price, avg90_price, all_time_low, category, "
-            "rating, reviews, sales_rank FROM products WHERE is_active=true ORDER BY deal_score DESC"
-        )
-
-    deactivated = 0
-    async with httpx.AsyncClient(timeout=15) as client:
-        for row in active:
-            asin      = row["asin"]
-            live_price = await check_live_price(asin, client)
-            await asyncio.sleep(0.5)  # sanftes Rate-Limiting
-
-            if live_price is None:
-                continue  # Bei Fehler: behalten
-
-            # Score mit aktuellem Preis neu berechnen
-            score, breakdown = calculate_deal_score(
-                live_price,
-                row["avg90_price"] or row["current_price"],
-                row["all_time_low"] or live_price,
-                row["sales_rank"] or 0,
-                row["category"],
-                row["rating"],
-                row["reviews"],
-                price_updated=now,
-            )
-
-            async with db.acquire() as conn:
-                if score < MIN_SCORE:
-                    # Deal ist nicht mehr gut — deaktivieren
-                    await conn.execute(
-                        "UPDATE products SET is_active=false, is_top_pick=false, "
-                        "deal_score=$2, last_checked=$3 WHERE asin=$1",
-                        asin, score, now,
-                    )
-                    deactivated += 1
-                else:
-                    tag = determine_tag(
-                        live_price,
-                        row["all_time_low"] or 0,
-                        row["avg90_price"] or 0,
-                        0,
-                        atl_confirmed=False,  # hourly check hat keinen echten ATL
-                    )
-                    await conn.execute(
-                        "UPDATE products SET current_price=$2, deal_score=$3, "
-                        "tag=$4, last_checked=$5, score_breakdown=$6 WHERE asin=$1",
-                        asin, live_price, score, tag, now, breakdown,
-                    )
-                    await conn.execute(
-                        "INSERT INTO price_history (asin, price, timestamp) VALUES ($1,$2,$3)",
-                        asin, live_price, now,
-                    )
-
-    if deactivated > 0:
-        await _promote_backups(deactivated)
-
-    # Top Picks neu setzen
-    await _recalculate_top_picks()
-    print(f"  Preis-Check fertig: {deactivated} deaktiviert.")
-
-
-async def _promote_backups(count: int):
-    """Rückt bis zu `count` Backup-Deals nach Live vor (mit Preis-Verifikation)."""
-    db = await get_pool()
-    async with db.acquire() as conn:
-        backups = await conn.fetch(
-            "SELECT asin, current_price, avg90_price, all_time_low, category, "
-            "rating, reviews, sales_rank FROM products "
-            "WHERE is_backup=true ORDER BY deal_score DESC LIMIT $1",
-            count * 2,
-        )
-
-    promoted = 0
-    async with httpx.AsyncClient(timeout=15) as client:
-        for row in backups:
-            if promoted >= count:
-                break
-            asin       = row["asin"]
-            live_price = await check_live_price(asin, client)
-            await asyncio.sleep(0.5)
-
-            if live_price is None:
-                continue
-
-            score, _ = calculate_deal_score(
-                live_price,
-                row["avg90_price"] or row["current_price"],
-                row["all_time_low"] or live_price,
-                row["sales_rank"] or 0,
-                row["category"],
-                row["rating"],
-                row["reviews"],
-            )
-
-            if score >= MIN_SCORE:
-                async with db.acquire() as conn:
-                    await conn.execute(
-                        "UPDATE products SET is_active=true, is_backup=false, "
-                        "current_price=$2, deal_score=$3, last_checked=$4 WHERE asin=$1",
-                        asin, live_price, score, datetime.utcnow(),
-                    )
-                promoted += 1
-                print(f"    ↑ Backup {asin} promoviert (Score {score})")
 
 
 async def _recalculate_top_picks():
