@@ -98,16 +98,6 @@ export default function DealCard({ deal, onClick }) {
           </div>
         )}
 
-        {/* Top Pick star */}
-        {deal.is_top_pick && (
-          <div style={{
-            position: 'absolute', top: 14, right: 14, zIndex: 2,
-            fontSize: 15, lineHeight: 1, title: 'Top Pick',
-          }}>
-            ★
-          </div>
-        )}
-
         {imgSrc && !imgError ? (
           <img
             key={imgSrc}

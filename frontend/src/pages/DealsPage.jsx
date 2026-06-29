@@ -12,11 +12,21 @@ const SORTS = [
   { id: 'newest',    label: 'Neu' },
 ]
 
-const COUNTRIES = [
-  { code: 'DE', src: '/flags/de.svg',  label: 'Deutschland' },
-  { code: 'AT', src: '/flags/at.webp', label: 'Österreich' },
-  { code: 'CH', src: '/flags/ch.avif', label: 'Schweiz' },
-]
+// Kurznamen nur für die Anzeige — interne Kategorie/DB bleibt unverändert.
+// Flaggen (DE/AT/CH) entfernt: Keepa liefert nur amazon.de, AT/CH nicht
+// unterscheidbar. Assets bleiben unter /public/flags/ archiviert für später.
+const CAT_LABELS = {
+  'Drogerie & Körperpflege':         'Körperpflege',
+  'Küche, Haushalt & Wohnen':        'Küche & Haushalt',
+  'Musikinstrumente & DJ-Equipment': 'Musik',
+  'Elektro-Großgeräte':              'Grossgeräte',
+  'Computer & Zubehör':              'Computer',
+  'Elektronik & Foto':               'Elektronik',
+  'Auto & Motorrad':                 'Auto',
+  'Sport & Freizeit':                'Sport',
+  'Kamera & Foto':                   'Kamera',
+}
+const catLabel = (c) => CAT_LABELS[c] || c
 
 const LS_DEALS = 'sng_deals_v2'
 const LS_CATS  = 'sng_cats_v2'
@@ -103,9 +113,9 @@ function BestPicksSlider({ deals, onOpen }) {
   return (
     <section style={{ marginBottom: 28 }}>
       <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)', marginBottom: 22, display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span>Top Picks</span>
+        <span>Neueste Picks</span>
         <span style={{ fontSize: 11, fontWeight: 600, background: 'var(--accent)', color: '#fff', padding: '2px 8px', letterSpacing: 0.5, verticalAlign: 'middle' }}>
-          HEUTE
+          NEU
         </span>
         <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--muted)' }}>
           ({topDeals.length})
@@ -193,11 +203,10 @@ function BestPicksSlider({ deals, onOpen }) {
 
 /* ── Main Page ──────────────────────────────────────────────────── */
 export default function DealsPage() {
-  const { isMobile, isTablet, isDesktop, width } = useBreakpoint()
+  const { isMobile, isDesktop, width } = useBreakpoint()
   const [categories,   setCategories]   = useState(() => lsGet(LS_CATS)  || ['Alle'])
   const [selectedCat,  setSelectedCat]  = useState('Alle')
   const [sortBy,       setSortBy]       = useState('score')
-  const [selectedCountry, setSelectedCountry] = useState('DE')
   const [search,       setSearch]       = useState('')
   const [deals,        setDeals]        = useState(() => lsGet(LS_DEALS) || [])
   const [visibleCount, setVisibleCount] = useState(60)
@@ -214,15 +223,10 @@ export default function DealsPage() {
   const [error,        setError]        = useState(null)
   const [selectedDeal, setSelectedDeal] = useState(null)
 
-  /* Load Top Picks once — unaffected by filters */
+  /* Neueste Picks — frische Neuzugänge, unabhängig von Filtern */
   useEffect(() => {
-    api.deals({ category: 'Top Picks', sort_by: 'score', limit: 10 })
+    api.deals({ sort_by: 'newest', limit: 12 })
       .then(data => {
-        // Fallback: wenn keine echten Top Picks, nimm Top-Score Deals
-        if (data.length === 0) {
-          return api.deals({ sort_by: 'score', limit: 20 })
-            .then(d => { setBestPicks(d); lsSet(LS_PICKS, d) })
-        }
         setBestPicks(data)
         lsSet(LS_PICKS, data)
       })
@@ -391,34 +395,34 @@ export default function DealsPage() {
             </button>
           ))}
           <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.2)', flexShrink: 0 }} />
-          {/* Rest — scrollable */}
-          <div className="no-scroll" style={{ display: 'flex', gap: 6, alignItems: 'center', overflowX: 'auto', flexWrap: 'nowrap', minWidth: 0, overscrollBehaviorX: 'contain' }}>
+          {/* Rest — Desktop: umbrechen (max. 2 Zeilen), Mobile: horizontaler Scroll */}
+          <div className="no-scroll" style={{
+            display: 'flex', gap: 6, alignItems: 'center', minWidth: 0,
+            overflowX: isMobile ? 'auto' : 'visible',
+            flexWrap: isMobile ? 'nowrap' : 'wrap',
+            rowGap: 6, overscrollBehaviorX: 'contain',
+          }}>
           {categories.filter(c => c !== 'Alle').map(cat => {
-            const isTopPicks = cat === 'Top Picks'
-            const isActive   = cat === selectedCat
+            const isActive = cat === selectedCat
             return (
               <button
                 key={cat}
                 onClick={() => setSelectedCat(cat)}
+                title={cat}
                 style={{
                   padding: isMobile ? '6px 12px' : '7px 16px',
                   fontSize: 13, flexShrink: 0, borderRadius: 2,
-                  border: isTopPicks ? '1px solid rgba(255,200,50,0.6)' : '1px solid transparent',
-                  background: isActive
-                    ? (isTopPicks ? '#F0B429' : 'rgba(255,255,255,0.95)')
-                    : (isTopPicks ? 'rgba(240,180,41,0.15)' : 'rgba(255,255,255,0.1)'),
-                  color: isActive
-                    ? (isTopPicks ? '#1a1a1a' : '#153D68')
-                    : '#fff',
+                  border: '1px solid transparent',
+                  background: isActive ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.1)',
+                  color: isActive ? '#153D68' : '#fff',
                   fontWeight: isActive ? 600 : 500,
                   transition: 'all 0.15s',
-                  display: 'flex', alignItems: 'center', gap: 4,
+                  whiteSpace: 'nowrap',
                 }}
-                onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = isTopPicks ? 'rgba(240,180,41,0.25)' : 'rgba(255,255,255,0.2)' } }}
-                onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = isTopPicks ? 'rgba(240,180,41,0.15)' : 'rgba(255,255,255,0.1)' } }}
+                onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = 'rgba(255,255,255,0.2)' } }}
+                onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' } }}
               >
-                {isTopPicks && <span style={{ fontSize: 11 }}>★</span>}
-                {cat}
+                {catLabel(cat)}
               </button>
             )
           })}
@@ -426,38 +430,7 @@ export default function DealsPage() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, marginLeft: 12 }}>
-          {/* Versandland */}
-          {isTablet && <div style={{ width: 1, height: 22, background: 'rgba(255,255,255,0.2)', flexShrink: 0 }} />}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {COUNTRIES.map(c => {
-              const active = selectedCountry === c.code
-              return (
-                <button
-                  key={c.code}
-                  onClick={() => setSelectedCountry(c.code)}
-                  title={c.label}
-                  style={{
-                    padding: 0,
-                    border: 'none',
-                    background: 'none',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    transition: 'all 0.15s',
-                    transform: active ? 'scale(1.18)' : 'scale(1)',
-                    opacity: active ? 1 : 0.55,
-                    filter: active ? 'none' : 'grayscale(30%)',
-                  }}
-                >
-                  <img
-                    src={c.src}
-                    alt={c.label}
-                    style={{ width: 28, height: 19, objectFit: 'cover', display: 'block', borderRadius: 2 }}
-                  />
-                </button>
-              )
-            })}
-          </div>
-          <div style={{ width: 1, height: 22, background: 'rgba(255,255,255,0.2)', flexShrink: 0 }} />
+          {isDesktop && <div style={{ width: 1, height: 22, background: 'rgba(255,255,255,0.2)', flexShrink: 0 }} />}
           {isDesktop && (
             <span style={{ fontSize: 13, color: '#fff', fontWeight: 600 }}>
               Sortieren

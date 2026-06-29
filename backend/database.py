@@ -58,6 +58,7 @@ MIGRATE_PRODUCTS = [
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS tag           TEXT DEFAULT ''",
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS score_breakdown TEXT DEFAULT ''",
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS is_volatile   BOOLEAN DEFAULT false",
+    "ALTER TABLE products ADD COLUMN IF NOT EXISTS first_seen    TIMESTAMP",
 ]
 
 CREATE_PRICE_HISTORY = """

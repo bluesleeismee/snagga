@@ -193,7 +193,7 @@ async def get_deals(
         "discount":   "(1.0 - current_price / NULLIF(original_price,0)) DESC",
         "price_asc":  "current_price ASC",
         "price_desc": "current_price DESC",
-        "newest":     "last_updated DESC",
+        "newest":     "first_seen DESC NULLS LAST, last_updated DESC",
     }
     order = sort_map.get(sort_by, "deal_score DESC")
 
@@ -250,7 +250,7 @@ async def get_categories():
         rows = await conn.fetch(
             "SELECT DISTINCT category FROM products WHERE is_active=true ORDER BY category"
         )
-    cats = ["Alle", "Top Picks"] + [r["category"] for r in rows if r["category"]]
+    cats = ["Alle"] + [r["category"] for r in rows if r["category"]]
     cache_set("categories", cats)
     return cats
 

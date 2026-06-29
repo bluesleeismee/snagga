@@ -551,9 +551,9 @@ async def fetch_and_update_deals():
                        deal_score, rating, reviews, prime,
                        last_updated, last_checked, affiliate_url,
                        is_active, is_backup, is_top_pick, is_fba,
-                       sales_rank, tag, score_breakdown)
+                       sales_rank, tag, score_breakdown, first_seen)
                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
-                            $16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
+                            $16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
                     ON CONFLICT (asin) DO UPDATE SET
                         name            = EXCLUDED.name,
                         brand           = EXCLUDED.brand,
@@ -586,7 +586,7 @@ async def fetch_and_update_deals():
                     now, now,
                     f"https://www.amazon.de/dp/{asin}?tag={AFFILIATE_TAG}",
                     is_active, is_backup, is_top_pick, p["is_fba"],
-                    p["sales_rank"] or 0, p["tag"], p["score_breakdown"],
+                    p["sales_rank"] or 0, p["tag"], p["score_breakdown"], now,
                 )
 
                 await conn.execute(
