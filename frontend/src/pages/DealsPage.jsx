@@ -304,7 +304,7 @@ export default function DealsPage() {
     if (!isDefault) setLoading(true)
     setError(null)
     // "Neueste"-Chip ohne Kategoriefilter: nur die 24 frischesten Deals
-    const dealLimit = (sortBy === 'newest' && noFilter) ? 24 : 500
+    const dealLimit = sortBy === 'newest' ? 24 : 500
     const categoryParam = noFilter ? undefined : [...selectedCats].join('|')
     api.deals({ category: categoryParam, sort_by: sortBy, search: search || undefined, limit: dealLimit })
       .then(data => {

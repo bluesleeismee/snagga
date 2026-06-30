@@ -361,7 +361,7 @@ async def enrich_with_keepa(
                 if parsed and asin:
                     results[asin] = parsed
 
-            if start + 100 < len(asins):
+            if start + 20 < len(asins):
                 await asyncio.sleep(1.0)
     finally:
         if own_client:
@@ -457,7 +457,7 @@ async def fetch_current_prices(
                 if price is not None:
                     results[asin] = price
 
-            if start + 100 < len(asins):
+            if start + 20 < len(asins):
                 await asyncio.sleep(1.0)
     finally:
         if own_client:

@@ -89,6 +89,15 @@ async def get_pool() -> asyncpg.Pool:
     return pool
 
 
+CREATE_INDEXES = [
+    # Alle Queries filtern zuerst nach is_active=true — partial indexes sind deutlich schneller
+    "CREATE INDEX IF NOT EXISTS idx_active_score   ON products(deal_score DESC) WHERE is_active = true",
+    "CREATE INDEX IF NOT EXISTS idx_active_price   ON products(current_price)   WHERE is_active = true",
+    "CREATE INDEX IF NOT EXISTS idx_active_updated ON products(last_updated DESC) WHERE is_active = true",
+    "CREATE INDEX IF NOT EXISTS idx_active_cat     ON products(category)        WHERE is_active = true",
+    "CREATE INDEX IF NOT EXISTS idx_price_history_asin ON price_history(asin)",
+]
+
 async def init_db():
     p = await get_pool()
     async with p.acquire() as conn:
@@ -99,4 +108,9 @@ async def init_db():
                 await conn.execute(stmt)
             except Exception:
                 pass  # Spalte existiert bereits
+        for stmt in CREATE_INDEXES:
+            try:
+                await conn.execute(stmt)
+            except Exception:
+                pass  # Index existiert bereits
     print("Datenbank initialisiert.")
