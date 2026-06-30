@@ -413,6 +413,18 @@ async def debug_category_children(cat_id: int):
     }
 
 
+@app.get("/admin/mark-all-posted")
+async def mark_all_posted():
+    """Einmalig: alle bestehenden Deals als telegram_posted markieren, damit nur neue Deals gepostet werden."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            "UPDATE products SET telegram_posted = NOW() WHERE telegram_posted IS NULL AND is_active = true"
+        )
+    count = int(result.split()[-1])
+    return {"ok": True, "marked": count, "message": f"{count} bestehende Deals als gepostet markiert — ab jetzt werden nur neue Deals gesendet."}
+
+
 @app.get("/test-telegram")
 async def test_telegram():
     import httpx
