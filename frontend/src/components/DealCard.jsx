@@ -108,16 +108,16 @@ export default function DealCard({ deal, onClick }) {
         )}
       </div>
 
-      {/* Tag badge */}
-      {tag && tagStyle && (
-        <div style={{
-          background: tagStyle.bg, color: tagStyle.text,
-          fontSize: 10, fontWeight: 600, letterSpacing: 0.6,
-          padding: '4px 10px', textTransform: 'uppercase',
-        }}>
-          {tag}
-        </div>
-      )}
+      {/* Tag badge — immer gleiche Höhe, damit Body-Text auf allen Kacheln gleich beginnt */}
+      <div style={{
+        fontSize: 10, fontWeight: 600, letterSpacing: 0.6,
+        padding: '4px 10px', textTransform: 'uppercase',
+        background: (tag && tagStyle) ? tagStyle.bg : 'transparent',
+        color:      (tag && tagStyle) ? tagStyle.text : 'transparent',
+        visibility: (tag && tagStyle) ? 'visible' : 'hidden',
+      }}>
+        {(tag && tagStyle) ? tag : ' '}
+      </div>
 
       {/* Card body */}
       <div style={{ padding: '16px 18px 16px', display: 'flex', flexDirection: 'column', flex: 1 }}>
