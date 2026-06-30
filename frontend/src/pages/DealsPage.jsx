@@ -255,15 +255,20 @@ export default function DealsPage() {
 
   useEffect(() => {
     if (isDesktop) { setHeaderHidden(false); return }
+    let ticking = false
     const handleScroll = () => {
-      const y = window.pageYOffset ?? window.scrollY ?? 0
-      if (y > lastScrollY.current && y > 80) setHeaderHidden(true)
-      else if (y < lastScrollY.current) setHeaderHidden(false)
-      lastScrollY.current = y
+      if (ticking) return
+      ticking = true
+      requestAnimationFrame(() => {
+        const y = window.scrollY
+        if (y > lastScrollY.current && y > 80) setHeaderHidden(true)
+        else if (y < lastScrollY.current) setHeaderHidden(false)
+        lastScrollY.current = y
+        ticking = false
+      })
     }
-    // document statt window: iOS Safari feuert scroll manchmal nur auf document
-    document.addEventListener('scroll', handleScroll, { passive: true })
-    return () => document.removeEventListener('scroll', handleScroll)
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
   }, [isDesktop])
 
   const toggleTheme = () => setTheme(t => t === 'light' ? 'dark' : 'light')
