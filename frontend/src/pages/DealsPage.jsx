@@ -234,11 +234,25 @@ export default function DealsPage() {
   const [bestPicks,    setBestPicks]    = useState(() => lsGet(LS_PICKS) || [])
   const [loading,      setLoading]      = useState(deals.length === 0)
   const [theme,        setTheme]        = useState(() => localStorage.getItem('sng_theme') || 'light')
+  const [headerHidden, setHeaderHidden] = useState(false)
+  const lastScrollY = useRef(0)
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
     localStorage.setItem('sng_theme', theme)
   }, [theme])
+
+  useEffect(() => {
+    if (isDesktop) return
+    const handleScroll = () => {
+      const y = window.scrollY
+      if (y > lastScrollY.current && y > 80) setHeaderHidden(true)
+      else setHeaderHidden(false)
+      lastScrollY.current = y
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [isDesktop])
 
   const toggleTheme = () => setTheme(t => t === 'light' ? 'dark' : 'light')
   const [error,        setError]        = useState(null)
@@ -321,10 +335,16 @@ export default function DealsPage() {
     >
       {selectedDeal && <ProductModal deal={selectedDeal} onClose={closeModal} />}
 
+      {/* ── HEADER + FILTERBAR WRAPPER (hide on scroll down, mobile/tablet only) ── */}
+      <div style={{
+        position: 'sticky', top: 0, zIndex: 100,
+        transform: (!isDesktop && headerHidden) ? 'translateY(-100%)' : 'translateY(0)',
+        transition: 'transform 0.3s ease',
+      }}>
+
       {/* ── HEADER ── */}
       <header style={{
         background: '#153D68',
-        position: 'sticky', top: 0, zIndex: 100,
         height: 'var(--header-h)',
       }}>
         <div style={{
@@ -380,10 +400,9 @@ export default function DealsPage() {
         </div>
       </header>
 
-      {/* ── FILTER BAR — full width, outside constrained main ── */}
+      {/* ── FILTER BAR ── */}
       <div style={{
         background: '#153D68', border: '1px solid #1E5080', borderTop: 'none',
-        position: 'sticky', top: 'calc(var(--header-h) - 1px)', zIndex: 90,
       }}>
         <div style={{
           maxWidth: 1840, width: '98%', margin: '0 auto',
@@ -508,6 +527,7 @@ export default function DealsPage() {
         </div>
         </div>
       </div>
+      </div>{/* end sticky wrapper */}
 
       {/* ── MAIN ── */}
       <main style={{ maxWidth: 1840, width: '98%', margin: '0 auto', padding: isMobile ? '12px 0 24px' : '20px 0 32px', minHeight: 'calc(100vh - var(--header-h))', display: 'flex', flexDirection: 'column' }}>
