@@ -13,8 +13,10 @@ html, body, #root {
   -webkit-font-smoothing: antialiased;
 }
 
-/* overflow-x nur auf body — auf html würde iOS Safari window.scroll-Events blockieren */
-body, #root { max-width: 100%; overflow-x: hidden; }
+/* overflow-x nur auf body — auf html blockiert es iOS, auf #root würde overflow-y:auto erzwingen
+   und #root zum Scroll-Container machen (statt window → window.scrollY wäre immer 0) */
+body { max-width: 100%; overflow-x: hidden; }
+#root { max-width: 100%; }
 
 :root {
   --bg:           #FAF8F5;

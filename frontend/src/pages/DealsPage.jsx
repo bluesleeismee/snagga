@@ -234,38 +234,41 @@ export default function DealsPage() {
   const [bestPicks,    setBestPicks]    = useState(() => lsGet(LS_PICKS) || [])
   const [loading,      setLoading]      = useState(deals.length === 0)
   const [theme,        setTheme]        = useState(() => localStorage.getItem('sng_theme') || 'light')
-  const [headerHidden, setHeaderHidden] = useState(false)
-  const [navHeight,    setNavHeight]    = useState(0)
+  const navRef    = useRef(null)
+  const spacerRef = useRef(null)
   const lastScrollY = useRef(0)
-  const navRef      = useRef(null)
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
     localStorage.setItem('sng_theme', theme)
   }, [theme])
 
+  // Spacer height tracks nav height via ResizeObserver — no state, no re-render
   useEffect(() => {
-    const node = navRef.current
-    if (!node) return
-    setNavHeight(node.offsetHeight)
-    const ro = new ResizeObserver(() => setNavHeight(node.offsetHeight))
-    ro.observe(node)
+    const nav    = navRef.current
+    const spacer = spacerRef.current
+    if (!nav || !spacer) return
+    const update = () => { spacer.style.height = nav.offsetHeight + 'px' }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(nav)
     return () => ro.disconnect()
   }, [])
 
+  // Scroll-hide on mobile — direct DOM mutation, no React state, no re-render lag
   useEffect(() => {
-    if (isDesktop) { setHeaderHidden(false); return }
-    let ticking = false
+    const nav = navRef.current
+    if (!nav) return
+    if (isDesktop) { nav.style.transform = 'translateY(0)'; return }
+    let lastY = window.scrollY
     const handleScroll = () => {
-      if (ticking) return
-      ticking = true
-      requestAnimationFrame(() => {
-        const y = window.scrollY
-        if (y > lastScrollY.current && y > 80) setHeaderHidden(true)
-        else if (y < lastScrollY.current) setHeaderHidden(false)
-        lastScrollY.current = y
-        ticking = false
-      })
+      const y = window.scrollY
+      if (y > lastY && y > 80) {
+        nav.style.transform = 'translateY(-100%)'
+      } else if (y < lastY) {
+        nav.style.transform = 'translateY(0)'
+      }
+      lastY = y
     }
     window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
@@ -357,8 +360,9 @@ export default function DealsPage() {
         ref={navRef}
         style={{
           position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
-          transform: (!isDesktop && headerHidden) ? 'translateY(-100%)' : 'translateY(0)',
+          transform: 'translateY(0)',
           transition: 'transform 0.3s ease',
+          willChange: 'transform',
         }}
       >
 
@@ -548,7 +552,7 @@ export default function DealsPage() {
         </div>
       </div>
       </div>{/* end fixed nav wrapper */}
-      <div style={{ height: navHeight }} />{/* spacer = nav height */}
+      <div ref={spacerRef} />{/* spacer height set imperatively by ResizeObserver */}
 
       {/* ── MAIN ── */}
       <main style={{ maxWidth: 1840, width: '98%', margin: '0 auto', padding: isMobile ? '12px 0 24px' : '20px 0 32px', minHeight: 'calc(100vh - var(--header-h))', display: 'flex', flexDirection: 'column' }}>
