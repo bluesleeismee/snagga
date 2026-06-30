@@ -507,12 +507,7 @@ export default function DealsPage() {
               <button
                 key={cat}
                 onClick={() => {
-                  setSelectedCats(prev => {
-                    const next = new Set(prev)
-                    if (next.has(cat)) next.delete(cat)
-                    else next.add(cat)
-                    return next
-                  })
+                  setSelectedCats(prev => prev.has(cat) ? new Set() : new Set([cat]))
                   setSortBy('score')
                 }}
                 title={cat}
