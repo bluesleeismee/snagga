@@ -372,6 +372,7 @@ async def enrich_with_keepa(
 
 # ---------------------------------------------------------------------------
 # /product — Minimaler Preis-Check (stündlich, günstig)
+# Chunk-Grösse 20: Keepa lehnt /product mit stats=1 bei zu vielen ASINs (400)
 # ---------------------------------------------------------------------------
 
 async def fetch_current_prices(
@@ -393,8 +394,8 @@ async def fetch_current_prices(
         client = httpx.AsyncClient(timeout=30)
 
     try:
-        for start in range(0, len(asins), 100):
-            chunk = asins[start : start + 100]
+        for start in range(0, len(asins), 20):
+            chunk = asins[start : start + 20]
             try:
                 resp = await client.get(
                     f"{KEEPA_BASE}/product",
@@ -413,7 +414,7 @@ async def fetch_current_prices(
                 tokens = data.get("tokensLeft", "?")
                 print(f"  Keepa /product (Preis-Check): {len(chunk)} ASINs · {tokens} Tokens übrig")
             except Exception as e:
-                print(f"  Keepa /product Preis-Check Fehler: {e}")
+                print(f"  Keepa /product Preis-Check Fehler (chunk {start}): {e}")
                 continue
 
             IDX_BUYBOX  = 18

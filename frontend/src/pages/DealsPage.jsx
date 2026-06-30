@@ -245,9 +245,11 @@ export default function DealsPage() {
   }, [theme])
 
   useEffect(() => {
-    if (!navRef.current) return
-    const ro = new ResizeObserver(entries => setNavHeight(entries[0].contentRect.height))
-    ro.observe(navRef.current)
+    const node = navRef.current
+    if (!node) return
+    setNavHeight(node.offsetHeight)
+    const ro = new ResizeObserver(() => setNavHeight(node.offsetHeight))
+    ro.observe(node)
     return () => ro.disconnect()
   }, [])
 
