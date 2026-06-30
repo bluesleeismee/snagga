@@ -415,22 +415,32 @@ async def debug_category_children(cat_id: int):
 
 @app.get("/test-telegram")
 async def test_telegram():
-    from telegram import post_deal, TELEGRAM_TOKEN, TELEGRAM_CHANNEL
+    import httpx
+    from telegram import TELEGRAM_TOKEN, TELEGRAM_CHANNEL, _build_message
     if not TELEGRAM_TOKEN or not TELEGRAM_CHANNEL:
-        raise HTTPException(status_code=503, detail="TELEGRAM_BOT_TOKEN oder TELEGRAM_CHANNEL_ID fehlt in Env-Vars")
+        return {"ok": False, "error": "Env-Vars fehlen", "token_set": bool(TELEGRAM_TOKEN), "channel": TELEGRAM_CHANNEL}
     test_deal = {
         "asin":           "B0TEST00001",
         "name":           "snagga.de Telegram-Test — alles funktioniert!",
         "current_price":  19.99,
         "original_price": 39.99,
-        "deal_score":     95,
+        "deal_score":     999,
         "tag":            "Allzeittiefpreis",
         "category":       "Elektronik & Foto",
     }
-    success = await post_deal(test_deal)
-    if success:
-        return {"status": "ok", "message": "Testnachricht wurde gesendet — schau in deinen Telegram-Kanal!"}
-    raise HTTPException(status_code=500, detail="Senden fehlgeschlagen — Token oder Channel-ID prüfen")
+    text = _build_message(test_deal)
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(
+                f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
+                json={"chat_id": TELEGRAM_CHANNEL, "text": text, "parse_mode": "MarkdownV2"},
+            )
+            data = resp.json()
+            if data.get("ok"):
+                return {"ok": True, "message": "Testnachricht gesendet — schau in deinen Kanal!"}
+            return {"ok": False, "telegram_error": data.get("description"), "error_code": data.get("error_code"), "channel": TELEGRAM_CHANNEL}
+    except Exception as e:
+        return {"ok": False, "exception": str(e)}
 
 
 @app.api_route("/health", methods=["GET", "HEAD"])
