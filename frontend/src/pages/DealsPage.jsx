@@ -396,12 +396,31 @@ export default function DealsPage() {
             />
           </div>
 
-          {/* Theme toggle */}
+          {/* Telegram + Theme toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto', flexShrink: 0 }}>
+          <a
+            href="https://t.me/snagga_deals"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Deals auf Telegram abonnieren"
+            style={{
+              width: 38, height: 38, borderRadius: '50%',
+              border: '1px solid rgba(255,255,255,0.25)', background: '#fff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#153D68', transition: 'all 0.2s', textDecoration: 'none',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.85)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#fff' }}
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L7.19 13.367l-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.958.192z"/>
+            </svg>
+          </a>
           <button
             onClick={toggleTheme}
             title={theme === 'light' ? 'Dark Mode' : 'Light Mode'}
             style={{
-              flexShrink: 0, marginLeft: 'auto', width: 38, height: 38, borderRadius: '50%',
+              flexShrink: 0, width: 38, height: 38, borderRadius: '50%',
               border: '1px solid rgba(255,255,255,0.25)', background: '#fff',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               color: '#153D68', transition: 'all 0.2s', lineHeight: 1,
@@ -423,6 +442,7 @@ export default function DealsPage() {
               </svg>
             )}
           </button>
+          </div>
         </div>
       </header>
 
