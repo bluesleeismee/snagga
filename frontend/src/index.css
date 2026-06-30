@@ -9,11 +9,12 @@
 
 html, body, #root {
   height: 100%;
-  max-width: 100%;
-  overflow-x: hidden;
   font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+/* overflow-x nur auf body — auf html würde iOS Safari window.scroll-Events blockieren */
+body, #root { max-width: 100%; overflow-x: hidden; }
 
 :root {
   --bg:           #FAF8F5;
