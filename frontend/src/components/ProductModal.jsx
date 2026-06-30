@@ -309,6 +309,11 @@ export default function ProductModal({ deal, onClose }) {
               ) : null })()}
             </div>
 
+            <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, marginBottom: 12 }}>
+              * Affiliate-Hinweis: Als Amazon-Partner verdienen wir an qualifizierten Käufen —
+              für dich entstehen keine Mehrkosten. Der angezeigte Preis kann abweichen;
+              massgeblich ist der Preis bei Amazon zum Kaufzeitpunkt.
+            </p>
             <a
               href={cartUrl}
               target="_blank"
@@ -317,19 +322,16 @@ export default function ProductModal({ deal, onClose }) {
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
                 background: 'var(--accent)', color: '#fff',
                 padding: '16px 28px', fontSize: 14, fontWeight: 600,
-                textDecoration: 'none', transition: 'filter 0.15s', marginBottom: 10,
+                textDecoration: 'none', transition: 'filter 0.15s',
               }}
               onMouseEnter={e => e.currentTarget.style.filter = 'brightness(0.9)'}
               onMouseLeave={e => e.currentTarget.style.filter = ''}
             >
-              Zum Produkt
+              Zum Produkt auf Amazon
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12,5 19,12 12,19"/>
               </svg>
             </a>
-            <p style={{ fontSize: 10.5, color: 'var(--muted)', textAlign: 'center', lineHeight: 1.4 }}>
-              * Als Amazon-Partner verdienen wir an qualifizierten Käufen.
-            </p>
           </div>
         </div>
       </div>
