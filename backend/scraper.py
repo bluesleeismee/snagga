@@ -605,7 +605,33 @@ async def fetch_and_update_deals():
 
     print(f"  Fertig: {len(active_pool)} aktiv, {len(backup_pool)} Backup, "
           f"{min(TOP_PICKS_COUNT, len(active_pool))} Top Picks")
+
+    await _post_new_deals_to_telegram()
     return len(active_pool)
+
+
+async def _post_new_deals_to_telegram():
+    """Postet neue Top-Deals (telegram_posted IS NULL, score >= MIN) auf Telegram. Max 3/Run."""
+    from telegram import post_deal, MIN_SCORE
+    if not MIN_SCORE:
+        return
+    db = await get_pool()
+    async with db.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT asin, name, current_price, original_price, deal_score, tag, category "
+            "FROM products WHERE is_active=true AND telegram_posted IS NULL "
+            "AND deal_score >= $1 ORDER BY deal_score DESC LIMIT 3",
+            MIN_SCORE,
+        )
+    for row in rows:
+        success = await post_deal(dict(row))
+        if success:
+            async with db.acquire() as conn:
+                await conn.execute(
+                    "UPDATE products SET telegram_posted=$1 WHERE asin=$2",
+                    datetime.utcnow(), row["asin"],
+                )
+            await asyncio.sleep(2)  # Telegram: max 1 Msg/Sekunde pro Bot
 
 
 
