@@ -204,9 +204,16 @@ async def get_deals(
     if category and category == "Top Picks":
         where_clauses.append("is_top_pick = true")
     elif category and category != "Alle":
-        where_clauses.append(f"category = ${idx}")
-        params.append(category)
-        idx += 1
+        cat_list = [c.strip() for c in category.split(',') if c.strip()]
+        if len(cat_list) == 1:
+            where_clauses.append(f"category = ${idx}")
+            params.append(cat_list[0])
+            idx += 1
+        elif len(cat_list) > 1:
+            placeholders = ','.join(f'${idx + i}' for i in range(len(cat_list)))
+            where_clauses.append(f"category IN ({placeholders})")
+            params.extend(cat_list)
+            idx += len(cat_list)
 
     if search:
         where_clauses.append(f"(LOWER(name) LIKE ${idx} OR LOWER(brand) LIKE ${idx+1})")

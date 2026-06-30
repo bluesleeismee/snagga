@@ -226,7 +226,7 @@ function BestPicksSlider({ deals, onOpen }) {
 export default function DealsPage() {
   const { isMobile, isDesktop, width } = useBreakpoint()
   const [categories,   setCategories]   = useState(() => lsGet(LS_CATS)  || ['Alle'])
-  const [selectedCat,  setSelectedCat]  = useState('Alle')
+  const [selectedCats, setSelectedCats] = useState(new Set())   // leer = "Alle"
   const [sortBy,       setSortBy]       = useState('score')
   const [search,       setSearch]       = useState('')
   const [deals,        setDeals]        = useState(() => lsGet(LS_DEALS) || [])
@@ -261,12 +261,14 @@ export default function DealsPage() {
   }, [])
 
   const loadDeals = useCallback(() => {
-    const isDefault = selectedCat === 'Alle' && sortBy === 'score' && !search
+    const noFilter = selectedCats.size === 0
+    const isDefault = noFilter && sortBy === 'score' && !search
     if (!isDefault) setLoading(true)
     setError(null)
-    // "Neueste"-Chip: nur die 24 frischesten Deals, kein Overflow
-    const dealLimit = (sortBy === 'newest' && selectedCat === 'Alle') ? 24 : 500
-    api.deals({ category: selectedCat, sort_by: sortBy, search: search || undefined, limit: dealLimit })
+    // "Neueste"-Chip ohne Kategoriefilter: nur die 24 frischesten Deals
+    const dealLimit = (sortBy === 'newest' && noFilter) ? 24 : 500
+    const categoryParam = noFilter ? undefined : [...selectedCats].join(',')
+    api.deals({ category: categoryParam, sort_by: sortBy, search: search || undefined, limit: dealLimit })
       .then(data => {
         setDeals(data)
         setVisibleCount(60)
@@ -274,7 +276,7 @@ export default function DealsPage() {
         if (isDefault) lsSet(LS_DEALS, data)
       })
       .catch(e => { setError(e.message); setLoading(false) })
-  }, [selectedCat, sortBy, search])
+  }, [selectedCats, sortBy, search])
 
   useEffect(() => {
     const t = setTimeout(loadDeals, search ? 400 : 0)
@@ -398,25 +400,28 @@ export default function DealsPage() {
             </span>
           )}
           {/* "Alle" — always visible, never scrolls away */}
-          {['Alle'].map(cat => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCat(cat)}
-              style={{
-                padding: isMobile ? '6px 12px' : '7px 16px',
-                fontSize: 13, flexShrink: 0, borderRadius: 2,
-                border: '1px solid transparent',
-                background: cat === selectedCat ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.1)',
-                color: cat === selectedCat ? '#153D68' : '#fff',
-                fontWeight: cat === selectedCat ? 600 : 500,
-                transition: 'all 0.15s',
-              }}
-              onMouseEnter={e => { if (cat !== selectedCat) { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; e.currentTarget.style.color = '#fff' } }}
-              onMouseLeave={e => { if (cat !== selectedCat) { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'rgba(255,255,255,0.8)' } }}
-            >
-              {cat}
-            </button>
-          ))}
+          {(() => {
+            const isActive = selectedCats.size === 0 && sortBy !== 'newest'
+            return (
+              <button
+                key="alle"
+                onClick={() => { setSelectedCats(new Set()); setSortBy('score') }}
+                style={{
+                  padding: isMobile ? '6px 12px' : '7px 16px',
+                  fontSize: 13, flexShrink: 0, borderRadius: 2,
+                  border: '1px solid transparent',
+                  background: isActive ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.1)',
+                  color: isActive ? '#153D68' : '#fff',
+                  fontWeight: isActive ? 600 : 500,
+                  transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; e.currentTarget.style.color = '#fff' } }}
+                onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'rgba(255,255,255,0.8)' } }}
+              >
+                Alle
+              </button>
+            )
+          })()}
           <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.2)', flexShrink: 0 }} />
           {/* Rest — Desktop: umbrechen (max. 2 Zeilen), Mobile: horizontaler Scroll */}
           <div className="no-scroll" style={{
@@ -431,7 +436,7 @@ export default function DealsPage() {
             return (
               <button
                 key="neueste"
-                onClick={() => { setSortBy('newest'); setSelectedCat('Alle') }}
+                onClick={() => { setSortBy('newest'); setSelectedCats(new Set()) }}
                 style={{
                   padding: isMobile ? '6px 12px' : '7px 16px',
                   fontSize: 13, flexShrink: 0, borderRadius: 2,
@@ -451,11 +456,19 @@ export default function DealsPage() {
           })()}
           <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.15)', flexShrink: 0 }} />
           {sortCats(categories).map(cat => {
-            const isActive = cat === selectedCat
+            const isActive = selectedCats.has(cat)
             return (
               <button
                 key={cat}
-                onClick={() => { setSelectedCat(cat); setSortBy('score') }}
+                onClick={() => {
+                  setSelectedCats(prev => {
+                    const next = new Set(prev)
+                    if (next.has(cat)) next.delete(cat)
+                    else next.add(cat)
+                    return next
+                  })
+                  setSortBy('score')
+                }}
                 title={cat}
                 style={{
                   padding: isMobile ? '6px 12px' : '7px 16px',
@@ -505,7 +518,14 @@ export default function DealsPage() {
 
         {/* Grid title */}
         <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 22, color: 'var(--text)' }}>
-          {selectedCat !== 'Alle' ? `${selectedCat} Deals` : search ? `Suche: "${search}"` : 'Alle Picks'}
+          {search
+            ? `Suche: "${search}"`
+            : selectedCats.size === 1
+              ? `${catLabel([...selectedCats][0])} Deals`
+              : selectedCats.size > 1
+                ? [...selectedCats].map(catLabel).join(' + ')
+                : sortBy === 'newest' ? 'Neueste Picks' : 'Alle Picks'
+          }
           {!loading && (
             <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--muted)', marginLeft: 10 }}>
               ({deals.length})
