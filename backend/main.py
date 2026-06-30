@@ -19,6 +19,11 @@ from scraper import fetch_and_update_deals, generate_history
 from scheduler import create_scheduler
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+ADMIN_TOKEN  = os.getenv("ADMIN_TOKEN", "")
+
+def _check_admin(token: str = Query(default="")):
+    if not ADMIN_TOKEN or token != ADMIN_TOKEN:
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 # Rate-Limiting für /refresh
 _last_refresh: float = 0
@@ -263,8 +268,9 @@ async def get_categories():
 
 
 @app.post("/refresh")
-async def refresh_deals():
+async def refresh_deals(token: str = Query(default="")):
     """Manuelles Refresh — max. alle 5 Minuten."""
+    _check_admin(token)
     global _last_refresh
     now = time.time()
     if now - _last_refresh < REFRESH_COOLDOWN:
@@ -282,8 +288,9 @@ async def refresh_deals():
 
 
 @app.get("/debug/keepa-cats")
-async def debug_keepa_cats():
+async def debug_keepa_cats(token: str = Query(default="")):
     """Gibt rootCat-Verteilung + avg-Datenverfügbarkeit aus Keepa /deal zurück."""
+    _check_admin(token)
     import os, json, httpx
     from collections import Counter
     KEEPA_KEY = os.getenv("KEEPA_API_KEY", "")
@@ -352,8 +359,9 @@ async def debug_keepa_cats():
 
 
 @app.get("/debug/category-tree")
-async def debug_category_tree():
+async def debug_category_tree(token: str = Query(default="")):
     """Holt den kompletten Amazon-DE-Kategoriebaum von Keepa."""
+    _check_admin(token)
     import os, httpx
     KEEPA_KEY = os.getenv("KEEPA_API_KEY", "")
     if not KEEPA_KEY:
@@ -384,8 +392,9 @@ async def debug_category_tree():
 
 
 @app.get("/debug/category-children/{cat_id}")
-async def debug_category_children(cat_id: int):
+async def debug_category_children(cat_id: int, token: str = Query(default="")):
     """Holt Unterkategorien einer bestimmten Kategorie."""
+    _check_admin(token)
     import os, httpx
     KEEPA_KEY = os.getenv("KEEPA_API_KEY", "")
     if not KEEPA_KEY:
@@ -411,13 +420,6 @@ async def debug_category_children(cat_id: int):
         "count": len(result),
         "categories": result,
     }
-
-
-ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
-
-def _check_admin(token: str = Query(default="")):
-    if not ADMIN_TOKEN or token != ADMIN_TOKEN:
-        raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 @app.get("/admin/mark-all-posted")
