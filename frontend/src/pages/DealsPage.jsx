@@ -261,7 +261,8 @@ export default function DealsPage() {
   }, [])
 
   const loadDeals = useCallback(() => {
-    const noFilter = selectedCats.size === 0
+    const knownCats = sortCats(categories)
+    const noFilter = selectedCats.size === 0 || selectedCats.size >= knownCats.length
     const isDefault = noFilter && sortBy === 'score' && !search
     if (!isDefault) setLoading(true)
     setError(null)
@@ -276,7 +277,7 @@ export default function DealsPage() {
         if (isDefault) lsSet(LS_DEALS, data)
       })
       .catch(e => { setError(e.message); setLoading(false) })
-  }, [selectedCats, sortBy, search])
+  }, [selectedCats, sortBy, search, categories])
 
   useEffect(() => {
     const t = setTimeout(loadDeals, search ? 400 : 0)
