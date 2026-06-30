@@ -95,7 +95,7 @@ async def fetch_keepa_deals(
     selection = {
         "page":                page,
         "domainId":            domain,
-        "priceTypes":          0,                   # 0 = alle Preistypen
+        "priceTypes":          [0, 10, 18],          # 0=Amazon, 10=New FBA, 18=BuyBox
         "deltaPercentRange":   [-100, -delta_pct],  # mind. X% gefallen
         "dateRange":           2,                   # letzte 3 Tage
         "minRating":           min_rating,          # 40 = 4.0 Sterne (×10)
@@ -319,14 +319,17 @@ async def enrich_with_keepa(
     asins:  list[str],
     domain: int = 3,
     client: httpx.AsyncClient | None = None,
+    new_asins: set[str] | None = None,
 ) -> dict[str, dict]:
     """
     Deep-Sync: vollständige Produktdaten für eine Liste von ASINs.
+    new_asins: ASINs die noch keine history haben → history=1 nur für diese.
     Gibt {asin: data_dict} zurück.
     """
     if not KEEPA_KEY or not asins:
         return {}
 
+    new_set = new_asins or set()
     results: dict[str, dict] = {}
     own_client = client is None
     if own_client:
@@ -335,6 +338,7 @@ async def enrich_with_keepa(
     try:
         for start in range(0, len(asins), 100):
             chunk = asins[start : start + 100]
+            needs_history = any(a in new_set for a in chunk)
             try:
                 resp = await client.get(
                     f"{KEEPA_BASE}/product",
@@ -343,7 +347,7 @@ async def enrich_with_keepa(
                         "domain":  domain,
                         "asin":    ",".join(chunk),
                         "stats":   1,
-                        "history": 1,
+                        "history": 1 if needs_history else 0,
                         "rating":  1,
                     },
                 )

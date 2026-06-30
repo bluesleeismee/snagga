@@ -297,15 +297,16 @@ async def hourly_keepa_price_check():
     now = datetime.utcnow()
 
     async with db.acquire() as conn:
+        # Tier-Staffelung: Top 100 (deal_score) stündlich, Rest alle 4h → ~60% Token-Einsparung
         active = await conn.fetch(
             "SELECT asin, current_price, avg90_price, avg180_price, all_time_low, "
             "category, rating, reviews, sales_rank FROM products "
             "WHERE is_active=true AND ("
-            "  is_top_pick = true "
-            "  OR is_volatile = true "
-            "  OR tag = 'Allzeittiefpreis' "
-            "  OR last_checked IS NULL "
-            "  OR last_checked < NOW() - INTERVAL '3 hours'"
+            "  last_checked IS NULL "
+            "  OR (deal_score >= (SELECT PERCENTILE_CONT(0.8) WITHIN GROUP (ORDER BY deal_score) "
+            "                     FROM products WHERE is_active=true) "
+            "      AND last_checked < NOW() - INTERVAL '1 hour') "
+            "  OR last_checked < NOW() - INTERVAL '4 hours'"
             ")"
         )
 
@@ -641,17 +642,19 @@ async def nightly_deep_sync():
 
     async with db.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT asin FROM products WHERE is_active=true "
+            "SELECT asin, last_deep_sync FROM products WHERE is_active=true "
             "ORDER BY deal_score DESC LIMIT $1",
             DEEPSYNC_LIMIT,
         )
     asins = [r["asin"] for r in rows]
+    # Neue ASINs (noch nie deep-synced) → brauchen history=1
+    new_asins = {r["asin"] for r in rows if r["last_deep_sync"] is None}
     if not asins:
         print("  Keine Deals für Deep-Sync gefunden.")
         return
 
-    print(f"  Deep-Sync für {len(asins)} ASINs …")
-    keepa_data = await enrich_with_keepa(asins, domain=3)
+    print(f"  Deep-Sync für {len(asins)} ASINs ({len(new_asins)} neu mit history) …")
+    keepa_data = await enrich_with_keepa(asins, domain=3, new_asins=new_asins)
     now        = datetime.utcnow()
 
     async with db.acquire() as conn:
@@ -682,6 +685,7 @@ async def nightly_deep_sync():
                     tag             = $13,
                     score_breakdown = $14,
                     last_checked    = $15,
+                    last_deep_sync  = $15,
                     image_url       = CASE WHEN $16 != '' THEN $16 ELSE image_url END
                 WHERE asin = $1
             """,
