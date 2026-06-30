@@ -235,7 +235,9 @@ export default function DealsPage() {
   const [loading,      setLoading]      = useState(deals.length === 0)
   const [theme,        setTheme]        = useState(() => localStorage.getItem('sng_theme') || 'light')
   const [headerHidden, setHeaderHidden] = useState(false)
+  const [navHeight,    setNavHeight]    = useState(0)
   const lastScrollY = useRef(0)
+  const navRef      = useRef(null)
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -243,7 +245,14 @@ export default function DealsPage() {
   }, [theme])
 
   useEffect(() => {
-    if (isDesktop) return
+    if (!navRef.current) return
+    const ro = new ResizeObserver(entries => setNavHeight(entries[0].contentRect.height))
+    ro.observe(navRef.current)
+    return () => ro.disconnect()
+  }, [])
+
+  useEffect(() => {
+    if (isDesktop) { setHeaderHidden(false); return }
     const handleScroll = () => {
       const y = window.scrollY
       if (y > lastScrollY.current && y > 80) setHeaderHidden(true)
@@ -335,12 +344,15 @@ export default function DealsPage() {
     >
       {selectedDeal && <ProductModal deal={selectedDeal} onClose={closeModal} />}
 
-      {/* ── HEADER + FILTERBAR WRAPPER (hide on scroll down, mobile/tablet only) ── */}
-      <div style={{
-        position: 'sticky', top: 0, zIndex: 100,
-        transform: (!isDesktop && headerHidden) ? 'translateY(-100%)' : 'translateY(0)',
-        transition: 'transform 0.3s ease',
-      }}>
+      {/* ── HEADER + FILTERBAR WRAPPER ── */}
+      <div
+        ref={navRef}
+        style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
+          transform: (!isDesktop && headerHidden) ? 'translateY(-100%)' : 'translateY(0)',
+          transition: 'transform 0.3s ease',
+        }}
+      >
 
       {/* ── HEADER ── */}
       <header style={{
@@ -527,7 +539,8 @@ export default function DealsPage() {
         </div>
         </div>
       </div>
-      </div>{/* end sticky wrapper */}
+      </div>{/* end fixed nav wrapper */}
+      <div style={{ height: navHeight }} />{/* spacer = nav height */}
 
       {/* ── MAIN ── */}
       <main style={{ maxWidth: 1840, width: '98%', margin: '0 auto', padding: isMobile ? '12px 0 24px' : '20px 0 32px', minHeight: 'calc(100vh - var(--header-h))', display: 'flex', flexDirection: 'column' }}>
