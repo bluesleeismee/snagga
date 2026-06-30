@@ -404,17 +404,24 @@ export default function DealsPage() {
             title="Deals auf Telegram abonnieren"
             style={{
               marginLeft: 'auto', marginRight: 138, flexShrink: 0,
-              width: 38, height: 38, borderRadius: '50%',
-              border: '1px solid rgba(255,255,255,0.25)', background: '#fff',
+              width: 38, height: 38,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#153D68', transition: 'all 0.2s', textDecoration: 'none',
+              textDecoration: 'none', transition: 'opacity 0.2s', opacity: 1,
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.85)' }}
-            onMouseLeave={e => { e.currentTarget.style.background = '#fff' }}
+            onMouseEnter={e => { e.currentTarget.style.opacity = '0.8' }}
+            onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M22 2L11 13"/>
-              <path d="M22 2L15 22L11 13L2 9L22 2Z"/>
+            <svg width="38" height="38" viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="tg-g" x1="120" y1="0" x2="120" y2="240" gradientUnits="userSpaceOnUse">
+                  <stop offset="0" stopColor="#2AABEE"/>
+                  <stop offset="1" stopColor="#229ED9"/>
+                </linearGradient>
+              </defs>
+              <circle cx="120" cy="120" r="120" fill="url(#tg-g)"/>
+              <path d="M81.229 128.772l14.237 39.406s1.78 3.687 3.686 3.687c1.906 0 30.255-29.493 30.255-29.493l31.485-60.32L81.229 128.772z" fill="#c8daea"/>
+              <path d="M100.106 138.878l-2.733 29.046s-1.144 8.9 7.754 0l17.418-15.788-22.439-13.258z" fill="#a9c9dd"/>
+              <path d="M81.486 130.178l-40.232-13.309s-4.806-1.948-3.268-6.364c.319-.913 1.955-2.152 5.805-4.298 18.032-10.009 135.01-50.899 135.01-50.899s4.406-1.485 7.006-.5c1.32.485 2.16 1.028 2.87 3.148.253.763.399 2.378.38 3.968-.018 1.149-.134 2.21-.27 3.574-1.378 13.85-42.524 117.178-42.524 117.178s-2.461 6.121-7.134 6.292c-2.008.073-4.444-.586-6.787-2.63-6.914-5.992-30.818-22.067-36.287-25.847-.126-.088-.229-.196-.32-.313-.34-.43-.546-1.065.24-1.788 0 0 41.795-37.276 42.966-41.369.087-.3-.232-.449-.667-.317-4.31 1.588-49.816 30.783-55.593 34.173z" fill="white"/>
             </svg>
           </a>
           {/* Theme toggle */}
