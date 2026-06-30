@@ -604,7 +604,7 @@ export default function DealsPage() {
 
         {/* ── GRID ── */}
         {!loading && !error && deals.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: isMobile ? 14 : 24 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: isMobile ? 14 : 24 }}>
             {deals.slice(0, visibleCount).map(deal => (
               <DealCard key={deal.asin} deal={deal} onClick={() => openDeal(deal)} />
             ))}
