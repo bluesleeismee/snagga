@@ -263,7 +263,7 @@ export default function ProductModal({ deal, onClose }) {
               </span>
               {deal.original_price > deal.current_price && (
                 <span
-                  title="Durchschnittspreis der letzten 6 Monate (AVG180)"
+                  title="Durchschnittspreis der letzten 6 Monate"
                   style={{ fontSize: 16, textDecoration: 'line-through', color: 'var(--muted)', cursor: 'help' }}
                 >
                   {fmtPrice(deal.original_price)}
