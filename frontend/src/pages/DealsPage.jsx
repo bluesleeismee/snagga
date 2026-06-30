@@ -644,7 +644,7 @@ export default function DealsPage() {
               snagga<span style={{ color: 'var(--accent)' }}>.de</span>
             </a>
             <p style={{ fontSize: 12, color: '#fff', marginTop: 6 }}>
-              Täglich kuratierte Amazon-Deals · Affiliate-Partner von Amazon
+              Täglich ausgewählte Amazon-Deals · Affiliate-Partner von Amazon
             </p>
           </div>
           <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? 12 : 28, flexWrap: 'wrap' }}>
