@@ -629,6 +629,7 @@ export default function DealsPage() {
             {[
               ['Impressum', '/legal#impressum'],
               ['Datenschutz', '/legal#datenschutz'],
+              ['Nutzungsbedingungen', '/legal#nutzung'],
               ['Affiliate-Hinweis', '/legal#affiliate'],
               ['Preisangaben', '/legal#preise'],
             ].map(([label, href]) => (

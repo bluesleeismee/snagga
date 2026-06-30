@@ -69,17 +69,26 @@ export default function LegalPage() {
           </SubSection>
 
           <SubSection title="Hosting & Server-Logs">
-            Diese Website wird über Vercel (Frontend) und Render (Backend, USA) gehostet.
+            Diese Website wird über Vercel (Frontend, EU/USA) und Render (Backend, USA) gehostet.
             Beim Aufruf werden technisch bedingt IP-Adressen kurzzeitig in Server-Logs erfasst
-            und danach automatisch gelöscht. Es gelten die Datenschutzrichtlinien von{' '}
+            und nach spätestens 7 Tagen automatisch gelöscht. Es gelten die Datenschutzrichtlinien von{' '}
             <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>Vercel</a>{' '}
             und <a href="https://render.com/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>Render</a>.
-            Beide Anbieter sind nach EU-Standardvertragsklauseln (SCCs) zertifiziert.
+            Beide Anbieter verarbeiten Daten auf Basis von EU-Standardvertragsklauseln (SCCs)
+            und erfüllen die Anforderungen der DSGVO.
           </SubSection>
 
-          <SubSection title="Preisdaten">
-            Preisdaten werden über einen eigenen Backend-Dienst erhoben und verarbeitet.
-            Es werden keine Nutzerdaten an Dritte weitergegeben.
+          <SubSection title="Lokale Datenspeicherung (localStorage)">
+            Nutzereinstellungen (z. B. Dark/Light-Mode) sowie temporäre Preisdaten-Caches
+            werden ausschliesslich lokal im Browser gespeichert (localStorage) und
+            nie an Server übertragen. Diese Speicherung ist funktional notwendig und
+            erfordert keine Einwilligung.
+          </SubSection>
+
+          <SubSection title="Preisdaten & Produktinformationen">
+            Preisdaten werden über die Keepa-API bezogen und in einem eigenen Backend-Dienst
+            verarbeitet. Es werden keine Nutzerdaten an Dritte weitergegeben.
+            Produktbilder und -informationen stammen aus dem Amazon-Partnerprogramm.
           </SubSection>
 
           <SubSection title="Rechtsgrundlage">
@@ -118,6 +127,33 @@ export default function LegalPage() {
           </SubSection>
         </Section>
 
+        <Section id="nutzung" title="Nutzungsbedingungen">
+          <SubSection title="Haftungsausschluss">
+            snagga.de stellt Preisinformationen und Deal-Hinweise ohne Gewähr zur Verfügung.
+            Alle Angaben sind unverbindlich. snagga.de haftet nicht für Schäden, die durch
+            die Nutzung der bereitgestellten Informationen entstehen, insbesondere nicht für
+            Preisabweichungen, verpasste Angebote oder Kaufentscheidungen.
+          </SubSection>
+
+          <SubSection title="Haftung für Links">
+            Die auf snagga.de verlinkten externen Seiten (insbesondere amazon.de) liegen
+            ausserhalb unseres Einflussbereichs. Für die Inhalte und Datenschutzpraktiken
+            verlinkter Seiten übernimmt snagga.de keine Haftung.
+          </SubSection>
+
+          <SubSection title="Urheberrecht">
+            Das Design und die eigenen Inhalte von snagga.de sind urheberrechtlich geschützt.
+            Produktbilder und Produktinformationen stammen aus dem Amazon-Partnerprogramm
+            und unterliegen den Nutzungsbedingungen von Amazon.
+          </SubSection>
+
+          <SubSection title="Verfügbarkeit" last>
+            snagga.de bemüht sich um eine kontinuierliche Verfügbarkeit, übernimmt jedoch
+            keine Garantie für Erreichbarkeit oder Aktualität. Wartungsarbeiten und technisch
+            bedingte Ausfälle sind vorbehalten.
+          </SubSection>
+        </Section>
+
         <Section id="preise" title="Preisangaben">
           <p>
             Alle Preise verstehen sich inkl. der gesetzlichen Mehrwertsteuer (MwSt.).
@@ -144,9 +180,19 @@ export default function LegalPage() {
             E-Mail: <a href="mailto:contact@snagga.de" style={{ color: 'var(--accent)' }}>contact@snagga.de</a>
           </p>
           <p>
-            snagga.de ist ein kommerziell betriebenes Angebot mit Sitz in der Schweiz.
-            Das Angebot steht in keiner direkten Verbindung zu Amazon.
+            Geschäftsform: Einzelunternehmen<br />
+            Umsatzsteuer: nicht umsatzsteuerpflichtig
+          </p>
+          <p>
+            snagga.de ist ein kommerziell betriebenes, unabhängiges Affiliate-Vermittlungsportal
+            mit Sitz in der Schweiz. snagga.de steht in keinem direkten Dienst- oder
+            Vertragsverhältnis zu Amazon und handelt nicht im Auftrag von Amazon.
             Teilnahme am Amazon-Partnerprogramm (Partner-Tag: snagga-21).
+          </p>
+          <p>
+            Produktinformationen und Preisdaten werden über die Keepa-API bezogen.
+            Produktbilder stammen aus dem Amazon-Partnerprogramm und sind urheberrechtlich
+            geschützt.
           </p>
           <p style={{ marginBottom: 0, color: 'var(--muted)', fontSize: 13 }}>
             <strong style={{ color: 'var(--muted)' }}>Online-Streitbeilegung (EU):</strong>{' '}
