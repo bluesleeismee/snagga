@@ -6,10 +6,11 @@ import { api } from '../api.js'
 import { fmtPrice, discount } from '../utils.js'
 
 const SORTS = [
-  { id: 'score',     label: 'Bester Deal' },
-  { id: 'discount',  label: 'Grösster Rabatt' },
-  { id: 'price_asc', label: 'Günstigste' },
-  { id: 'newest',    label: 'Neu' },
+  { id: 'score',      label: 'Bester Deal' },
+  { id: 'discount',   label: 'Grösster Rabatt' },
+  { id: 'price_asc',  label: 'Günstigste' },
+  { id: 'price_desc', label: 'Teuerste' },
+  { id: 'newest',     label: 'Neueste' },
 ]
 
 // Kurznamen nur für die Anzeige — interne Kategorie/DB bleibt unverändert.
@@ -402,7 +403,7 @@ export default function DealsPage() {
             flexWrap: isMobile ? 'nowrap' : 'wrap',
             rowGap: 6, overscrollBehaviorX: 'contain',
           }}>
-          {categories.filter(c => c !== 'Alle').map(cat => {
+          {categories.filter(c => c !== 'Alle' && c !== 'Top Picks').map(cat => {
             const isActive = cat === selectedCat
             return (
               <button
