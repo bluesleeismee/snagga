@@ -78,11 +78,15 @@ export default function DealCard({ deal, onClick }) {
       }}>
         {/* Discount badge */}
         {disc > 0 && (
-          <div style={{
-            position: 'absolute', top: 14, left: 14, zIndex: 2,
-            background: 'var(--accent)', color: '#fff',
-            padding: '3px 8px', fontSize: 11, fontWeight: 600, letterSpacing: 0.5,
-          }}>
+          <div
+            title={`–${disc}% verglichen mit dem Durchschnittspreis der letzten 6 Monate`}
+            style={{
+              position: 'absolute', top: 14, left: 14, zIndex: 2,
+              background: 'var(--accent)', color: '#fff',
+              padding: '3px 8px', fontSize: 11, fontWeight: 600, letterSpacing: 0.5,
+              cursor: 'help',
+            }}
+          >
             –{disc}%
           </div>
         )}
