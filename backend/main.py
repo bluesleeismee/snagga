@@ -413,6 +413,26 @@ async def debug_category_children(cat_id: int):
     }
 
 
+@app.get("/test-telegram")
+async def test_telegram():
+    from telegram import post_deal, TELEGRAM_TOKEN, TELEGRAM_CHANNEL
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHANNEL:
+        raise HTTPException(status_code=503, detail="TELEGRAM_BOT_TOKEN oder TELEGRAM_CHANNEL_ID fehlt in Env-Vars")
+    test_deal = {
+        "asin":           "B0TEST00001",
+        "name":           "snagga.de Telegram-Test — alles funktioniert!",
+        "current_price":  19.99,
+        "original_price": 39.99,
+        "deal_score":     95,
+        "tag":            "Allzeittiefpreis",
+        "category":       "Elektronik & Foto",
+    }
+    success = await post_deal(test_deal)
+    if success:
+        return {"status": "ok", "message": "Testnachricht wurde gesendet — schau in deinen Telegram-Kanal!"}
+    raise HTTPException(status_code=500, detail="Senden fehlgeschlagen — Token oder Channel-ID prüfen")
+
+
 @app.api_route("/health", methods=["GET", "HEAD"])
 async def health():
     pool = await get_pool()
