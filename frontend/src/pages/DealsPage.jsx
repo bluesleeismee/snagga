@@ -29,6 +29,26 @@ const CAT_LABELS = {
 }
 const catLabel = (c) => CAT_LABELS[c] || c
 
+// Gewünschte Reihenfolge der Kategorie-Chips
+const CAT_ORDER = [
+  'Elektronik & Foto',
+  'Computer & Zubehör',
+  'Küche, Haushalt & Wohnen',
+  'Auto & Motorrad',
+  'Sport & Freizeit',
+  'Games',
+  'Baumarkt',
+  'Musikinstrumente & DJ-Equipment',
+  'Drogerie & Körperpflege',
+  'Kamera & Foto',
+  'Elektro-Großgeräte',
+]
+const sortCats = (cats) => {
+  const known  = CAT_ORDER.filter(c => cats.includes(c))
+  const others = cats.filter(c => !CAT_ORDER.includes(c) && c !== 'Alle' && c !== 'Top Picks')
+  return [...known, ...others]
+}
+
 const LS_DEALS = 'sng_deals_v2'
 const LS_CATS  = 'sng_cats_v2'
 const LS_PICKS = 'sng_picks_v2'
@@ -403,12 +423,37 @@ export default function DealsPage() {
             flexWrap: isMobile ? 'nowrap' : 'wrap',
             rowGap: 6, overscrollBehaviorX: 'contain',
           }}>
-          {categories.filter(c => c !== 'Alle' && c !== 'Top Picks').map(cat => {
+          {/* Neueste — Sortier-Shortcut */}
+          {(() => {
+            const isActive = sortBy === 'newest'
+            return (
+              <button
+                key="neueste"
+                onClick={() => { setSortBy('newest'); setSelectedCat('Alle') }}
+                style={{
+                  padding: isMobile ? '6px 12px' : '7px 16px',
+                  fontSize: 13, flexShrink: 0, borderRadius: 2,
+                  border: '1px solid transparent',
+                  background: isActive ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.1)',
+                  color: isActive ? '#153D68' : '#fff',
+                  fontWeight: isActive ? 600 : 500,
+                  transition: 'all 0.15s',
+                  whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = 'rgba(255,255,255,0.2)' } }}
+                onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' } }}
+              >
+                Neueste
+              </button>
+            )
+          })()}
+          <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.15)', flexShrink: 0 }} />
+          {sortCats(categories).map(cat => {
             const isActive = cat === selectedCat
             return (
               <button
                 key={cat}
-                onClick={() => setSelectedCat(cat)}
+                onClick={() => { setSelectedCat(cat); setSortBy('score') }}
                 title={cat}
                 style={{
                   padding: isMobile ? '6px 12px' : '7px 16px',
