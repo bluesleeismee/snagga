@@ -410,7 +410,6 @@ async def fetch_current_prices(
                         "stats":   1,   # aktueller Preis + Durchschnitte
                         "history": 0,   # keine volle Preishistorie → günstiger
                         "rating":  0,
-                        "offers":  0,
                     },
                 )
                 resp.raise_for_status()
