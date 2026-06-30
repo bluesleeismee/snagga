@@ -264,7 +264,9 @@ export default function DealsPage() {
     const isDefault = selectedCat === 'Alle' && sortBy === 'score' && !search
     if (!isDefault) setLoading(true)
     setError(null)
-    api.deals({ category: selectedCat, sort_by: sortBy, search: search || undefined, limit: 500 })
+    // "Neueste"-Chip: nur die 24 frischesten Deals, kein Overflow
+    const dealLimit = (sortBy === 'newest' && selectedCat === 'Alle') ? 24 : 500
+    api.deals({ category: selectedCat, sort_by: sortBy, search: search || undefined, limit: dealLimit })
       .then(data => {
         setDeals(data)
         setVisibleCount(60)
