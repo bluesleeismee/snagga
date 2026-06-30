@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { fmtPrice, discount, fmtAge, AGE_COLORS } from '../utils.js'
 
 const TAG_COLORS = {
@@ -34,27 +34,16 @@ async function shareOrCopy(deal) {
 }
 
 export default function DealCard({ deal, onClick }) {
-  const [imgError,  setImgError]  = useState(false)
-  const [hovered,   setHovered]   = useState(false)
-  const [secondImg, setSecondImg] = useState(null)
-  const [copied,    setCopied]    = useState(false)
+  const [imgError, setImgError] = useState(false)
+  const [hovered,  setHovered]  = useState(false)
+  const [copied,   setCopied]   = useState(false)
 
   const disc = discount(deal.current_price, deal.original_price)
   const age  = fmtAge(deal.last_updated)
   const tag  = deal.tag || ''
   const tagStyle = TAG_COLORS[tag] || null
 
-  useEffect(() => {
-    if (!deal.asin) return
-    const url = `https://images-na.ssl-images-amazon.com/images/P/${deal.asin}.02.LZZZZZZZ.jpg`
-    const img = new Image()
-    img.onload  = () => setSecondImg(url)
-    img.onerror = () => setSecondImg(null)
-    img.src = url
-  }, [deal.asin])
-
-  const showSecond = hovered && secondImg
-  const imgSrc     = showSecond ? secondImg : (deal.image_url || null)
+  const imgSrc = deal.image_url || null
 
   const handleShare = async (e) => {
     e.stopPropagation()
