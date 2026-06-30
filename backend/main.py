@@ -413,9 +413,16 @@ async def debug_category_children(cat_id: int):
     }
 
 
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
+
+def _check_admin(token: str = Query(default="")):
+    if not ADMIN_TOKEN or token != ADMIN_TOKEN:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
 @app.get("/admin/mark-all-posted")
-async def mark_all_posted():
-    """Einmalig: alle bestehenden Deals als telegram_posted markieren, damit nur neue Deals gepostet werden."""
+async def mark_all_posted(token: str = Query(default="")):
+    _check_admin(token)
     pool = await get_pool()
     async with pool.acquire() as conn:
         result = await conn.execute(
@@ -426,7 +433,8 @@ async def mark_all_posted():
 
 
 @app.get("/test-telegram")
-async def test_telegram():
+async def test_telegram(token: str = Query(default="")):
+    _check_admin(token)
     import httpx
     from telegram import TELEGRAM_TOKEN, TELEGRAM_CHANNEL, _build_message
     if not TELEGRAM_TOKEN or not TELEGRAM_CHANNEL:
