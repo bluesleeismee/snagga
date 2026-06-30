@@ -256,13 +256,16 @@ export default function DealsPage() {
   }, [])
 
   // Scroll-hide on mobile — direct DOM mutation, no React state, no re-render lag
+  // Use document+capture so we catch scroll regardless of which element is the container
   useEffect(() => {
     const nav = navRef.current
     if (!nav) return
-    if (isDesktop) { nav.style.transform = 'translateY(0)'; return }
-    let lastY = window.scrollY
+    nav.style.transform = 'translateY(0)'
+    if (isDesktop) return
+    const getY = () => window.scrollY ?? document.documentElement.scrollTop ?? document.body.scrollTop ?? 0
+    let lastY = getY()
     const handleScroll = () => {
-      const y = window.scrollY
+      const y = getY()
       if (y > lastY && y > 80) {
         nav.style.transform = 'translateY(-100%)'
       } else if (y < lastY) {
@@ -270,8 +273,8 @@ export default function DealsPage() {
       }
       lastY = y
     }
-    window.addEventListener('scroll', handleScroll, { passive: true })
-    return () => window.removeEventListener('scroll', handleScroll)
+    document.addEventListener('scroll', handleScroll, { passive: true, capture: true })
+    return () => document.removeEventListener('scroll', handleScroll, { capture: true })
   }, [isDesktop])
 
   const toggleTheme = () => setTheme(t => t === 'light' ? 'dark' : 'light')
@@ -360,7 +363,6 @@ export default function DealsPage() {
         ref={navRef}
         style={{
           position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
-          transform: 'translateY(0)',
           transition: 'transform 0.3s ease',
           willChange: 'transform',
         }}

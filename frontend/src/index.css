@@ -13,10 +13,10 @@ html, body, #root {
   -webkit-font-smoothing: antialiased;
 }
 
-/* overflow-x nur auf body — auf html blockiert es iOS, auf #root würde overflow-y:auto erzwingen
-   und #root zum Scroll-Container machen (statt window → window.scrollY wäre immer 0) */
-body { max-width: 100%; overflow-x: hidden; }
-#root { max-width: 100%; }
+/* overflow-x: clip verhindert horizontales Scrollen OHNE einen neuen Scroll-Container zu erzeugen
+   (overflow-x: hidden würde overflow-y: auto erzwingen → body/root wird Scroll-Container → window.scrollY = 0) */
+html { overflow-x: clip; }
+body, #root { width: 100%; }
 
 :root {
   --bg:           #FAF8F5;
