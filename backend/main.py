@@ -2,7 +2,9 @@
 Snagga — FastAPI Backend
 Endpoints: GET /deals  GET /product/{asin}  GET /categories  POST /refresh
 """
+import html
 import os
+import re
 import time
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -10,6 +12,7 @@ from typing import Optional
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 load_dotenv()
@@ -250,6 +253,67 @@ async def get_product(asin: str):
         if not row:
             raise HTTPException(status_code=404, detail="Produkt nicht gefunden")
         return await row_to_product(row, conn, history_limit=180)
+
+
+_ASIN_RE = re.compile(r"^[A-Za-z0-9]{10}$")
+
+
+@app.get("/share/{asin}", response_class=HTMLResponse)
+async def share_deal(asin: str):
+    """
+    Server-gerenderte Preview für geteilte Deal-Links (Telegram, WhatsApp, native
+    Share-Sheets). Crawler/Link-Unfurler lesen nur die statischen OG-Tags unten
+    und führen kein JS aus; echte Besucher werden per Meta-Refresh + JS sofort
+    zur eigentlichen SPA-Seite mit dem Produkt-Modal weitergeleitet.
+    """
+    target = "https://snagga.de/"
+    if _ASIN_RE.match(asin):
+        target = f"https://snagga.de/?asin={asin}"
+
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT name, image_url, current_price, original_price, tag "
+                "FROM products WHERE asin=$1", asin,
+            )
+        if row:
+            name     = html.escape((row["name"] or "Deal")[:90])
+            current  = row["current_price"]    or 0
+            original = row["original_price"]   or 0
+            tag      = html.escape(row["tag"] or "")
+            price_txt = f"{current:.2f}".replace(".", ",") + " €"
+            disc = round((original - current) / original * 100) if original > current else 0
+
+            title = f"{name} — {price_txt}" + (f" (-{disc}%)" if disc > 0 else "")
+            original_txt = f"{original:.2f}".replace(".", ",") + " €"
+            desc  = f"{tag or 'Deal'} auf snagga.de — statt {original_txt}" if original > current \
+                    else "Aktueller Bestpreis auf snagga.de"
+            image = html.escape(row["image_url"] or "https://snagga.de/favicon.svg")
+
+            return HTMLResponse(f"""<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>{title}</title>
+<meta http-equiv="refresh" content="0;url={target}">
+<meta property="og:type" content="product">
+<meta property="og:title" content="{title}">
+<meta property="og:description" content="{desc}">
+<meta property="og:image" content="{image}">
+<meta property="og:url" content="{target}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{title}">
+<meta name="twitter:description" content="{desc}">
+<meta name="twitter:image" content="{image}">
+</head>
+<body>
+<script>location.replace({target!r});</script>
+<p>Weiterleitung zu <a href="{target}">snagga.de</a>…</p>
+</body>
+</html>""")
+
+    return HTMLResponse(f'<meta http-equiv="refresh" content="0;url={target}">'
+                         f'<script>location.replace({target!r})</script>')
 
 
 @app.get("/categories", response_model=list[str])

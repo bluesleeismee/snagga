@@ -10,7 +10,7 @@ const TAG_COLORS = {
 }
 
 async function shareOrCopy(deal) {
-  const url = `${window.location.origin}/?asin=${deal.asin}`
+  const url = `${window.location.origin}/share/${deal.asin}`
   const text = `${deal.name} jetzt für ${(deal.current_price).toFixed(2).replace('.',',')} € auf snagga.de 🔥`
 
   if (navigator.share) {

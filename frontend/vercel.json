@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/share/:asin", "destination": "https://snagga.onrender.com/share/:asin" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
