@@ -278,7 +278,14 @@ def classify_category(title: str, root_cat: int = 0) -> str | None:
 
     # 3. rootCat-Mapping (zuverlässig wenn ID bekannt)
     if root_cat and root_cat in ROOTCAT_MAP:
-        return ROOTCAT_MAP[root_cat]
+        mapped = ROOTCAT_MAP[root_cat]
+        # Kamera & Foto hat bei Keepa keine eigene rootCat-ID (571860 ist nur ein
+        # Kind von Elektronik & Foto/562066) — jedes Kamera-Produkt würde sonst
+        # immer als "Elektronik & Foto" einsortiert und die Kategorie bliebe
+        # für immer leer. Titel-Keywords zuerst prüfen, dann erst den Fallback.
+        if mapped == "Elektronik & Foto" and _KEYWORD_RE["Kamera & Foto"].search(title_l):
+            return "Kamera & Foto"
+        return mapped
 
     # 4. Keyword-Fallback (exhaustiv — kein Catch-all mehr)
     for cat, pattern in _KEYWORD_RE.items():
