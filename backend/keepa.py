@@ -95,7 +95,7 @@ async def fetch_keepa_deals(
     selection = {
         "page":                page,
         "domainId":            domain,
-        "priceTypes":          [0, 10, 18],          # 0=Amazon, 10=New FBA, 18=BuyBox
+        "priceTypes":          [18],                 # BuyBox — Keepa erlaubt nur EINEN Wert pro Query
         "deltaPercentRange":   [-100, -delta_pct],  # mind. X% gefallen
         "dateRange":           2,                   # letzte 3 Tage
         "minRating":           min_rating,          # 40 = 4.0 Sterne (×10)
