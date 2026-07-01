@@ -3,6 +3,7 @@ Snagga — FastAPI Backend
 Endpoints: GET /deals  GET /product/{asin}  GET /categories  POST /refresh
 """
 import html
+import json
 import os
 import re
 import time
@@ -12,7 +13,7 @@ from typing import Optional
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
 
 load_dotenv()
@@ -314,6 +315,163 @@ async def share_deal(asin: str):
 
     return HTMLResponse(f'<meta http-equiv="refresh" content="0;url={target}">'
                          f'<script>location.replace({target!r})</script>')
+
+
+@app.get("/deal/{asin}", response_class=HTMLResponse)
+async def deal_page(asin: str):
+    """
+    Eigene, serverseitig gerenderte und crawlbare Detailseite pro Deal.
+    Anders als /share: KEIN Redirect. Die React-SPA selbst hat nur eine
+    einzige URL (Client-Side-Filterung), Google kann darüber also nie
+    einzelne Produkte für Long-Tail-Suchen indexieren. Diese Seite schliesst
+    die Lücke — eigene URL, eigener Title/Description, JSON-LD Product-Markup.
+    """
+    if not _ASIN_RE.match(asin):
+        raise HTTPException(status_code=404, detail="Ungültige ASIN")
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT name, image_url, current_price, original_price, tag, category, "
+            "rating, reviews, affiliate_url, is_active FROM products WHERE asin=$1",
+            asin,
+        )
+    if not row:
+        raise HTTPException(status_code=404, detail="Deal nicht gefunden")
+
+    canonical = f"https://snagga.de/deal/{asin}"
+    name      = html.escape((row["name"] or "Deal")[:200])
+    image     = html.escape(row["image_url"] or "https://snagga.de/favicon.svg")
+    affiliate = html.escape(row["affiliate_url"] or f"https://www.amazon.de/dp/{asin}")
+
+    # Abgelaufene Deals: Seite bleibt erreichbar (keine toten Links aus Google),
+    # aber noindex — verhindert veraltete Preise in den Suchergebnissen.
+    if not row["is_active"]:
+        return HTMLResponse(f"""<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>{name} — Deal nicht mehr verfügbar | snagga.de</title>
+<meta name="robots" content="noindex, follow">
+<link rel="canonical" href="{canonical}">
+</head>
+<body style="font-family:system-ui,sans-serif;text-align:center;padding:60px 20px;background:#F2EFEA;color:#1F1E1D">
+<h1>Dieser Deal ist nicht mehr verfügbar</h1>
+<p>{name}</p>
+<p><a href="https://snagga.de/">Alle aktuellen Deals ansehen →</a></p>
+</body>
+</html>""")
+
+    current  = row["current_price"]  or 0
+    original = row["original_price"] or 0
+    tag      = html.escape(row["tag"] or "")
+    category = html.escape(row["category"] or "")
+    rating   = row["rating"]  or 0
+    reviews  = row["reviews"] or 0
+    disc = round((original - current) / original * 100) if original > current else 0
+    price_txt    = f"{current:.2f}".replace(".", ",") + " €"
+    original_txt = f"{original:.2f}".replace(".", ",") + " €"
+
+    title = f"{name} für {price_txt}" + (f" statt {original_txt} (-{disc}%)" if disc > 0 else "") + " | snagga.de"
+    desc  = html.escape(
+        (f"{row['tag']} — " if row["tag"] else "") +
+        f"{row['name'] or 'Deal'} aktuell für {price_txt} auf snagga.de" +
+        (f", {disc}% günstiger als der bisherige Preis." if disc > 0 else ".")
+    )
+
+    rating_html = f'<p>⭐ {rating:.1f} ({reviews} Bewertungen)</p>' if rating > 0 and reviews > 0 else ""
+
+    ld_json: dict = {
+        "@context":   "https://schema.org/",
+        "@type":      "Product",
+        "name":       row["name"] or "Deal",
+        "image":      [row["image_url"]] if row["image_url"] else [],
+        "description": desc,
+        "category":   row["category"] or "",
+        "offers": {
+            "@type":         "Offer",
+            "url":           row["affiliate_url"] or affiliate,
+            "priceCurrency": "EUR",
+            "price":         f"{current:.2f}",
+            "availability":  "https://schema.org/InStock",
+        },
+    }
+    if rating > 0 and reviews > 0:
+        ld_json["aggregateRating"] = {
+            "@type":       "AggregateRating",
+            "ratingValue": f"{rating:.1f}",
+            "reviewCount": int(reviews),
+        }
+
+    return HTMLResponse(f"""<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{title}</title>
+<meta name="description" content="{desc}">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{canonical}">
+<meta property="og:type" content="product">
+<meta property="og:title" content="{title}">
+<meta property="og:description" content="{desc}">
+<meta property="og:image" content="{image}">
+<meta property="og:url" content="{canonical}">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{json.dumps(ld_json, ensure_ascii=False)}</script>
+<style>
+  body {{ font-family: system-ui, sans-serif; background:#F2EFEA; color:#1F1E1D; margin:0; }}
+  header {{ background:#153D68; padding:16px 20px; }}
+  header a {{ color:#EDE9E3; font-size:22px; font-weight:800; text-decoration:none; }}
+  main {{ max-width:640px; margin:0 auto; padding:32px 20px; }}
+  img {{ max-width:100%; border-radius:8px; }}
+  .tag {{ display:inline-block; background:#C85E43; color:#fff; font-size:13px; font-weight:700; padding:4px 10px; border-radius:4px; margin-bottom:12px; }}
+  .price {{ font-size:28px; font-weight:800; }}
+  .original {{ color:#888; text-decoration:line-through; font-size:16px; margin-left:8px; font-weight:400; }}
+  .cta {{ display:inline-block; margin-top:20px; background:#C85E43; color:#fff; padding:14px 28px; border-radius:4px; text-decoration:none; font-weight:700; }}
+  .back {{ display:block; margin-top:24px; color:#153D68; }}
+</style>
+</head>
+<body>
+<header><a href="https://snagga.de/">snagga.de</a></header>
+<main>
+  {f'<div class="tag">{tag}</div>' if tag else ''}
+  <img src="{image}" alt="{name}">
+  <h1>{name}</h1>
+  <p class="price">{price_txt}{f'<span class="original">{original_txt}</span>' if disc > 0 else ''}</p>
+  {rating_html}
+  <p>Kategorie: {category}</p>
+  <a class="cta" href="{affiliate}" rel="nofollow sponsored noopener" target="_blank">Zum Angebot bei Amazon →</a>
+  <a class="back" href="https://snagga.de/">← Alle Deals ansehen</a>
+</main>
+</body>
+</html>""")
+
+
+@app.get("/sitemap.xml")
+async def sitemap():
+    """Dynamische Sitemap — jeder aktive Deal bekommt eine eigene, crawlbare URL."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT asin, last_updated FROM products WHERE is_active=true ORDER BY deal_score DESC"
+        )
+
+    urls = [
+        "  <url><loc>https://snagga.de/</loc><changefreq>hourly</changefreq><priority>1.0</priority></url>",
+        "  <url><loc>https://snagga.de/legal</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>",
+    ]
+    for row in rows:
+        lastmod = f"<lastmod>{row['last_updated'].date().isoformat()}</lastmod>" if row["last_updated"] else ""
+        urls.append(
+            f"  <url><loc>https://snagga.de/deal/{row['asin']}</loc>{lastmod}"
+            f"<changefreq>daily</changefreq><priority>0.6</priority></url>"
+        )
+
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+           + "\n".join(urls) + "\n</urlset>")
+    return Response(content=xml, media_type="application/xml")
 
 
 @app.get("/categories", response_model=list[str])

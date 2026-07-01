@@ -46,6 +46,7 @@ export default function DealCard({ deal, onClick }) {
   const imgSrc = deal.image_url || null
 
   const handleShare = async (e) => {
+    e.preventDefault()
     e.stopPropagation()
     const result = await shareOrCopy(deal)
     if (result === 'copied') {
@@ -54,15 +55,24 @@ export default function DealCard({ deal, onClick }) {
     }
   }
 
+  // Echter Link auf die crawlbare Deal-Seite (SEO + Middle-Click/Ctrl-Click öffnen
+  // sie in neuem Tab), normaler Linksklick öffnet weiterhin das schnelle Modal.
+  const handleCardClick = (e) => {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+    e.preventDefault()
+    onClick?.(e)
+  }
+
   return (
-    <div
-      onClick={onClick}
+    <a
+      href={`/deal/${deal.asin}`}
+      onClick={handleCardClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
         background: 'var(--bg-card)', border: '1px solid var(--border)',
         display: 'flex', flexDirection: 'column',
-        cursor: 'pointer', position: 'relative',
+        cursor: 'pointer', position: 'relative', textDecoration: 'none', color: 'inherit',
         transition: 'transform 0.3s cubic-bezier(0.16,1,0.3,1), box-shadow 0.3s',
         transform:  hovered ? 'translateY(-4px)' : '',
         boxShadow:  hovered ? '0 15px 35px rgba(31,30,29,0.06)' : '',
@@ -175,6 +185,6 @@ export default function DealCard({ deal, onClick }) {
           </div>
         </div>
       </div>
-    </div>
+    </a>
   )
 }
