@@ -396,14 +396,14 @@ export default function DealsPage() {
             />
           </div>
 
-          {/* Telegram button — ~3 button-widths left of theme toggle */}
+          {/* Telegram button — ~3 button-widths left of theme toggle on desktop, tight on mobile */}
           <a
             href="https://t.me/snagga_deals"
             target="_blank"
             rel="noopener noreferrer"
             title="Deals auf Telegram abonnieren"
             style={{
-              marginLeft: 'auto', marginRight: 138, flexShrink: 0,
+              marginLeft: 'auto', marginRight: !isDesktop ? 8 : 138, flexShrink: 0,
               width: 38, height: 38,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               textDecoration: 'none', transition: 'opacity 0.2s', opacity: 1,
