@@ -261,7 +261,7 @@ async def get_product(asin: str):
 _ASIN_RE = re.compile(r"^[A-Za-z0-9]{10}$")
 
 
-@app.get("/share/{asin}", response_class=HTMLResponse)
+@app.api_route("/share/{asin}", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def share_deal(asin: str):
     """
     Server-gerenderte Preview für geteilte Deal-Links (Telegram, WhatsApp, native
@@ -319,7 +319,7 @@ async def share_deal(asin: str):
                          f'<script>location.replace({target!r})</script>')
 
 
-@app.get("/deal/{asin}", response_class=HTMLResponse)
+@app.api_route("/deal/{asin}", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def deal_page(asin: str):
     """
     Eigene, serverseitig gerenderte und crawlbare Detailseite pro Deal.
@@ -450,7 +450,7 @@ async def deal_page(asin: str):
 </html>""")
 
 
-@app.get("/sitemap.xml")
+@app.api_route("/sitemap.xml", methods=["GET", "HEAD"])
 async def sitemap():
     """Dynamische Sitemap — jeder aktive Deal bekommt eine eigene, crawlbare URL."""
     pool = await get_pool()
