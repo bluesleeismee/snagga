@@ -266,8 +266,10 @@ async def share_deal(asin: str):
     """
     Server-gerenderte Preview für geteilte Deal-Links (Telegram, WhatsApp, native
     Share-Sheets). Crawler/Link-Unfurler lesen nur die statischen OG-Tags unten
-    und führen kein JS aus; echte Besucher werden per Meta-Refresh + JS sofort
-    zur eigentlichen SPA-Seite mit dem Produkt-Modal weitergeleitet.
+    und führen kein JS aus; echte Besucher werden per JS sofort zur eigentlichen
+    SPA-Seite mit dem Produkt-Modal weitergeleitet. WICHTIG: kein Meta-Refresh
+    hier — Telegrams Preview-Crawler folgt dem sonst VOR dem Lesen der OG-Tags
+    und zeigt die generische Startseite statt der Produktvorschau.
     """
     target = "https://snagga.de/"
     if _ASIN_RE.match(asin):
@@ -298,7 +300,6 @@ async def share_deal(asin: str):
 <head>
 <meta charset="UTF-8">
 <title>{title}</title>
-<meta http-equiv="refresh" content="0;url={target}">
 <meta property="og:type" content="product">
 <meta property="og:title" content="{title}">
 <meta property="og:description" content="{desc}">
@@ -685,6 +686,38 @@ async def test_telegram(token: str = Query(default="")):
             if data.get("ok"):
                 return {"ok": True, "message": "Testnachricht gesendet — schau in deinen Kanal!"}
             return {"ok": False, "telegram_error": data.get("description"), "error_code": data.get("error_code"), "channel": TELEGRAM_CHANNEL}
+    except Exception as e:
+        return {"ok": False, "exception": str(e)}
+
+
+@app.get("/test-mastodon")
+async def test_mastodon(token: str = Query(default="")):
+    _check_admin(token)
+    import httpx
+    from mastodon import MASTODON_INSTANCE, MASTODON_TOKEN, _build_status
+    if not MASTODON_INSTANCE or not MASTODON_TOKEN:
+        return {"ok": False, "error": "Env-Vars fehlen", "token_set": bool(MASTODON_TOKEN), "instance": MASTODON_INSTANCE}
+    test_deal = {
+        "asin":           "B0TEST00001",
+        "name":           "snagga.de Mastodon-Test — alles funktioniert!",
+        "current_price":  19.99,
+        "original_price": 39.99,
+        "deal_score":     999,
+        "tag":            "Allzeittiefpreis",
+        "category":       "Elektronik & Foto",
+    }
+    status = _build_status(test_deal)
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(
+                f"{MASTODON_INSTANCE}/api/v1/statuses",
+                headers={"Authorization": f"Bearer {MASTODON_TOKEN}"},
+                data={"status": status, "visibility": "public", "language": "de"},
+            )
+            data = resp.json()
+            if resp.status_code == 200 and data.get("id"):
+                return {"ok": True, "message": "Test-Toot gesendet — schau auf deinem Profil!", "url": data.get("url")}
+            return {"ok": False, "mastodon_error": data.get("error"), "status_code": resp.status_code}
     except Exception as e:
         return {"ok": False, "exception": str(e)}
 

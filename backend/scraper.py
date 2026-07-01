@@ -617,6 +617,7 @@ async def fetch_and_update_deals():
           f"{min(TOP_PICKS_COUNT, len(active_pool))} Top Picks")
 
     await _post_new_deals_to_telegram()
+    await _post_new_deals_to_mastodon()
     return len(active_pool)
 
 
@@ -642,6 +643,30 @@ async def _post_new_deals_to_telegram():
                     datetime.utcnow(), row["asin"],
                 )
             await asyncio.sleep(2)  # Telegram: max 1 Msg/Sekunde pro Bot
+
+
+async def _post_new_deals_to_mastodon():
+    """Postet neue Top-Deals (mastodon_posted IS NULL, score >= MIN) als Toot. Max 3/Run."""
+    from mastodon import post_deal as post_deal_mastodon, MIN_SCORE as MASTODON_MIN_SCORE
+    if not MASTODON_MIN_SCORE:
+        return
+    db = await get_pool()
+    async with db.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT asin, name, current_price, original_price, deal_score, tag, category "
+            "FROM products WHERE is_active=true AND mastodon_posted IS NULL "
+            "AND deal_score >= $1 ORDER BY deal_score DESC LIMIT 3",
+            MASTODON_MIN_SCORE,
+        )
+    for row in rows:
+        success = await post_deal_mastodon(dict(row))
+        if success:
+            async with db.acquire() as conn:
+                await conn.execute(
+                    "UPDATE products SET mastodon_posted=$1 WHERE asin=$2",
+                    datetime.utcnow(), row["asin"],
+                )
+            await asyncio.sleep(2)  # gleiches Rate-Limit-Verhalten wie Telegram
 
 
 
