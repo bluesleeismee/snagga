@@ -224,6 +224,16 @@ EXCLUDE_KEYWORDS = [
     "teststreifen", "blutzucker", "blutdruck",
     # US-Importprodukte ohne DE-Relevanz
     "toskanische bronze", "pfister ",
+    # Tastaturen/Eingabegeräte mit nicht-DACH-Layout (Amazon trennt das nicht per Kategorie)
+    "norwegisches layout", "norwegische tastatur", "norwegisch layout",
+    "schwedisches layout", "schwedische tastatur", "schwedisch layout",
+    "dänisches layout", "dänische tastatur", "dänisch layout",
+    "finnisches layout", "finnische tastatur", "finnisch layout",
+    "ukrainisches layout", "ukrainische tastatur", "ukrainisch layout",
+    "russisches layout", "russische tastatur", "russisch layout", "kyrillisch",
+    "polnisches layout", "polnische tastatur",
+    "tschechisches layout", "ungarisches layout", "türkisches layout",
+    "griechisches layout", "nordisches layout", "skandinavisches layout",
 ]
 
 # Pre-compiled Regex-Sets (einmal beim Import, statt pro Produkt zu schleifen).
