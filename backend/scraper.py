@@ -5,7 +5,9 @@ snagga.de — Deal-Pipeline
 3. Scoring + Hard Filters → 200 aktive + 100 Backup
 4. PostgreSQL aktualisieren
 """
+import os
 import re
+import json
 import random
 import asyncio
 import httpx
@@ -20,7 +22,21 @@ from scoring import (
     determine_tag,
 )
 
-AFFILIATE_TAG   = "snagga-21"
+AFFILIATE_TAG   = "snagga-21"  # Fallback-Tag für Kategorien ohne eigenen Tracking-Tag
+
+# Optional: pro Kategorie ein eigener Amazon-Tracking-Tag, um Klicks/Verkäufe
+# im Partnerprogramm-Dashboard nach Kategorie getrennt auszuwerten.
+# Format env var (JSON): {"Elektronik & Foto": "snagga-elektronik-21", ...}
+try:
+    CATEGORY_TAGS: dict[str, str] = json.loads(os.getenv("AMAZON_CATEGORY_TAGS", "{}"))
+except (json.JSONDecodeError, TypeError):
+    CATEGORY_TAGS = {}
+
+
+def _affiliate_tag_for(category: str) -> str:
+    return CATEGORY_TAGS.get(category, AFFILIATE_TAG)
+
+
 MAX_ACTIVE      = 500
 MAX_BACKUP      = 150
 TOP_PICKS_COUNT = 10
@@ -595,7 +611,7 @@ async def fetch_and_update_deals():
                     p["avg90"] or 0.0, p["avg180"] or 0.0,
                     p["deal_score"], p["rating"], p["reviews"], True,
                     now, now,
-                    f"https://www.amazon.de/dp/{asin}?tag={AFFILIATE_TAG}",
+                    f"https://www.amazon.de/dp/{asin}?tag={_affiliate_tag_for(p['category'])}",
                     is_active, is_backup, is_top_pick, p["is_fba"],
                     p["sales_rank"] or 0, p["tag"], p["score_breakdown"], now,
                 )
@@ -629,7 +645,7 @@ async def _post_new_deals_to_telegram():
     db = await get_pool()
     async with db.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT asin, name, current_price, original_price, deal_score, tag, category "
+            "SELECT asin, name, current_price, original_price, deal_score, tag, category, affiliate_url "
             "FROM products WHERE is_active=true AND telegram_posted IS NULL "
             "AND deal_score >= $1 ORDER BY deal_score DESC LIMIT 3",
             MIN_SCORE,

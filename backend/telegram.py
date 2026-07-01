@@ -22,6 +22,11 @@ def _fmt(price: float) -> str:
     return f"{price:.2f}".replace(".", ",") + " €"
 
 
+def _esc_url(url: str) -> str:
+    """MarkdownV2 verlangt innerhalb von (URL) nur \\ und ) escapen, sonst nichts."""
+    return url.replace("\\", "\\\\").replace(")", "\\)")
+
+
 def _build_message(deal: dict) -> str:
     name     = (deal.get("name") or deal.get("title") or "")[:80]
     current  = deal.get("current_price", 0)
@@ -44,7 +49,7 @@ def _build_message(deal: dict) -> str:
         price_line += f" \\(\\-{disc}%\\)\n~~{_esc(_fmt(original))}~~ Ø\\-Preis 6 Monate"
 
     snagga_url = f"https://snagga.de/share/{asin}"
-    amazon_url = f"https://www.amazon.de/dp/{asin}?tag=snagga\\-21"
+    amazon_url = _esc_url(deal.get("affiliate_url") or f"https://www.amazon.de/dp/{asin}?tag=snagga-21")
 
     return "\n".join([
         tag_line,
