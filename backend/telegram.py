@@ -1,13 +1,13 @@
 """
 Telegram Bot — automatische Deal-Alerts für snagga.de
-Env vars: TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, TELEGRAM_MIN_SCORE (default 80)
+Env vars: TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, TELEGRAM_MIN_SCORE (default 45)
 """
 import os
 import httpx
 
 TELEGRAM_TOKEN   = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHANNEL = os.getenv("TELEGRAM_CHANNEL_ID", "")
-MIN_SCORE        = int(os.getenv("TELEGRAM_MIN_SCORE", "80"))
+MIN_SCORE        = int(os.getenv("TELEGRAM_MIN_SCORE", "45"))
 
 _ESCAPE_CHARS = r"_*[]()~`>#+-=|{}.!"
 
