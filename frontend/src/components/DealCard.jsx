@@ -39,7 +39,7 @@ export default function DealCard({ deal, onClick }) {
   const [copied,   setCopied]   = useState(false)
 
   const disc = discount(deal.current_price, deal.original_price)
-  const age  = fmtAge(deal.last_updated)
+  const age  = fmtAge(deal.first_seen)
   const tag  = deal.tag || ''
   const tagStyle = TAG_COLORS[tag] || null
 

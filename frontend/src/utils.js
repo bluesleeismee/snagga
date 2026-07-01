@@ -27,12 +27,12 @@ export function chartStatus(prices, avgPrice, allTimeLow) {
   return                                                   { text: '▼ Leicht unter Ø',  color: '#888888' }
 }
 
-/** Zeitdifferenz seit last_updated → { text, level }
+/** Zeitdifferenz seit dem übergebenen Zeitstempel → { text, level }
  *  level: 'fresh' (<6h) | 'ok' (6–24h) | 'stale' (>24h)
  */
-export function fmtAge(lastUpdated) {
-  if (!lastUpdated) return null
-  const date = new Date(lastUpdated)
+export function fmtAge(timestamp) {
+  if (!timestamp) return null
+  const date = new Date(timestamp)
   if (isNaN(date.getTime())) return null
   const mins = Math.floor((Date.now() - date.getTime()) / 60000)
   if (mins < 1)   return { text: 'gerade eben', level: 'fresh' }

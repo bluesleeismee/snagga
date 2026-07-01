@@ -75,6 +75,7 @@ class Product(BaseModel):
     reviews:        int
     prime:          bool
     last_updated:   str
+    first_seen:     str = ""
     affiliate_url:  str
     price_history:  list[float] = []
     # Neu
@@ -146,6 +147,7 @@ def _row_to_product(row, prices: list[float]) -> Product:
         deal_score=row["deal_score"], rating=row["rating"], reviews=row["reviews"],
         prime=bool(row["prime"]),
         last_updated=str(row["last_updated"]) if row["last_updated"] else "",
+        first_seen=str(row["first_seen"]) if row["first_seen"] else str(row["last_updated"] or ""),
         affiliate_url=row["affiliate_url"],
         price_history=prices,
         is_top_pick=bool(row["is_top_pick"]) if "is_top_pick" in row.keys() else False,
