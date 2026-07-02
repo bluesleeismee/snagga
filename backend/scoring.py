@@ -15,7 +15,7 @@ CATEGORY_MAX_RANK: dict[str, int] = {
     "Computer & Zubehör":         18_000,
     "Kamera & Foto":              10_000,
     "Games":                       5_000,
-    "Baumarkt":                   30_000,
+    "Baumarkt":                   15_000,
     "Drogerie & Körperpflege":    30_000,
     "Küche, Haushalt & Wohnen":   20_000,
     "Elektro-Großgeräte":         10_000,
@@ -46,6 +46,12 @@ def specificity_penalty(title: str) -> int:
     # 2+ vierstellige Nummernblöcke im Titel deuten auf Modellcodes hin
     if len(re.findall(r'\b\d{4,}\b', t)) >= 2:
         p += 20
+
+    # Generische Baumarkt-/Haushalt-Ersatzteile ("Entlüftungsabdeckung" u.ä.) —
+    # bewusst OHNE "adapter"/"kit", die auch bei echten Marken-Elektronik-
+    # Zubehörteilen (Anker, Apple, Ugreen …) sehr häufig im Titel vorkommen.
+    if re.search(r'\b(abdeckplane|abdeckung|organizer|halterung|verlängerung)\b', t):
+        p += 18
 
     return min(p, 60)
 

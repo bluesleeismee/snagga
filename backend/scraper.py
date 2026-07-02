@@ -51,6 +51,8 @@ CATEGORY_MIN_PRICE: dict[str, float] = {
     "Elektro-Großgeräte":                50.0,
     "Kamera & Foto":                     30.0,
     "Musikinstrumente & DJ-Equipment":   30.0,
+    "Baumarkt":                          28.0,
+    "Küche, Haushalt & Wohnen":          28.0,
 }
 
 # ---------------------------------------------------------------------------
