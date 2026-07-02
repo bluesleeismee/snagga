@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { fmtPrice, discount, fmtAge, AGE_COLORS, shareOrCopy } from '../utils.js'
+import { fmtPrice, discount, fmtAge, AGE_COLORS, fmtReviews, shareOrCopy } from '../utils.js'
 
 const TAG_COLORS = {
   'Allzeittiefpreis':  { bg: '#1a1a1a', text: '#fff' },
@@ -19,6 +19,13 @@ export default function DealCard({ deal, onClick }) {
   const age  = fmtAge(deal.first_seen)
   const tag  = deal.tag || ''
   const tagStyle = TAG_COLORS[tag] || null
+
+  // Eyebrow-Label: Marke bevorzugt, sonst Bewertung statt der Kategorie (die
+  // steht schon in der Fusszeile — sonst stuende sie zweimal auf der Kachel).
+  const ratingLabel = deal.rating > 0
+    ? `${deal.rating.toFixed(1)} ★${fmtReviews(deal.reviews) ? ' · ' + fmtReviews(deal.reviews) : ''}`
+    : null
+  const eyebrow = deal.brand || ratingLabel || deal.category
 
   const imgSrc = deal.image_url || null
 
@@ -109,7 +116,7 @@ export default function DealCard({ deal, onClick }) {
       {/* Card body */}
       <div style={{ padding: '16px 18px 16px', display: 'flex', flexDirection: 'column', flex: 1 }}>
         <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--muted)', fontWeight: 500, marginBottom: 7 }}>
-          {deal.brand || deal.category}
+          {eyebrow}
         </div>
         <h3 style={{
           fontSize: 14, fontWeight: 500, lineHeight: 1.45, color: 'var(--text)', marginBottom: 14,

@@ -354,7 +354,20 @@ def _deal_card_html(row) -> str:
         tag_html = '<div class="card-tag card-tag-empty">&nbsp;</div>'
 
     category = html.escape(row["category"]) if "category" in row.keys() and row["category"] else ""
-    brand    = html.escape(row["brand"])    if "brand"    in row.keys() and row["brand"]    else category
+
+    # Eyebrow-Label: Marke bevorzugt, sonst Bewertung statt der Kategorie (die
+    # steht schon in der Fusszeile — sonst stuende sie zweimal auf der Kachel).
+    rating  = row["rating"]  if "rating"  in row.keys() and row["rating"]  else 0
+    reviews = row["reviews"] if "reviews" in row.keys() and row["reviews"] else 0
+    if reviews >= 1000:
+        reviews_txt = f"{reviews / 1000:.1f}".replace(".", ",") + "T"
+    elif reviews > 0:
+        reviews_txt = str(reviews)
+    else:
+        reviews_txt = ""
+    rating_label = (f"{rating:.1f} ★" + (f" · {reviews_txt}" if reviews_txt else "")) if rating > 0 else ""
+
+    brand = html.escape(row["brand"]) if "brand" in row.keys() and row["brand"] else (rating_label or category)
 
     return (
         f'<a class="card" href="https://www.snagga.de/deal/{row["asin"]}">'
@@ -507,14 +520,14 @@ async def deal_page(asin: str):
         pool2 = await get_pool()
         async with pool2.acquire() as conn:
             similar = await conn.fetch(
-                "SELECT asin, name, image_url, current_price, original_price, tag, category, brand "
+                "SELECT asin, name, image_url, current_price, original_price, tag, category, brand, rating, reviews "
                 "FROM products WHERE is_active=true AND category=$1 AND asin != $2 "
                 "ORDER BY deal_score DESC LIMIT 4",
                 row["category"], asin,
             )
             if not similar:
                 similar = await conn.fetch(
-                    "SELECT asin, name, image_url, current_price, original_price, tag, category, brand "
+                    "SELECT asin, name, image_url, current_price, original_price, tag, category, brand, rating, reviews "
                     "FROM products WHERE is_active=true ORDER BY deal_score DESC LIMIT 4"
                 )
 
@@ -748,7 +761,7 @@ async def category_page(slug: str):
     pool = await get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT asin, name, image_url, current_price, original_price, tag, category, brand "
+            "SELECT asin, name, image_url, current_price, original_price, tag, category, brand, rating, reviews "
             "FROM products WHERE is_active=true AND category=$1 "
             "ORDER BY deal_score DESC LIMIT 60",
             category,
