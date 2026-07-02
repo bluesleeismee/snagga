@@ -279,21 +279,70 @@ CATEGORY_SLUGS: dict[str, str] = {
 SLUG_BY_CATEGORY = {v: k for k, v in CATEGORY_SLUGS.items()}
 
 
+# Spiegelt TAG_COLORS aus frontend/src/components/DealCard.jsx
+_TAG_COLORS = {
+    "Allzeittiefpreis":    ("#1a1a1a", "#fff"),
+    "Historisch günstig":  ("#2d5a27", "#fff"),
+    "Stark gefallen":      ("#8b1a1a", "#fff"),
+    "Seltene Gelegenheit": ("#1a3d6b", "#fff"),
+    "Preis gefallen":      ("#C85E43", "#fff"),
+}
+
+# Repliziert das Kachel-Layout von DealCard.jsx 1:1 (Maße, Farben, Grid-
+# Breakpoints) für serverseitig gerenderte Seiten (Kategorie, ähnliche Deals).
+_CARD_CSS = """
+  .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-top:24px; }
+  @media (min-width:768px)  { .grid { grid-template-columns:repeat(3,minmax(0,1fr)); gap:24px; } }
+  @media (min-width:1100px) { .grid { grid-template-columns:repeat(4,minmax(0,1fr)); } }
+  @media (min-width:1500px) { .grid { grid-template-columns:repeat(5,minmax(0,1fr)); } }
+  .card { background:#fff; border:1px solid #EAE6E1; display:flex; flex-direction:column; text-decoration:none; color:#1F1E1D; }
+  .card-img { background:#fff; height:240px; display:flex; align-items:center; justify-content:center; padding:24px; position:relative; }
+  .card-disc { position:absolute; top:14px; left:14px; background:#C85E43; color:#fff; padding:3px 8px; font-size:11px; font-weight:600; letter-spacing:0.5px; }
+  .card-img img { max-width:100%; max-height:190px; object-fit:contain; }
+  .card-tag { font-size:10px; font-weight:600; letter-spacing:0.6px; padding:4px 10px; text-transform:uppercase; }
+  .card-tag-empty { background:transparent !important; color:transparent !important; }
+  .card-body { padding:16px 18px; display:flex; flex-direction:column; flex:1; }
+  .card-brand { font-size:10.5px; text-transform:uppercase; letter-spacing:1px; color:#7E7A75; font-weight:500; margin-bottom:7px; }
+  .card-name { font-size:14px; font-weight:500; line-height:1.45; color:#1F1E1D; margin-bottom:14px; height:40px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .card-price-row { display:flex; align-items:baseline; gap:8px; margin-bottom:14px; }
+  .card-price { font-size:17px; font-weight:700; }
+  .card-original { font-size:13px; text-decoration:line-through; color:#7E7A75; }
+  .card-footer { border-top:1px solid #EAE6E1; padding-top:11px; font-size:11px; color:#7E7A75; margin-top:auto; }
+"""
+
+
 def _deal_card_html(row) -> str:
-    """Kompakte Deal-Karte für Kategorie-Seiten und die 'Ähnliche Deals'-Liste."""
-    name    = html.escape((row["name"] or "Deal")[:120])
-    image   = html.escape(row["image_url"] or "https://www.snagga.de/favicon.svg")
+    """Deal-Karte für Kategorie-Seiten und die 'Ähnliche Deals'-Liste — matcht DealCard.jsx."""
+    name     = html.escape((row["name"] or "Deal")[:160])
+    image    = html.escape(row["image_url"] or "https://www.snagga.de/favicon.svg")
     current  = row["current_price"]  or 0
     original = row["original_price"] or 0
     price_txt = f"{current:.2f}".replace(".", ",") + " €"
-    original_html = ""
-    if original > current:
-        original_txt = f"{original:.2f}".replace(".", ",") + " €"
-        original_html = f'<span class="card-original">{original_txt}</span>'
-    return (f'<a class="card" href="https://www.snagga.de/deal/{row["asin"]}">'
-            f'<img src="{image}" alt="{name}" loading="lazy">'
-            f'<div class="card-body"><p class="card-name">{name}</p>'
-            f'<p class="card-price">{price_txt}{original_html}</p></div></a>')
+    disc = round((original - current) / original * 100) if original > current else 0
+    original_html = f'<span class="card-original">{f"{original:.2f}".replace(".", ",")} €</span>' if original > current else ""
+    disc_html     = f'<div class="card-disc">–{disc}%</div>' if disc > 0 else ""
+
+    tag = row["tag"] if "tag" in row.keys() else ""
+    if tag and tag in _TAG_COLORS:
+        bg, fg = _TAG_COLORS[tag]
+        tag_html = f'<div class="card-tag" style="background:{bg};color:{fg}">{html.escape(tag)}</div>'
+    else:
+        tag_html = '<div class="card-tag card-tag-empty">&nbsp;</div>'
+
+    category = html.escape(row["category"]) if "category" in row.keys() and row["category"] else ""
+    brand    = html.escape(row["brand"])    if "brand"    in row.keys() and row["brand"]    else category
+
+    return (
+        f'<a class="card" href="https://www.snagga.de/deal/{row["asin"]}">'
+        f'<div class="card-img">{disc_html}<img src="{image}" alt="{name}" loading="lazy"></div>'
+        f'{tag_html}'
+        f'<div class="card-body">'
+        f'<div class="card-brand">{brand}</div>'
+        f'<div class="card-name">{name}</div>'
+        f'<div class="card-price-row"><span class="card-price">{price_txt}</span>{original_html}</div>'
+        f'<div class="card-footer">{category}</div>'
+        f'</div></a>'
+    )
 
 
 @app.api_route("/share/{asin}", methods=["GET", "HEAD"], response_class=HTMLResponse)
@@ -426,14 +475,14 @@ async def deal_page(asin: str):
         pool2 = await get_pool()
         async with pool2.acquire() as conn:
             similar = await conn.fetch(
-                "SELECT asin, name, image_url, current_price, original_price "
+                "SELECT asin, name, image_url, current_price, original_price, tag, category, brand "
                 "FROM products WHERE is_active=true AND category=$1 AND asin != $2 "
                 "ORDER BY deal_score DESC LIMIT 4",
                 row["category"], asin,
             )
             if not similar:
                 similar = await conn.fetch(
-                    "SELECT asin, name, image_url, current_price, original_price "
+                    "SELECT asin, name, image_url, current_price, original_price, tag, category, brand "
                     "FROM products WHERE is_active=true ORDER BY deal_score DESC LIMIT 4"
                 )
 
@@ -456,16 +505,10 @@ async def deal_page(asin: str):
   header {{ background:#153D68; padding:16px 20px; }}
   header a {{ color:#EDE9E3; font-size:22px; font-weight:800; text-decoration:none; }}
   header .accent {{ color:#C85E43; }}
-  main {{ max-width:720px; margin:0 auto; padding:32px 20px; }}
+  main {{ max-width:900px; margin:0 auto; padding:32px 20px; }}
   h1 {{ font-size:22px; }}
   .back {{ display:inline-block; margin-top:8px; color:#153D68; }}
-  .grid {{ display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:14px; margin-top:16px; }}
-  .card {{ display:block; background:#fff; border-radius:8px; overflow:hidden; text-decoration:none; color:#1F1E1D; box-shadow:0 1px 3px rgba(0,0,0,.08); }}
-  .card img {{ width:100%; aspect-ratio:1; object-fit:contain; background:#fff; padding:8px; }}
-  .card-body {{ padding:6px 10px 12px; }}
-  .card-name {{ font-size:13px; line-height:1.3; height:2.6em; overflow:hidden; margin:0 0 4px; }}
-  .card-price {{ font-weight:800; font-size:15px; margin:0; }}
-  .card-original {{ color:#888; text-decoration:line-through; font-weight:400; font-size:12px; margin-left:4px; }}
+  {_CARD_CSS}
 </style>
 </head>
 <body>
@@ -541,18 +584,18 @@ async def deal_page(asin: str):
   header {{ background:#153D68; padding:16px 24px; }}
   header a {{ color:#EDE9E3; font-size:22px; font-weight:800; text-decoration:none; }}
   header .accent {{ color:#C85E43; }}
-  .wrap {{ max-width:1100px; margin:32px auto; background:#fff; display:grid; grid-template-columns:1.2fr 0.8fr; box-shadow:0 4px 24px rgba(0,0,0,0.06); }}
+  .wrap {{ max-width:1360px; margin:32px auto; background:#fff; display:grid; grid-template-columns:1fr 1.15fr; box-shadow:0 4px 24px rgba(0,0,0,0.06); }}
   @media (max-width:760px) {{ .wrap {{ grid-template-columns:1fr; margin:0; }} }}
-  .gallery {{ background:#FAF9F7; padding:48px; display:flex; align-items:center; justify-content:center; border-right:1px solid #EAE6E1; }}
+  .gallery {{ background:#fff; padding:48px; display:flex; align-items:center; justify-content:center; border-right:1px solid #EAE6E1; }}
   @media (max-width:760px) {{ .gallery {{ border-right:none; border-bottom:1px solid #EAE6E1; padding:32px; }} }}
-  .gallery img {{ max-width:100%; max-height:400px; object-fit:contain; }}
-  .details {{ padding:48px 44px; }}
+  .gallery img {{ max-width:100%; max-height:460px; object-fit:contain; }}
+  .details {{ padding:56px 52px; }}
   @media (max-width:760px) {{ .details {{ padding:32px 24px; }} }}
   .brand {{ font-size:11px; text-transform:uppercase; letter-spacing:1.5px; color:#7E7A75; font-weight:600; margin-bottom:10px; }}
   .tag {{ display:inline-block; background:#C85E43; color:#fff; font-size:13px; font-weight:700; padding:4px 10px; margin-bottom:12px; }}
-  h1 {{ font-size:28px; font-weight:700; line-height:1.3; margin:0 0 24px; }}
+  h1 {{ font-size:31px; font-weight:700; line-height:1.35; margin:0 0 24px; }}
   .price-row {{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px; }}
-  .price {{ font-size:34px; font-weight:700; }}
+  .price {{ font-size:38px; font-weight:700; }}
   .original {{ font-size:16px; text-decoration:line-through; color:#7E7A75; font-weight:400; }}
   .disc {{ background:#C85E43; color:#fff; padding:3px 9px; font-size:12px; font-weight:600; }}
   .meta {{ font-size:13px; color:#7E7A75; margin:0 0 8px; }}
@@ -656,7 +699,7 @@ async def category_page(slug: str):
     pool = await get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT asin, name, image_url, current_price, original_price "
+            "SELECT asin, name, image_url, current_price, original_price, tag, category, brand "
             "FROM products WHERE is_active=true AND category=$1 "
             "ORDER BY deal_score DESC LIMIT 60",
             category,
@@ -714,19 +757,13 @@ async def category_page(slug: str):
 <meta property="og:url" content="{canonical}">
 {ld_script}
 <style>
-  body {{ font-family: system-ui, sans-serif; background:#F2EFEA; color:#1F1E1D; margin:0; }}
-  header {{ background:#153D68; padding:16px 20px; }}
+  body {{ font-family: system-ui, sans-serif; background:#FAF8F5; color:#1F1E1D; margin:0; }}
+  header {{ background:#153D68; padding:16px 24px; }}
   header a {{ color:#EDE9E3; font-size:22px; font-weight:800; text-decoration:none; }}
   header .accent {{ color:#C85E43; }}
-  main {{ max-width:960px; margin:0 auto; padding:32px 20px; }}
+  main {{ max-width:1840px; width:98%; margin:0 auto; padding:32px 0; }}
   h1 {{ font-size:26px; margin-bottom:4px; }}
-  .grid {{ display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:16px; margin-top:24px; }}
-  .card {{ display:block; background:#fff; border-radius:8px; overflow:hidden; text-decoration:none; color:#1F1E1D; box-shadow:0 1px 3px rgba(0,0,0,.08); }}
-  .card img {{ width:100%; aspect-ratio:1; object-fit:contain; background:#fff; padding:8px; }}
-  .card-body {{ padding:8px 10px 12px; }}
-  .card-name {{ font-size:13px; line-height:1.3; height:2.6em; overflow:hidden; margin:0 0 4px; }}
-  .card-price {{ font-weight:800; font-size:15px; margin:0; }}
-  .card-original {{ color:#888; text-decoration:line-through; font-weight:400; font-size:12px; margin-left:4px; }}
+  {_CARD_CSS}
   .catnav {{ display:flex; flex-wrap:wrap; gap:8px; margin-top:40px; }}
   .catnav a {{ font-size:13px; background:#fff; border-radius:20px; padding:6px 14px; text-decoration:none; color:#153D68; }}
   .back {{ display:inline-block; margin-top:20px; color:#153D68; }}
