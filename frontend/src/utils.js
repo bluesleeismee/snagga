@@ -57,3 +57,28 @@ export function fmtReviews(n) {
   return n.toString()
 }
 
+/** Deal teilen (native Share-Sheet) oder Link kopieren — gibt 'copied' zurück wenn kopiert wurde. */
+export async function shareOrCopy(deal) {
+  const url = `${window.location.origin}/share/${deal.asin}`
+  const text = `${deal.name} jetzt für ${(deal.current_price).toFixed(2).replace('.', ',')} € auf snagga.de 🔥`
+
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: deal.name, text, url })
+      return
+    } catch (_) {}
+  }
+  try {
+    await navigator.clipboard.writeText(url)
+    return 'copied'
+  } catch (_) {}
+  // Fallback: Textfeld
+  const ta = document.createElement('textarea')
+  ta.value = url
+  document.body.appendChild(ta)
+  ta.select()
+  document.execCommand('copy')
+  document.body.removeChild(ta)
+  return 'copied'
+}
+

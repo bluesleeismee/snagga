@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { fmtPrice, discount, fmtAge, AGE_COLORS } from '../utils.js'
+import { fmtPrice, discount, fmtAge, AGE_COLORS, shareOrCopy } from '../utils.js'
 
 const TAG_COLORS = {
   'Allzeittiefpreis':  { bg: '#1a1a1a', text: '#fff' },
@@ -9,34 +9,11 @@ const TAG_COLORS = {
   'Preis gefallen':    { bg: 'var(--accent)', text: '#fff' },
 }
 
-async function shareOrCopy(deal) {
-  const url = `${window.location.origin}/share/${deal.asin}`
-  const text = `${deal.name} jetzt für ${(deal.current_price).toFixed(2).replace('.',',')} € auf snagga.de 🔥`
-
-  if (navigator.share) {
-    try {
-      await navigator.share({ title: deal.name, text, url })
-      return
-    } catch (_) {}
-  }
-  try {
-    await navigator.clipboard.writeText(url)
-    return 'copied'
-  } catch (_) {}
-  // Fallback: Textfeld
-  const ta = document.createElement('textarea')
-  ta.value = url
-  document.body.appendChild(ta)
-  ta.select()
-  document.execCommand('copy')
-  document.body.removeChild(ta)
-  return 'copied'
-}
-
 export default function DealCard({ deal, onClick }) {
   const [imgError, setImgError] = useState(false)
   const [hovered,  setHovered]  = useState(false)
   const [copied,   setCopied]   = useState(false)
+  const [shareHovered, setShareHovered] = useState(false)
 
   const disc = discount(deal.current_price, deal.original_price)
   const age  = fmtAge(deal.first_seen)
@@ -175,12 +152,26 @@ export default function DealCard({ deal, onClick }) {
               onClick={handleShare}
               title={copied ? 'Link kopiert!' : 'Deal teilen'}
               style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                padding: '2px 4px', color: copied ? 'var(--accent)' : 'var(--muted)',
-                fontSize: 13, lineHeight: 1, transition: 'color 0.2s',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: 26, height: 26, borderRadius: '50%',
+                background: shareHovered ? 'var(--bg-img)' : 'none',
+                border: 'none', cursor: 'pointer',
+                color: copied ? 'var(--accent)' : shareHovered ? 'var(--text)' : 'var(--muted)',
+                transition: 'background 0.15s, color 0.15s',
               }}
+              onMouseEnter={() => setShareHovered(true)}
+              onMouseLeave={() => setShareHovered(false)}
             >
-              {copied ? '✓' : '↗'}
+              {copied ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                </svg>
+              )}
             </button>
           </div>
         </div>

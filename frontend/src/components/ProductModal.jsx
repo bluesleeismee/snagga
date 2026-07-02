@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { fmtPrice, discount, fmtAge, AGE_COLORS, fmtReviews } from '../utils.js'
+import { fmtPrice, discount, fmtAge, AGE_COLORS, fmtReviews, shareOrCopy } from '../utils.js'
 import { useBreakpoint } from '../hooks/useBreakpoint.js'
 
 function useProductImages(asin, primaryUrl) {
@@ -9,6 +9,7 @@ function useProductImages(asin, primaryUrl) {
 export default function ProductModal({ deal, onClose }) {
   const [slide, setSlide] = useState(0)
   const [lightbox, setLightbox] = useState(false)
+  const [copied, setCopied] = useState(false)
   const { isMobile, width } = useBreakpoint()
   const isStacked = width < 1100
   const images = useProductImages(deal?.asin, deal?.image_url)
@@ -69,6 +70,14 @@ export default function ProductModal({ deal, onClose }) {
     document.addEventListener('keydown', handleKey)
     return () => document.removeEventListener('keydown', handleKey)
   }, [handleKey])
+
+  const handleShare = async () => {
+    const result = await shareOrCopy(deal)
+    if (result === 'copied') {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
 
   const handleTouchStart = e => { touchStartX.current = e.touches[0].clientX }
   const handleTouchEnd   = e => {
@@ -160,6 +169,32 @@ export default function ProductModal({ deal, onClose }) {
           boxShadow: '0 30px 70px rgba(0,0,0,0.2)',
         }}
       >
+        {/* Share */}
+        <button
+          onClick={handleShare}
+          title={copied ? 'Link kopiert!' : 'Deal teilen'}
+          style={{
+            position: 'absolute', top: 18, right: 62, zIndex: 20,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 36, height: 36, borderRadius: '50%',
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: copied ? 'var(--accent)' : 'var(--text)', transition: 'background 0.15s, color 0.15s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-img)' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+        >
+          {copied ? (
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          ) : (
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+            </svg>
+          )}
+        </button>
+
         {/* Close */}
         <button
           onClick={onClose}
