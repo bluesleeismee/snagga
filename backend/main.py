@@ -355,6 +355,41 @@ async def share_deal(asin: str):
                          f'<script>location.replace({target!r})</script>')
 
 
+def _not_found_page(message: str) -> HTMLResponse:
+    """
+    Gebrandete 404-Seite für crawlbare HTML-Routen (/deal, /kategorie) —
+    ohne das würden ungültige URLs die rohe {"detail": "..."} JSON-Antwort
+    von FastAPIs Standard-Handler anzeigen. Behält echten 404-Status (SEO:
+    ein Redirect zur Startseite mit 200 wäre ein "Soft 404" und würde von
+    Google negativ bewertet).
+    """
+    return HTMLResponse(status_code=404, content=f"""<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Seite nicht gefunden | snagga.de</title>
+<meta name="robots" content="noindex, follow">
+<style>
+  body {{ font-family: system-ui, sans-serif; background:#F2EFEA; color:#1F1E1D; margin:0; }}
+  header {{ background:#153D68; padding:16px 20px; }}
+  header a {{ color:#EDE9E3; font-size:22px; font-weight:800; text-decoration:none; }}
+  main {{ max-width:640px; margin:0 auto; padding:60px 20px; text-align:center; }}
+  h1 {{ font-size:24px; margin-bottom:8px; }}
+  .back {{ display:inline-block; margin-top:20px; background:#C85E43; color:#fff; padding:14px 28px; border-radius:4px; text-decoration:none; font-weight:700; }}
+</style>
+</head>
+<body>
+<header><a href="https://www.snagga.de/">snagga.de</a></header>
+<main>
+<h1>404 — {message}</h1>
+<p>Diese Seite gibt es nicht (mehr).</p>
+<a class="back" href="https://www.snagga.de/">Zu den aktuellen Deals →</a>
+</main>
+</body>
+</html>""")
+
+
 @app.api_route("/deal/{asin}", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def deal_page(asin: str):
     """
@@ -365,7 +400,7 @@ async def deal_page(asin: str):
     die Lücke — eigene URL, eigener Title/Description, JSON-LD Product-Markup.
     """
     if not _ASIN_RE.match(asin):
-        raise HTTPException(status_code=404, detail="Ungültige ASIN")
+        return _not_found_page("Ungültige Produkt-ID")
 
     pool = await get_pool()
     async with pool.acquire() as conn:
@@ -375,7 +410,7 @@ async def deal_page(asin: str):
             asin,
         )
     if not row:
-        raise HTTPException(status_code=404, detail="Deal nicht gefunden")
+        return _not_found_page("Deal nicht gefunden")
 
     canonical = f"https://www.snagga.de/deal/{asin}"
     name      = html.escape((row["name"] or "Deal")[:200])
@@ -593,7 +628,7 @@ async def category_page(slug: str):
     wieder ablaufen (Rotation stündlich) und daher als SEO-Basis ungeeignet sind.
     """
     if not _SLUG_RE.match(slug) or slug not in CATEGORY_SLUGS:
-        raise HTTPException(status_code=404, detail="Kategorie nicht gefunden")
+        return _not_found_page("Kategorie nicht gefunden")
 
     category  = CATEGORY_SLUGS[slug]
     canonical = f"https://www.snagga.de/kategorie/{slug}"
