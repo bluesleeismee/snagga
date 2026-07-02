@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://snagga.de/sitemap.xml
+Sitemap: https://www.snagga.de/sitemap.xml

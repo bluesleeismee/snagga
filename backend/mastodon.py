@@ -35,7 +35,7 @@ def _build_status(deal: dict) -> str:
     if disc > 0:
         price_line += f" (-{disc}%) statt {_fmt(original)}"
 
-    snagga_url = f"https://snagga.de/share/{asin}"
+    snagga_url = f"https://www.snagga.de/share/{asin}"
     full_name  = deal.get("name") or ""
 
     return "\n\n".join([

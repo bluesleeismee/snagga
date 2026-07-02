@@ -48,7 +48,7 @@ def _build_message(deal: dict) -> str:
     if disc > 0:
         price_line += f" \\(\\-{disc}%\\)\n~~{_esc(_fmt(original))}~~ Ø\\-Preis 6 Monate"
 
-    snagga_url = f"https://snagga.de/share/{asin}"
+    snagga_url = f"https://www.snagga.de/share/{asin}"
     amazon_url = _esc_url(deal.get("affiliate_url") or f"https://www.amazon.de/dp/{asin}?tag=snagga-21")
 
     return "\n".join([

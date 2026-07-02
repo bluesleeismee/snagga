@@ -271,9 +271,9 @@ async def share_deal(asin: str):
     hier — Telegrams Preview-Crawler folgt dem sonst VOR dem Lesen der OG-Tags
     und zeigt die generische Startseite statt der Produktvorschau.
     """
-    target = "https://snagga.de/"
+    target = "https://www.snagga.de/"
     if _ASIN_RE.match(asin):
-        target = f"https://snagga.de/?asin={asin}"
+        target = f"https://www.snagga.de/?asin={asin}"
 
         pool = await get_pool()
         async with pool.acquire() as conn:
@@ -293,7 +293,7 @@ async def share_deal(asin: str):
             original_txt = f"{original:.2f}".replace(".", ",") + " €"
             desc  = f"{tag or 'Deal'} auf snagga.de — statt {original_txt}" if original > current \
                     else "Aktueller Bestpreis auf snagga.de"
-            image = html.escape(row["image_url"] or "https://snagga.de/favicon.svg")
+            image = html.escape(row["image_url"] or "https://www.snagga.de/favicon.svg")
 
             return HTMLResponse(f"""<!DOCTYPE html>
 <html lang="de">
@@ -342,9 +342,9 @@ async def deal_page(asin: str):
     if not row:
         raise HTTPException(status_code=404, detail="Deal nicht gefunden")
 
-    canonical = f"https://snagga.de/deal/{asin}"
+    canonical = f"https://www.snagga.de/deal/{asin}"
     name      = html.escape((row["name"] or "Deal")[:200])
-    image     = html.escape(row["image_url"] or "https://snagga.de/favicon.svg")
+    image     = html.escape(row["image_url"] or "https://www.snagga.de/favicon.svg")
     affiliate = html.escape(row["affiliate_url"] or f"https://www.amazon.de/dp/{asin}")
 
     # Abgelaufene Deals: Seite bleibt erreichbar (keine toten Links aus Google),
@@ -361,7 +361,7 @@ async def deal_page(asin: str):
 <body style="font-family:system-ui,sans-serif;text-align:center;padding:60px 20px;background:#F2EFEA;color:#1F1E1D">
 <h1>Dieser Deal ist nicht mehr verfügbar</h1>
 <p>{name}</p>
-<p><a href="https://snagga.de/">Alle aktuellen Deals ansehen →</a></p>
+<p><a href="https://www.snagga.de/">Alle aktuellen Deals ansehen →</a></p>
 </body>
 </html>""")
 
@@ -436,7 +436,7 @@ async def deal_page(asin: str):
 </style>
 </head>
 <body>
-<header><a href="https://snagga.de/">snagga.de</a></header>
+<header><a href="https://www.snagga.de/">snagga.de</a></header>
 <main>
   {f'<div class="tag">{tag}</div>' if tag else ''}
   <img src="{image}" alt="{name}">
@@ -445,7 +445,7 @@ async def deal_page(asin: str):
   {rating_html}
   <p>Kategorie: {category}</p>
   <a class="cta" href="{affiliate}" rel="nofollow sponsored noopener" target="_blank">Zum Angebot bei Amazon →</a>
-  <a class="back" href="https://snagga.de/">← Alle Deals ansehen</a>
+  <a class="back" href="https://www.snagga.de/">← Alle Deals ansehen</a>
 </main>
 </body>
 </html>""")
@@ -461,13 +461,13 @@ async def sitemap():
         )
 
     urls = [
-        "  <url><loc>https://snagga.de/</loc><changefreq>hourly</changefreq><priority>1.0</priority></url>",
-        "  <url><loc>https://snagga.de/legal</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>",
+        "  <url><loc>https://www.snagga.de/</loc><changefreq>hourly</changefreq><priority>1.0</priority></url>",
+        "  <url><loc>https://www.snagga.de/legal</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>",
     ]
     for row in rows:
         lastmod = f"<lastmod>{row['last_updated'].date().isoformat()}</lastmod>" if row["last_updated"] else ""
         urls.append(
-            f"  <url><loc>https://snagga.de/deal/{row['asin']}</loc>{lastmod}"
+            f"  <url><loc>https://www.snagga.de/deal/{row['asin']}</loc>{lastmod}"
             f"<changefreq>daily</changefreq><priority>0.6</priority></url>"
         )
 
