@@ -529,6 +529,60 @@ async def deal_page(asin: str):
 </html>""")
 
 
+@app.api_route("/feed.xml", methods=["GET", "HEAD"])
+async def rss_feed():
+    """
+    RSS 2.0-Feed der aktuell aktiven Deals — erreicht Feed-Reader und
+    Deal-Aggregator-Bots automatisch, ohne dass jemand manuell posten muss.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT asin, name, current_price, original_price, tag, category, "
+            "first_seen, last_updated FROM products WHERE is_active=true "
+            "ORDER BY first_seen DESC NULLS LAST, last_updated DESC LIMIT 50"
+        )
+
+    def rfc822(dt) -> str:
+        return dt.strftime("%a, %d %b %Y %H:%M:%S +0000") if dt else ""
+
+    items = []
+    for r in rows:
+        current  = r["current_price"]  or 0
+        original = r["original_price"] or 0
+        price_txt = f"{current:.2f}".replace(".", ",") + " €"
+        disc = round((original - current) / original * 100) if original > current else 0
+        title = html.escape(
+            f"{r['name'] or 'Deal'} für {price_txt}" + (f" (-{disc}%)" if disc > 0 else "")
+        )
+        link = f"https://www.snagga.de/deal/{r['asin']}"
+        desc = html.escape(
+            (r["tag"] or r["category"] or "Deal") + f" — {price_txt} auf snagga.de"
+        )
+        pubdate = rfc822(r["first_seen"] or r["last_updated"])
+        items.append(
+            "<item>"
+            f"<title>{title}</title>"
+            f"<link>{link}</link>"
+            f'<guid isPermaLink="true">{link}</guid>'
+            f"<description>{desc}</description>"
+            + (f"<pubDate>{pubdate}</pubDate>" if pubdate else "")
+            + "</item>"
+        )
+
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<rss version="2.0"><channel>'
+        "<title>snagga — Aktuelle Amazon-Deals</title>"
+        "<link>https://www.snagga.de/</link>"
+        "<description>Täglich handverlesene Amazon-Bestpreise mit geprüfter Preishistorie</description>"
+        "<language>de-de</language>"
+        + "".join(items) +
+        "</channel></rss>"
+    )
+    return Response(content=xml, media_type="application/rss+xml")
+
+
 @app.api_route("/kategorie/{slug}", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def category_page(slug: str):
     """
