@@ -7,7 +7,10 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from scraper import fetch_and_update_deals, nightly_deep_sync, hourly_keepa_price_check
+from scraper import (
+    fetch_and_update_deals, nightly_deep_sync, hourly_keepa_price_check,
+    post_next_mastodon_deal,
+)
 
 SERVICE_URL = os.getenv("RENDER_EXTERNAL_URL", "https://snagga.onrender.com")
 
@@ -62,5 +65,18 @@ def create_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
         misfire_grace_time=3600,
     )
+
+    # Mastodon: max. 1 Post zu je einer festen Uhrzeit — bewusst NICHT stündlich.
+    # Die vorherige Taktung (bis zu 3/Std., identische Hashtags) fuehrte zur
+    # Spam-Sperre durch mastodon.social. 3 Posts/Tag zu festen Zeiten wirkt
+    # kuratiert statt automatisiert.
+    for hour in (9, 14, 19):
+        scheduler.add_job(
+            post_next_mastodon_deal,
+            CronTrigger(hour=hour, minute=15),
+            id=f"mastodon_post_{hour}",
+            replace_existing=True,
+            misfire_grace_time=1800,
+        )
 
     return scheduler

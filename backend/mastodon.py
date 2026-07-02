@@ -9,6 +9,15 @@ MASTODON_INSTANCE = os.getenv("MASTODON_INSTANCE_URL", "").rstrip("/")
 MASTODON_TOKEN    = os.getenv("MASTODON_ACCESS_TOKEN", "")
 MIN_SCORE         = int(os.getenv("MASTODON_MIN_SCORE", "45"))
 
+# Rotierende Hashtag-Sets statt immer derselben drei Tags — identische
+# Hashtags bei jedem Post waren Teil des Spam-Musters, das zur Sperre führte.
+_HASHTAG_SETS = [
+    "#Schnäppchen #AmazonDeals",
+    "#Angebot #Sparen",
+    "#Deal #Bestpreis",
+    "#Rabatt #AmazonAngebot",
+]
+
 
 def _fmt(price: float) -> str:
     return f"{price:.2f}".replace(".", ",") + " €"
@@ -37,13 +46,14 @@ def _build_status(deal: dict) -> str:
 
     snagga_url = f"https://www.snagga.de/share/{asin}"
     full_name  = deal.get("name") or ""
+    hashtags   = _HASHTAG_SETS[hash(asin) % len(_HASHTAG_SETS)]
 
     return "\n\n".join([
         tag_line,
         name + ("…" if len(full_name) > 100 else ""),
         f"{price_line}\n📂 {category}",
         snagga_url,
-        "#Schnäppchen #AmazonDeals #Sparen",
+        hashtags,
     ])
 
 
