@@ -198,9 +198,15 @@ export default function ProductModal({ deal, onClose }) {
         {/* Close */}
         <button
           onClick={onClose}
-          style={{ position: 'absolute', top: 20, right: 20, zIndex: 20, background: 'none', border: 'none', fontSize: 28, color: 'var(--text)', lineHeight: 1, transition: 'color 0.15s' }}
-          onMouseEnter={e => e.currentTarget.style.color = 'var(--accent)'}
-          onMouseLeave={e => e.currentTarget.style.color = 'var(--text)'}
+          style={{
+            position: 'absolute', top: 18, right: 20, zIndex: 20,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 36, height: 36, borderRadius: '50%',
+            background: 'none', border: 'none', cursor: 'pointer',
+            fontSize: 28, color: 'var(--text)', lineHeight: 1, transition: 'background 0.15s, color 0.15s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-img)'; e.currentTarget.style.color = 'var(--accent)' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text)' }}
         >×</button>
 
         {/* ── LEFT: Gallery ── */}
