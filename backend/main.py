@@ -617,8 +617,14 @@ async def deal_page(asin: str):
   header {{ background:#153D68; padding:16px 24px; }}
   header a {{ color:#EDE9E3; font-size:22px; font-weight:800; text-decoration:none; }}
   header .accent {{ color:#C85E43; }}
-  .wrap {{ max-width:1360px; margin:32px auto; background:#fff; display:grid; grid-template-columns:1fr 1.15fr; box-shadow:0 4px 24px rgba(0,0,0,0.06); }}
+  .wrap {{ max-width:1360px; margin:32px auto; background:#fff; display:grid; grid-template-columns:1fr 1.15fr; box-shadow:0 4px 24px rgba(0,0,0,0.06); position:relative; }}
   @media (max-width:760px) {{ .wrap {{ grid-template-columns:1fr; margin:0; }} }}
+  .page-share {{ position:absolute; top:20px; right:20px; z-index:5; display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:50%; background:#fff; border:none; cursor:pointer; color:#7E7A75; box-shadow:0 1px 4px rgba(0,0,0,0.1); transition:background 0.15s, color 0.15s; }}
+  .page-share:hover {{ background:#FAF9F7; color:#1F1E1D; }}
+  .page-share.copied {{ color:#C85E43; }}
+  .page-share .icon-check {{ display:none; }}
+  .page-share.copied .icon-share {{ display:none; }}
+  .page-share.copied .icon-check {{ display:inline-block; }}
   .gallery {{ background:#fff; padding:48px; display:flex; align-items:center; justify-content:center; border-right:1px solid #EAE6E1; }}
   @media (max-width:760px) {{ .gallery {{ border-right:none; border-bottom:1px solid #EAE6E1; padding:32px; }} }}
   .gallery img {{ max-width:100%; max-height:460px; object-fit:contain; }}
@@ -635,10 +641,20 @@ async def deal_page(asin: str):
   .cta {{ display:flex; align-items:center; justify-content:center; gap:10px; background:#C85E43; color:#fff; padding:16px 28px; font-size:14px; font-weight:600; text-decoration:none; margin-top:20px; }}
   .back {{ display:block; margin-top:16px; color:#153D68; font-size:14px; text-decoration:none; }}
 </style>
+{_CARD_SHARE_JS}
 </head>
 <body>
 <header><a href="https://www.snagga.de/">snagga<span class="accent">.de</span></a></header>
 <div class="wrap">
+  <button class="page-share" title="Deal teilen" onclick="snaggaShare(event,this)" data-asin="{asin}" data-name="{name}" data-price="{price_txt}">
+    <svg class="icon-share" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+    </svg>
+    <svg class="icon-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="20 6 9 17 4 12"/>
+    </svg>
+  </button>
   <div class="gallery"><img src="{image}" alt="{name}"></div>
   <div class="details">
     <div class="brand">{category}</div>
