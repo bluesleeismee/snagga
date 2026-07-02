@@ -29,6 +29,22 @@ const CAT_LABELS = {
 }
 const catLabel = (c) => CAT_LABELS[c] || c
 
+// Muss mit CATEGORY_SLUGS in backend/main.py übereinstimmen — dort werden
+// diese Slugs für die dauerhaften /kategorie/{slug}-SEO-Seiten verwendet.
+const CAT_SLUGS = {
+  'Auto & Motorrad':                  'auto-motorrad',
+  'Baumarkt':                         'baumarkt',
+  'Computer & Zubehör':               'computer-zubehoer',
+  'Drogerie & Körperpflege':          'drogerie-koerperpflege',
+  'Elektro-Großgeräte':               'elektro-grossgeraete',
+  'Elektronik & Foto':                'elektronik-foto',
+  'Games':                            'games',
+  'Kamera & Foto':                    'kamera-foto',
+  'Küche, Haushalt & Wohnen':         'kueche-haushalt-wohnen',
+  'Musikinstrumente & DJ-Equipment':  'musikinstrumente-dj-equipment',
+  'Sport & Freizeit':                 'sport-freizeit',
+}
+
 // Gewünschte Reihenfolge der Kategorie-Chips
 const CAT_ORDER = [
   'Elektronik & Foto',
@@ -525,15 +541,22 @@ export default function DealsPage() {
           <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.15)', flexShrink: 0 }} />
           {sortCats(categories).map(cat => {
             const isActive = selectedCats.has(cat)
+            const slug = CAT_SLUGS[cat]
             return (
-              <button
+              <a
                 key={cat}
-                onClick={() => {
+                href={slug ? `/kategorie/${slug}` : undefined}
+                onClick={e => {
+                  // Strg/Cmd/Shift-Klick (oder fehlender Slug) → normaler Link,
+                  // öffnet die dauerhafte SEO-Kategorieseite in neuem Tab.
+                  if (!slug || e.ctrlKey || e.metaKey || e.shiftKey) return
+                  e.preventDefault()
                   setSelectedCats(prev => prev.has(cat) ? new Set() : new Set([cat]))
                   setSortBy('score')
                 }}
                 title={cat}
                 style={{
+                  display: 'inline-block',
                   padding: isMobile ? '6px 12px' : '7px 16px',
                   fontSize: 13, flexShrink: 0, borderRadius: 2,
                   border: '1px solid transparent',
@@ -542,12 +565,13 @@ export default function DealsPage() {
                   fontWeight: isActive ? 600 : 500,
                   transition: 'all 0.15s',
                   whiteSpace: 'nowrap',
+                  textDecoration: 'none', cursor: 'pointer',
                 }}
                 onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = 'rgba(255,255,255,0.2)' } }}
                 onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' } }}
               >
                 {catLabel(cat)}
-              </button>
+              </a>
             )
           })}
           </div>

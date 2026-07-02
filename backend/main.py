@@ -374,13 +374,14 @@ def _not_found_page(message: str) -> HTMLResponse:
   body {{ font-family: system-ui, sans-serif; background:#F2EFEA; color:#1F1E1D; margin:0; }}
   header {{ background:#153D68; padding:16px 20px; }}
   header a {{ color:#EDE9E3; font-size:22px; font-weight:800; text-decoration:none; }}
+  header .accent {{ color:#C85E43; }}
   main {{ max-width:640px; margin:0 auto; padding:60px 20px; text-align:center; }}
   h1 {{ font-size:24px; margin-bottom:8px; }}
   .back {{ display:inline-block; margin-top:20px; background:#C85E43; color:#fff; padding:14px 28px; border-radius:4px; text-decoration:none; font-weight:700; }}
 </style>
 </head>
 <body>
-<header><a href="https://www.snagga.de/">snagga.de</a></header>
+<header><a href="https://www.snagga.de/">snagga<span class="accent">.de</span></a></header>
 <main>
 <h1>404 — {message}</h1>
 <p>Diese Seite gibt es nicht (mehr).</p>
@@ -454,6 +455,7 @@ async def deal_page(asin: str):
   body {{ font-family: system-ui, sans-serif; background:#F2EFEA; color:#1F1E1D; margin:0; }}
   header {{ background:#153D68; padding:16px 20px; }}
   header a {{ color:#EDE9E3; font-size:22px; font-weight:800; text-decoration:none; }}
+  header .accent {{ color:#C85E43; }}
   main {{ max-width:720px; margin:0 auto; padding:32px 20px; }}
   h1 {{ font-size:22px; }}
   .back {{ display:inline-block; margin-top:8px; color:#153D68; }}
@@ -467,7 +469,7 @@ async def deal_page(asin: str):
 </style>
 </head>
 <body>
-<header><a href="https://www.snagga.de/">snagga.de</a></header>
+<header><a href="https://www.snagga.de/">snagga<span class="accent">.de</span></a></header>
 <main>
 <h1>Huch! 👀 Dieser Deal ist schon weg</h1>
 <p>„{name}" war ein Snagga-Deal — Deals sind aber flüchtig und laufen ab.</p>
@@ -494,7 +496,7 @@ async def deal_page(asin: str):
         (f", {disc}% günstiger als der bisherige Preis." if disc > 0 else ".")
     )
 
-    rating_html = f'<p>⭐ {rating:.1f} ({reviews} Bewertungen)</p>' if rating > 0 and reviews > 0 else ""
+    rating_html = f'<p class="meta">⭐ {rating:.1f} ({reviews} Bewertungen)</p>' if rating > 0 and reviews > 0 else ""
 
     ld_json: dict = {
         "@context":   "https://schema.org/",
@@ -535,31 +537,49 @@ async def deal_page(asin: str):
 <meta name="twitter:card" content="summary_large_image">
 <script type="application/ld+json">{json.dumps(ld_json, ensure_ascii=False)}</script>
 <style>
-  body {{ font-family: system-ui, sans-serif; background:#F2EFEA; color:#1F1E1D; margin:0; }}
-  header {{ background:#153D68; padding:16px 20px; }}
+  body {{ font-family: system-ui, sans-serif; background:#FAF8F5; color:#1F1E1D; margin:0; }}
+  header {{ background:#153D68; padding:16px 24px; }}
   header a {{ color:#EDE9E3; font-size:22px; font-weight:800; text-decoration:none; }}
-  main {{ max-width:640px; margin:0 auto; padding:32px 20px; }}
-  img {{ max-width:100%; border-radius:8px; }}
-  .tag {{ display:inline-block; background:#C85E43; color:#fff; font-size:13px; font-weight:700; padding:4px 10px; border-radius:4px; margin-bottom:12px; }}
-  .price {{ font-size:28px; font-weight:800; }}
-  .original {{ color:#888; text-decoration:line-through; font-size:16px; margin-left:8px; font-weight:400; }}
-  .cta {{ display:inline-block; margin-top:20px; background:#C85E43; color:#fff; padding:14px 28px; border-radius:4px; text-decoration:none; font-weight:700; }}
-  .back {{ display:block; margin-top:24px; color:#153D68; }}
+  header .accent {{ color:#C85E43; }}
+  .wrap {{ max-width:1100px; margin:32px auto; background:#fff; display:grid; grid-template-columns:1.2fr 0.8fr; box-shadow:0 4px 24px rgba(0,0,0,0.06); }}
+  @media (max-width:760px) {{ .wrap {{ grid-template-columns:1fr; margin:0; }} }}
+  .gallery {{ background:#FAF9F7; padding:48px; display:flex; align-items:center; justify-content:center; border-right:1px solid #EAE6E1; }}
+  @media (max-width:760px) {{ .gallery {{ border-right:none; border-bottom:1px solid #EAE6E1; padding:32px; }} }}
+  .gallery img {{ max-width:100%; max-height:400px; object-fit:contain; }}
+  .details {{ padding:48px 44px; }}
+  @media (max-width:760px) {{ .details {{ padding:32px 24px; }} }}
+  .brand {{ font-size:11px; text-transform:uppercase; letter-spacing:1.5px; color:#7E7A75; font-weight:600; margin-bottom:10px; }}
+  .tag {{ display:inline-block; background:#C85E43; color:#fff; font-size:13px; font-weight:700; padding:4px 10px; margin-bottom:12px; }}
+  h1 {{ font-size:28px; font-weight:700; line-height:1.3; margin:0 0 24px; }}
+  .price-row {{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px; }}
+  .price {{ font-size:34px; font-weight:700; }}
+  .original {{ font-size:16px; text-decoration:line-through; color:#7E7A75; font-weight:400; }}
+  .disc {{ background:#C85E43; color:#fff; padding:3px 9px; font-size:12px; font-weight:600; }}
+  .meta {{ font-size:13px; color:#7E7A75; margin:0 0 8px; }}
+  .cta {{ display:flex; align-items:center; justify-content:center; gap:10px; background:#C85E43; color:#fff; padding:16px 28px; font-size:14px; font-weight:600; text-decoration:none; margin-top:20px; }}
+  .back {{ display:block; margin-top:16px; color:#153D68; font-size:14px; text-decoration:none; }}
 </style>
 </head>
 <body>
-<header><a href="https://www.snagga.de/">snagga.de</a></header>
-<main>
-  {f'<div class="tag">{tag}</div>' if tag else ''}
-  <img src="{image}" alt="{name}">
-  <h1>{name}</h1>
-  <p class="price">{price_txt}{f'<span class="original">{original_txt}</span>' if disc > 0 else ''}</p>
-  {rating_html}
-  <p>Kategorie: {category}</p>
-  <a class="cta" href="{affiliate}" rel="nofollow sponsored noopener" target="_blank">Zum Angebot bei Amazon →</a>
-  {f'<a class="back" href="https://www.snagga.de/kategorie/{SLUG_BY_CATEGORY[row["category"]]}">Alle {category}-Deals ansehen →</a>' if row["category"] in SLUG_BY_CATEGORY else ''}
-  <a class="back" href="https://www.snagga.de/">← Alle Deals ansehen</a>
-</main>
+<header><a href="https://www.snagga.de/">snagga<span class="accent">.de</span></a></header>
+<div class="wrap">
+  <div class="gallery"><img src="{image}" alt="{name}"></div>
+  <div class="details">
+    <div class="brand">{category}</div>
+    {f'<div class="tag">{tag}</div>' if tag else ''}
+    <h1>{name}</h1>
+    <div class="price-row">
+      <span class="price">{price_txt}</span>
+      {f'<span class="original">{original_txt}</span>' if disc > 0 else ''}
+      {f'<span class="disc">-{disc}%</span>' if disc > 0 else ''}
+    </div>
+    {rating_html}
+    <p class="meta">Kategorie: {category}</p>
+    <a class="cta" href="{affiliate}" rel="nofollow sponsored noopener" target="_blank">Zum Angebot bei Amazon →</a>
+    {f'<a class="back" href="https://www.snagga.de/kategorie/{SLUG_BY_CATEGORY[row["category"]]}">Alle {category}-Deals ansehen →</a>' if row["category"] in SLUG_BY_CATEGORY else ''}
+    <a class="back" href="https://www.snagga.de/">← Alle Deals ansehen</a>
+  </div>
+</div>
 </body>
 </html>""")
 
@@ -697,6 +717,7 @@ async def category_page(slug: str):
   body {{ font-family: system-ui, sans-serif; background:#F2EFEA; color:#1F1E1D; margin:0; }}
   header {{ background:#153D68; padding:16px 20px; }}
   header a {{ color:#EDE9E3; font-size:22px; font-weight:800; text-decoration:none; }}
+  header .accent {{ color:#C85E43; }}
   main {{ max-width:960px; margin:0 auto; padding:32px 20px; }}
   h1 {{ font-size:26px; margin-bottom:4px; }}
   .grid {{ display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:16px; margin-top:24px; }}
@@ -712,7 +733,7 @@ async def category_page(slug: str):
 </style>
 </head>
 <body>
-<header><a href="https://www.snagga.de/">snagga.de</a></header>
+<header><a href="https://www.snagga.de/">snagga<span class="accent">.de</span></a></header>
 <main>
 <h1>{cat_esc} Angebote</h1>
 <p>{desc}</p>
