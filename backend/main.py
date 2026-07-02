@@ -307,7 +307,31 @@ _CARD_CSS = """
   .card-price-row { display:flex; align-items:baseline; gap:8px; margin-bottom:14px; }
   .card-price { font-size:17px; font-weight:700; }
   .card-original { font-size:13px; text-decoration:line-through; color:#7E7A75; }
-  .card-footer { border-top:1px solid #EAE6E1; padding-top:11px; font-size:11px; color:#7E7A75; margin-top:auto; }
+  .card-footer { border-top:1px solid #EAE6E1; padding-top:11px; font-size:11px; color:#7E7A75; margin-top:auto; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .card-share { background:none; border:none; cursor:pointer; padding:2px; display:inline-flex; align-items:center; color:#7E7A75; transition:color 0.15s; flex-shrink:0; }
+  .card-share:hover { color:#1F1E1D; }
+  .card-share.copied { color:#C85E43; }
+  .card-share .icon-check { display:none; }
+  .card-share.copied .icon-share { display:none; }
+  .card-share.copied .icon-check { display:inline-block; }
+"""
+
+# Vanilla JS fürs Teilen auf statischen SSR-Kacheln (Kategorie-Seite, "Ähnliche
+# Deals") — dort gibt es kein React, daher eigenständige Klick-Logik statt
+# der shareOrCopy()-Funktion aus dem Frontend.
+_CARD_SHARE_JS = """
+<script>
+function snaggaShare(e, btn) {
+  e.preventDefault(); e.stopPropagation();
+  var url = location.origin + '/share/' + btn.dataset.asin;
+  var text = btn.dataset.name + ' jetzt für ' + btn.dataset.price + ' auf snagga.de \\uD83D\\uDD25';
+  if (navigator.share) { navigator.share({title: btn.dataset.name, text: text, url: url}).catch(function(){}); return; }
+  navigator.clipboard.writeText(url).then(function() {
+    btn.classList.add('copied');
+    setTimeout(function() { btn.classList.remove('copied'); }, 2000);
+  }).catch(function(){});
+}
+</script>
 """
 
 
@@ -340,7 +364,15 @@ def _deal_card_html(row) -> str:
         f'<div class="card-brand">{brand}</div>'
         f'<div class="card-name">{name}</div>'
         f'<div class="card-price-row"><span class="card-price">{price_txt}</span>{original_html}</div>'
-        f'<div class="card-footer">{category}</div>'
+        f'<div class="card-footer"><span>{category}</span>'
+        f'<button class="card-share" title="Deal teilen" onclick="snaggaShare(event,this)" '
+        f'data-asin="{row["asin"]}" data-name="{name}" data-price="{price_txt}">'
+        f'<svg class="icon-share" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+        f'<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>'
+        f'<line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>'
+        f'<svg class="icon-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">'
+        f'<polyline points="20 6 9 17 4 12"/></svg>'
+        f'</button></div>'
         f'</div></a>'
     )
 
@@ -510,6 +542,7 @@ async def deal_page(asin: str):
   .back {{ display:inline-block; margin-top:8px; color:#153D68; }}
   {_CARD_CSS}
 </style>
+{_CARD_SHARE_JS}
 </head>
 <body>
 <header><a href="https://www.snagga.de/">snagga<span class="accent">.de</span></a></header>
@@ -768,6 +801,7 @@ async def category_page(slug: str):
   .catnav a {{ font-size:13px; background:#fff; border-radius:20px; padding:6px 14px; text-decoration:none; color:#153D68; }}
   .back {{ display:inline-block; margin-top:20px; color:#153D68; }}
 </style>
+{_CARD_SHARE_JS}
 </head>
 <body>
 <header><a href="https://www.snagga.de/">snagga<span class="accent">.de</span></a></header>

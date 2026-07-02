@@ -203,11 +203,15 @@ export default function ProductModal({ deal, onClose }) {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             width: 36, height: 36, borderRadius: '50%',
             background: 'none', border: 'none', cursor: 'pointer',
-            fontSize: 28, color: 'var(--text)', lineHeight: 1, transition: 'background 0.15s, color 0.15s',
+            color: 'var(--text)', transition: 'background 0.15s, color 0.15s',
           }}
           onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-img)'; e.currentTarget.style.color = 'var(--accent)' }}
           onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text)' }}
-        >×</button>
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+            <line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>
+          </svg>
+        </button>
 
         {/* ── LEFT: Gallery ── */}
         <div
