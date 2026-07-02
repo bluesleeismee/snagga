@@ -259,6 +259,41 @@ async def get_product(asin: str):
 
 
 _ASIN_RE = re.compile(r"^[A-Za-z0-9]{10}$")
+_SLUG_RE = re.compile(r"^[a-z0-9-]+$")
+
+# Muss mit den Kategorienamen aus ROOTCAT_MAP / classify_category() in scraper.py
+# übereinstimmen — dort werden Produkte diesen exakten Strings zugeordnet.
+CATEGORY_SLUGS: dict[str, str] = {
+    "auto-motorrad":                  "Auto & Motorrad",
+    "baumarkt":                       "Baumarkt",
+    "computer-zubehoer":              "Computer & Zubehör",
+    "drogerie-koerperpflege":         "Drogerie & Körperpflege",
+    "elektro-grossgeraete":           "Elektro-Großgeräte",
+    "elektronik-foto":                "Elektronik & Foto",
+    "games":                          "Games",
+    "kamera-foto":                    "Kamera & Foto",
+    "kueche-haushalt-wohnen":         "Küche, Haushalt & Wohnen",
+    "musikinstrumente-dj-equipment":  "Musikinstrumente & DJ-Equipment",
+    "sport-freizeit":                 "Sport & Freizeit",
+}
+SLUG_BY_CATEGORY = {v: k for k, v in CATEGORY_SLUGS.items()}
+
+
+def _deal_card_html(row) -> str:
+    """Kompakte Deal-Karte für Kategorie-Seiten und die 'Ähnliche Deals'-Liste."""
+    name    = html.escape((row["name"] or "Deal")[:120])
+    image   = html.escape(row["image_url"] or "https://www.snagga.de/favicon.svg")
+    current  = row["current_price"]  or 0
+    original = row["original_price"] or 0
+    price_txt = f"{current:.2f}".replace(".", ",") + " €"
+    original_html = ""
+    if original > current:
+        original_txt = f"{original:.2f}".replace(".", ",") + " €"
+        original_html = f'<span class="card-original">{original_txt}</span>'
+    return (f'<a class="card" href="https://www.snagga.de/deal/{row["asin"]}">'
+            f'<img src="{image}" alt="{name}" loading="lazy">'
+            f'<div class="card-body"><p class="card-name">{name}</p>'
+            f'<p class="card-price">{price_txt}{original_html}</p></div></a>')
 
 
 @app.api_route("/share/{asin}", methods=["GET", "HEAD"], response_class=HTMLResponse)
@@ -348,20 +383,62 @@ async def deal_page(asin: str):
     affiliate = html.escape(row["affiliate_url"] or f"https://www.amazon.de/dp/{asin}")
 
     # Abgelaufene Deals: Seite bleibt erreichbar (keine toten Links aus Google),
-    # aber noindex — verhindert veraltete Preise in den Suchergebnissen.
+    # aber noindex — verhindert veraltete Preise in den Suchergebnissen. Zeigt
+    # stattdessen aktuell aktive Deals, damit Besucher nicht in einer Sackgasse
+    # landen und die Seite crawlbaren Linkwert weitergibt (kein Totpunkt).
     if not row["is_active"]:
+        pool2 = await get_pool()
+        async with pool2.acquire() as conn:
+            similar = await conn.fetch(
+                "SELECT asin, name, image_url, current_price, original_price "
+                "FROM products WHERE is_active=true AND category=$1 AND asin != $2 "
+                "ORDER BY deal_score DESC LIMIT 4",
+                row["category"], asin,
+            )
+            if not similar:
+                similar = await conn.fetch(
+                    "SELECT asin, name, image_url, current_price, original_price "
+                    "FROM products WHERE is_active=true ORDER BY deal_score DESC LIMIT 4"
+                )
+
+        similar_html = "".join(_deal_card_html(r) for r in similar)
+        similar_block = (
+            f'<h2>Diese Deals laufen gerade:</h2><div class="grid">{similar_html}</div>'
+            if similar else ""
+        )
+
         return HTMLResponse(f"""<!DOCTYPE html>
 <html lang="de">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{name} — Deal nicht mehr verfügbar | snagga.de</title>
 <meta name="robots" content="noindex, follow">
 <link rel="canonical" href="{canonical}">
+<style>
+  body {{ font-family: system-ui, sans-serif; background:#F2EFEA; color:#1F1E1D; margin:0; }}
+  header {{ background:#153D68; padding:16px 20px; }}
+  header a {{ color:#EDE9E3; font-size:22px; font-weight:800; text-decoration:none; }}
+  main {{ max-width:720px; margin:0 auto; padding:32px 20px; }}
+  h1 {{ font-size:22px; }}
+  .back {{ display:inline-block; margin-top:8px; color:#153D68; }}
+  .grid {{ display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:14px; margin-top:16px; }}
+  .card {{ display:block; background:#fff; border-radius:8px; overflow:hidden; text-decoration:none; color:#1F1E1D; box-shadow:0 1px 3px rgba(0,0,0,.08); }}
+  .card img {{ width:100%; aspect-ratio:1; object-fit:contain; background:#fff; padding:8px; }}
+  .card-body {{ padding:6px 10px 12px; }}
+  .card-name {{ font-size:13px; line-height:1.3; height:2.6em; overflow:hidden; margin:0 0 4px; }}
+  .card-price {{ font-weight:800; font-size:15px; margin:0; }}
+  .card-original {{ color:#888; text-decoration:line-through; font-weight:400; font-size:12px; margin-left:4px; }}
+</style>
 </head>
-<body style="font-family:system-ui,sans-serif;text-align:center;padding:60px 20px;background:#F2EFEA;color:#1F1E1D">
-<h1>Dieser Deal ist nicht mehr verfügbar</h1>
-<p>{name}</p>
-<p><a href="https://www.snagga.de/">Alle aktuellen Deals ansehen →</a></p>
+<body>
+<header><a href="https://www.snagga.de/">snagga.de</a></header>
+<main>
+<h1>Huch! 👀 Dieser Deal ist schon weg</h1>
+<p>„{name}" war ein Snagga-Deal — Deals sind aber flüchtig und laufen ab.</p>
+{similar_block}
+<p><a class="back" href="https://www.snagga.de/">← Alle aktuellen Deals ansehen</a></p>
+</main>
 </body>
 </html>""")
 
@@ -445,7 +522,114 @@ async def deal_page(asin: str):
   {rating_html}
   <p>Kategorie: {category}</p>
   <a class="cta" href="{affiliate}" rel="nofollow sponsored noopener" target="_blank">Zum Angebot bei Amazon →</a>
+  {f'<a class="back" href="https://www.snagga.de/kategorie/{SLUG_BY_CATEGORY[row["category"]]}">Alle {category}-Deals ansehen →</a>' if row["category"] in SLUG_BY_CATEGORY else ''}
   <a class="back" href="https://www.snagga.de/">← Alle Deals ansehen</a>
+</main>
+</body>
+</html>""")
+
+
+@app.api_route("/kategorie/{slug}", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def category_page(slug: str):
+    """
+    Dauerhafte, serverseitig gerenderte Kategorie-Seite. Anders als einzelne
+    Deal-Seiten (/deal/{asin}) läuft diese URL nie ab — Deals kommen und gehen,
+    aber die Kategorie-Seite bleibt bestehen und kann über Zeit Google-Vertrauen
+    aufbauen. Wichtig, weil einzelne Deals oft schon vor der Erstindexierung
+    wieder ablaufen (Rotation stündlich) und daher als SEO-Basis ungeeignet sind.
+    """
+    if not _SLUG_RE.match(slug) or slug not in CATEGORY_SLUGS:
+        raise HTTPException(status_code=404, detail="Kategorie nicht gefunden")
+
+    category  = CATEGORY_SLUGS[slug]
+    canonical = f"https://www.snagga.de/kategorie/{slug}"
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT asin, name, image_url, current_price, original_price "
+            "FROM products WHERE is_active=true AND category=$1 "
+            "ORDER BY deal_score DESC LIMIT 60",
+            category,
+        )
+
+    count = len(rows)
+    cat_esc = html.escape(category)
+
+    if count:
+        title = f"{cat_esc} Angebote — {count} aktuelle Amazon-Deals | snagga.de"
+        desc  = html.escape(
+            f"{count} aktuelle {category}-Deals mit geprüfter Preishistorie — "
+            f"täglich aktualisiert auf snagga.de."
+        )
+        robots = "index, follow"
+        body_extra = f'<div class="grid">{"".join(_deal_card_html(r) for r in rows)}</div>'
+        ld_json = {
+            "@context": "https://schema.org/",
+            "@type":    "ItemList",
+            "itemListElement": [
+                {
+                    "@type":    "ListItem",
+                    "position": i + 1,
+                    "url":      f"https://www.snagga.de/deal/{r['asin']}",
+                    "name":     r["name"] or "Deal",
+                }
+                for i, r in enumerate(rows)
+            ],
+        }
+        ld_script = f'<script type="application/ld+json">{json.dumps(ld_json, ensure_ascii=False)}</script>'
+    else:
+        title = f"{cat_esc} Angebote | snagga.de"
+        desc  = html.escape(f"Aktuell keine {category}-Deals — schau bald wieder vorbei.")
+        robots = "noindex, follow"
+        body_extra = '<p>Gerade läuft in dieser Kategorie kein Deal. Schau bald wieder vorbei!</p>'
+        ld_script = ""
+
+    other_cats = "".join(
+        f'<a href="https://www.snagga.de/kategorie/{s}">{html.escape(n)}</a>'
+        for s, n in CATEGORY_SLUGS.items() if s != slug
+    )
+
+    return HTMLResponse(f"""<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{title}</title>
+<meta name="description" content="{desc}">
+<meta name="robots" content="{robots}">
+<link rel="canonical" href="{canonical}">
+<meta property="og:type" content="website">
+<meta property="og:title" content="{title}">
+<meta property="og:description" content="{desc}">
+<meta property="og:url" content="{canonical}">
+{ld_script}
+<style>
+  body {{ font-family: system-ui, sans-serif; background:#F2EFEA; color:#1F1E1D; margin:0; }}
+  header {{ background:#153D68; padding:16px 20px; }}
+  header a {{ color:#EDE9E3; font-size:22px; font-weight:800; text-decoration:none; }}
+  main {{ max-width:960px; margin:0 auto; padding:32px 20px; }}
+  h1 {{ font-size:26px; margin-bottom:4px; }}
+  .grid {{ display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:16px; margin-top:24px; }}
+  .card {{ display:block; background:#fff; border-radius:8px; overflow:hidden; text-decoration:none; color:#1F1E1D; box-shadow:0 1px 3px rgba(0,0,0,.08); }}
+  .card img {{ width:100%; aspect-ratio:1; object-fit:contain; background:#fff; padding:8px; }}
+  .card-body {{ padding:8px 10px 12px; }}
+  .card-name {{ font-size:13px; line-height:1.3; height:2.6em; overflow:hidden; margin:0 0 4px; }}
+  .card-price {{ font-weight:800; font-size:15px; margin:0; }}
+  .card-original {{ color:#888; text-decoration:line-through; font-weight:400; font-size:12px; margin-left:4px; }}
+  .catnav {{ display:flex; flex-wrap:wrap; gap:8px; margin-top:40px; }}
+  .catnav a {{ font-size:13px; background:#fff; border-radius:20px; padding:6px 14px; text-decoration:none; color:#153D68; }}
+  .back {{ display:inline-block; margin-top:20px; color:#153D68; }}
+</style>
+</head>
+<body>
+<header><a href="https://www.snagga.de/">snagga.de</a></header>
+<main>
+<h1>{cat_esc} Angebote</h1>
+<p>{desc}</p>
+{body_extra}
+<nav class="catnav">{other_cats}</nav>
+<p><a class="back" href="https://www.snagga.de/">← Alle Deals ansehen</a></p>
 </main>
 </body>
 </html>""")
@@ -459,11 +643,21 @@ async def sitemap():
         rows = await conn.fetch(
             "SELECT asin, last_updated FROM products WHERE is_active=true ORDER BY deal_score DESC"
         )
+        active_cats = {
+            r["category"] for r in
+            await conn.fetch("SELECT DISTINCT category FROM products WHERE is_active=true")
+        }
 
     urls = [
         "  <url><loc>https://www.snagga.de/</loc><changefreq>hourly</changefreq><priority>1.0</priority></url>",
         "  <url><loc>https://www.snagga.de/legal</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>",
     ]
+    for slug, name in CATEGORY_SLUGS.items():
+        if name in active_cats:
+            urls.append(
+                f"  <url><loc>https://www.snagga.de/kategorie/{slug}</loc>"
+                f"<changefreq>daily</changefreq><priority>0.7</priority></url>"
+            )
     for row in rows:
         lastmod = f"<lastmod>{row['last_updated'].date().isoformat()}</lastmod>" if row["last_updated"] else ""
         urls.append(
