@@ -298,19 +298,6 @@ def classify_category(title: str, root_cat: int = 0) -> str | None:
     return None
 
 
-def generate_history(asin: str, current: float, avg: float, days: int = 60) -> list[tuple[float, datetime]]:
-    """Simulierte Preishistorie als Fallback."""
-    random.seed(asin)
-    now = datetime.utcnow()
-    history = []
-    for i in range(days, -1, -1):
-        ts = now - timedelta(days=i)
-        price = (current + random.gauss(0, current * 0.005)) if i < 5 else \
-                max(current * 0.9, round(avg + random.gauss(0, avg * 0.035), 2))
-        history.append((round(price, 2), ts))
-    return history
-
-
 # ---------------------------------------------------------------------------
 # Stündlicher Preis-Check via Keepa /product (minimal, ~2–3 Tokens/ASIN)
 # ---------------------------------------------------------------------------
@@ -399,9 +386,14 @@ async def hourly_keepa_price_check():
                 # last_updated wird mit-refresht: bestätigt-gute Deals laufen nicht aus,
                 # auch wenn Keepa sie nicht mehr als "frischen" Deal im /deal-Stream meldet.
                 # is_volatile steuert die Prüf-Frequenz (volatil → stündlich statt 3h).
+                # all_time_low mitziehen: fällt der Preis unter das gespeicherte
+                # Tief, ist das neue Tief der aktuelle Preis. Verhindert den
+                # unmöglichen Zustand "aktueller Preis < Allzeittief" zwischen
+                # zwei Deep-Syncs. NULLIF(...,0) fängt den Default 0 ab.
                 await conn.execute(
                     "UPDATE products SET current_price=$2, deal_score=$3, tag=$4, "
-                    "last_checked=$5, last_updated=$5, score_breakdown=$6, is_volatile=$7 "
+                    "last_checked=$5, last_updated=$5, score_breakdown=$6, is_volatile=$7, "
+                    "all_time_low = LEAST(NULLIF(all_time_low, 0), $2) "
                     "WHERE asin=$1",
                     asin, live_price, score, tag, now, breakdown, volatile,
                 )
@@ -629,14 +621,9 @@ async def fetch_and_update_deals():
                     "INSERT INTO price_history (asin, price, timestamp) VALUES ($1,$2,$3)",
                     asin, p["current_price"], now,
                 )
-
-                count = await conn.fetchval("SELECT COUNT(*) FROM price_history WHERE asin=$1", asin)
-                if count <= 1:
-                    sim = generate_history(asin, p["current_price"], p["avg_price"])
-                    await conn.executemany(
-                        "INSERT INTO price_history (asin, price, timestamp) VALUES ($1,$2,$3)",
-                        [(asin, pr, ts) for pr, ts in sim],
-                    )
+                # KEINE simulierte Historie mehr: snagga wirbt mit "geprüfter
+                # Preishistorie" — erfundene Punkte wären ein Etikettenschwindel.
+                # Echte Historie kommt ausschließlich aus dem Keepa-Deep-Sync.
 
     print(f"  Fertig: {len(active_pool)} aktiv, {len(backup_pool)} Backup, "
           f"{min(TOP_PICKS_COUNT, len(active_pool))} Top Picks")
@@ -797,8 +784,9 @@ async def nightly_deep_sync():
             DEEPSYNC_LIMIT,
         )
     asins = [r["asin"] for r in rows]
-    # Neue ASINs (noch nie deep-synced) → brauchen history=1
-    new_asins = {r["asin"] for r in rows if r["last_deep_sync"] is None}
+    # Immer echte Historie holen (history=1): so werden evtl. vorhandene
+    # simulierte Alt-Daten bei jedem Deep-Sync durch echte Keepa-Punkte ersetzt.
+    new_asins = set(asins)
     if not asins:
         print("  Keine Deals für Deep-Sync gefunden.")
         return
@@ -809,6 +797,14 @@ async def nightly_deep_sync():
 
     async with db.acquire() as conn:
         for asin, kd in keepa_data.items():
+            # Echtes Allzeittief konsistent zur angezeigten Historie: min aus
+            # Keepa-ATL, tatsächlicher Preishistorie und aktuellem Preis. Verhindert
+            # "ATL > aktueller Preis" und dass ATL/Ø auf denselben Wert kollabieren.
+            hist_prices = [pr for pr, _ in (kd.get("history") or []) if pr and pr > 0]
+            atl_candidates = [v for v in (kd["all_time_low"], kd["current_price"],
+                                          (min(hist_prices) if hist_prices else None)) if v and v > 0]
+            kd["all_time_low"] = min(atl_candidates) if atl_candidates else kd["current_price"]
+
             score, breakdown = calculate_deal_score(
                 kd["current_price"], kd["avg90_price"], kd["all_time_low"],
                 kd["sales_rank"], "Sonstiges",  # Kategorie aus DB holen wenn nötig
@@ -846,17 +842,20 @@ async def nightly_deep_sync():
                 score, tag, breakdown, now, kd["image_url"],
             )
 
-            # Echte Preishistorie einmalig befüllen (≤ 2 existierende Punkte)
-            existing = await conn.fetchval(
-                "SELECT COUNT(*) FROM price_history WHERE asin=$1", asin
-            )
-            if kd["history"] and existing <= 2:
+            # Echte Preishistorie IMMER frisch setzen: alte (evtl. simulierte)
+            # Punkte löschen, echte Keepa-Serie einspielen, has_real_history setzen.
+            # Erst ab jetzt wird für dieses Produkt überhaupt ein Chart gezeigt.
+            if kd["history"]:
                 recent = kd["history"][-365:]
+                await conn.execute("DELETE FROM price_history WHERE asin=$1", asin)
                 await conn.executemany(
                     "INSERT INTO price_history (asin, price, timestamp) VALUES ($1,$2,$3)",
                     [(asin, pr, ts) for pr, ts in recent],
                 )
-                print(f"    ✓ {asin}: {len(recent)} echte Preispunkte")
+                await conn.execute(
+                    "UPDATE products SET has_real_history=true WHERE asin=$1", asin
+                )
+                print(f"    ✓ {asin}: {len(recent)} echte Preispunkte (ersetzt)")
 
     # Deaktiviere Deals mit Score < 40
     async with db.acquire() as conn:

@@ -21,7 +21,7 @@ load_dotenv()
 
 import alerts
 from database import get_pool, init_db
-from scraper import fetch_and_update_deals, generate_history
+from scraper import fetch_and_update_deals
 from scheduler import create_scheduler
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
@@ -180,8 +180,8 @@ async def row_to_product(row, conn, history_limit: int = 30) -> Product:
         asin, history_limit,
     )
     prices = list(reversed([r["price"] for r in ph_rows]))
-    if not prices:
-        prices = [p for p, _ in generate_history(asin, row["current_price"], row["avg_price"])[-30:]]
+    # Keine simulierte Fallback-Historie mehr — lieber gar kein Chart als ein
+    # erfundener. Ohne echte Daten bleibt price_history leer.
     return _row_to_product(row, prices)
 
 
@@ -979,7 +979,8 @@ async def price_page(asin: str):
         row = await conn.fetchrow(
             "SELECT asin, name, brand, image_url, current_price, original_price, "
             "all_time_low, avg_price, avg90_price, avg180_price, category, "
-            "affiliate_url, is_active, rating, reviews, tag FROM products WHERE asin=$1",
+            "affiliate_url, is_active, rating, reviews, tag, has_real_history "
+            "FROM products WHERE asin=$1",
             asin,
         )
         if not row:
@@ -1006,7 +1007,8 @@ async def price_page(asin: str):
         return (f"{v:.2f}".replace(".", ",") + " €") if v and v > 0 else "—"
 
     verdict, vcolor, vreason = _price_verdict(current, avg90, atl)
-    chart_svg = _price_chart_svg(prices, avg90, atl)
+    # Chart nur mit verifizierter Keepa-Historie — nie erfundene Kurven zeigen.
+    chart_svg = _price_chart_svg(prices, avg90, atl) if row["has_real_history"] else ""
 
     canonical = f"https://www.snagga.de/preis/{asin}"
     title = f"{name} — Preisverlauf & Preis-Check | snagga.de"
@@ -1091,7 +1093,7 @@ async def price_page(asin: str):
                 if cat_slug else "")
 
     chart_block = (f'<div class="chart">{chart_svg}</div>' if chart_svg
-                   else '<p class="nochart">Für dieses Produkt liegen noch nicht genug Preisdaten für einen Verlauf vor.</p>')
+                   else '<p class="nochart">Der geprüfte Preisverlauf für dieses Produkt wird gerade aufgebaut — schau bald wieder vorbei.</p>')
 
     return HTMLResponse(f"""<!DOCTYPE html>
 <html lang="de">
@@ -1517,6 +1519,22 @@ async def refresh_deals(token: str = Query(default="")):
         raise HTTPException(status_code=500, detail=str(exc))
     cache_clear()
     return {"message": f"{count} aktive Deals geladen"}
+
+
+@app.post("/deep-sync")
+async def trigger_deep_sync(token: str = Query(default="")):
+    """Manueller Deep-Sync — holt echte Keepa-Historie, ersetzt Alt-/Fake-Daten,
+    berechnet ATL/Ø neu und setzt has_real_history. Nur die Top-DEEPSYNC_LIMIT Deals."""
+    _check_admin(token)
+    from scraper import nightly_deep_sync
+    try:
+        await nightly_deep_sync()
+    except Exception as exc:
+        import traceback
+        print(f"[DEEP-SYNC ERROR] {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(exc))
+    cache_clear()
+    return {"message": "Deep-Sync abgeschlossen — echte Preishistorie aktualisiert."}
 
 
 @app.get("/debug/keepa-cats")

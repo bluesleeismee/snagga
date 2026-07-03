@@ -63,6 +63,9 @@ MIGRATE_PRODUCTS = [
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS first_seen    TIMESTAMP",
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS mastodon_posted TIMESTAMP",
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS bluesky_posted  TIMESTAMP",
+    # Nur true, wenn echte Keepa-Preishistorie importiert wurde. Der Preisverlauf-
+    # Chart wird ausschließlich für solche Produkte gezeigt (nie erfundene Daten).
+    "ALTER TABLE products ADD COLUMN IF NOT EXISTS has_real_history BOOLEAN DEFAULT false",
 ]
 
 CREATE_PRICE_HISTORY = """
