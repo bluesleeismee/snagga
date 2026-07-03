@@ -9,6 +9,7 @@ import re
 import secrets
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -904,12 +905,40 @@ def _price_verdict(current: float, avg90: float, atl: float) -> tuple[str, str, 
     return ("Nein", "#8b1a1a", "Aktuell kein guter Preis — er liegt über dem 90-Tage-Durchschnitt.")
 
 
-def _price_chart_svg(prices: list[float], avg90: float, atl: float) -> str:
-    """Inline-SVG-Preisverlauf (SSR, kein JS) — portiert PriceChart.jsx für die Preisseite."""
-    if not prices or len(prices) < 2:
+def _parse_ts(raw) -> Optional[datetime]:
+    """TEXT-Zeitstempel (asyncpg-str oder ISO) robust nach datetime — sonst None."""
+    if raw is None:
+        return None
+    if isinstance(raw, datetime):
+        return raw
+    s = str(raw).strip().replace("T", " ")
+    try:
+        return datetime.strptime(s[:19], "%Y-%m-%d %H:%M:%S")
+    except Exception:
+        pass
+    try:
+        return datetime.strptime(s[:10], "%Y-%m-%d")
+    except Exception:
+        return None
+
+
+def _price_chart_svg(points: list, avg90: float, atl: float) -> str:
+    """
+    Inline-SVG-Preisverlauf als TREPPENKURVE mit echter Zeitachse (SSR, kein JS).
+    points: chronologische Liste (Preis, Zeitstempel). Der Preis hält konstant bis
+    zur nächsten Änderung (step-after) — so wie Keepa, statt schräger Interpolation.
+    X-Position ist zeitproportional; fällt das Zeitstempel-Parsing aus, wird gleich-
+    mäßig nach Index verteilt (Fallback, damit der Chart nie bricht).
+    """
+    parsed = [(float(p), _parse_ts(ts)) for p, ts in points if p and float(p) > 0]
+    if len(parsed) < 2:
         return ""
-    W, H = 760, 240
-    PAD_L, PAD_R, PAD_T, PAD_B = 52, 14, 16, 26
+    prices = [p for p, _ in parsed]
+    times  = [t for _, t in parsed]
+    have_time = all(t is not None for t in times) and times[0] != times[-1]
+
+    W, H = 760, 264
+    PAD_L, PAD_R, PAD_T, PAD_B = 52, 14, 16, 42
     chart_w, chart_h = W - PAD_L - PAD_R, H - PAD_T - PAD_B
 
     minv, maxv = min(prices), max(prices)
@@ -918,14 +947,26 @@ def _price_chart_svg(prices: list[float], avg90: float, atl: float) -> str:
     rng = (ymax - ymin) or 1
     n = len(prices)
 
-    def to_x(i: int) -> float: return PAD_L + (i / (n - 1)) * chart_w
+    if have_time:
+        t0, t1 = times[0].timestamp(), times[-1].timestamp()
+        span = (t1 - t0) or 1
+        xs = [PAD_L + ((t.timestamp() - t0) / span) * chart_w for t in times]
+    else:
+        xs = [PAD_L + (i / (n - 1)) * chart_w for i in range(n)]
+
     def to_y(p: float) -> float: return PAD_T + chart_h - ((p - ymin) / rng) * chart_h
     def fmt(v: float) -> str: return f"{v:.0f} €"
 
-    pts = [(to_x(i), to_y(p)) for i, p in enumerate(prices)]
-    path_d = " ".join(f"{'M' if i == 0 else 'L'}{x:.1f},{y:.1f}" for i, (x, y) in enumerate(pts))
-    fill_d = f"{path_d} L{pts[-1][0]:.1f},{PAD_T + chart_h:.1f} L{PAD_L:.1f},{PAD_T + chart_h:.1f} Z"
-    cx, cy = pts[-1]
+    ys = [to_y(p) for p in prices]
+    # Treppe (step-after): erst horizontal auf altem Preis bis zum neuen Zeitpunkt,
+    # dann senkrechter Sprung auf den neuen Preis.
+    seg = [f"M{xs[0]:.1f},{ys[0]:.1f}"]
+    for i in range(1, n):
+        seg.append(f"L{xs[i]:.1f},{ys[i-1]:.1f}")
+        seg.append(f"L{xs[i]:.1f},{ys[i]:.1f}")
+    path_d = " ".join(seg)
+    fill_d = f"{path_d} L{xs[-1]:.1f},{PAD_T + chart_h:.1f} L{PAD_L:.1f},{PAD_T + chart_h:.1f} Z"
+    cx, cy = xs[-1], ys[-1]
 
     avg_line = ""
     if avg90 and ymin <= avg90 <= ymax:
@@ -942,11 +983,28 @@ def _price_chart_svg(prices: list[float], avg90: float, atl: float) -> str:
             f'<text x="{W - PAD_R}" y="{ty + 12:.1f}" text-anchor="end" font-size="11" fill="#1E7A3C">Tief {fmt(atl)}</text>'
         )
 
+    # X-Achse: echte Datums-Labels + feine vertikale Gitterlinien an 5 Stützstellen
+    xaxis, vgrid = "", ""
+    if have_time:
+        for k in range(5):
+            frac = k / 4
+            x = PAD_L + frac * chart_w
+            tdt = datetime.fromtimestamp(t0 + frac * span)
+            anchor = "start" if k == 0 else ("end" if k == 4 else "middle")
+            xaxis += (f'<text x="{x:.1f}" y="{H - 8}" text-anchor="{anchor}" '
+                      f'font-size="11" fill="#7E7A75">{tdt.strftime("%d.%m.%y")}</text>')
+            if 0 < k < 4:
+                vgrid += f'<line x1="{x:.1f}" y1="{PAD_T}" x2="{x:.1f}" y2="{PAD_T + chart_h}" stroke="#F0ECE7"/>'
+    else:
+        xaxis = (f'<text x="{PAD_L}" y="{H - 8}" text-anchor="start" font-size="11" fill="#7E7A75">früher</text>'
+                 f'<text x="{W - PAD_R}" y="{H - 8}" text-anchor="end" font-size="11" fill="#7E7A75">heute</text>')
+
     ymid = (ymax + ymin) / 2
     return f"""<svg viewBox="0 0 {W} {H}" width="100%" role="img" aria-label="Preisverlauf" style="display:block;overflow:visible">
   <defs><linearGradient id="pcgrad" x1="0" y1="0" x2="0" y2="1">
     <stop offset="0%" stop-color="#C85E43" stop-opacity="0.15"/><stop offset="100%" stop-color="#C85E43" stop-opacity="0"/>
   </linearGradient></defs>
+  {vgrid}
   <line x1="{PAD_L}" y1="{PAD_T}" x2="{W - PAD_R}" y2="{PAD_T}" stroke="#EAE6E1"/>
   <line x1="{PAD_L}" y1="{PAD_T + chart_h / 2:.1f}" x2="{W - PAD_R}" y2="{PAD_T + chart_h / 2:.1f}" stroke="#EAE6E1"/>
   <line x1="{PAD_L}" y1="{PAD_T + chart_h}" x2="{W - PAD_R}" y2="{PAD_T + chart_h}" stroke="#EAE6E1"/>
@@ -957,8 +1015,7 @@ def _price_chart_svg(prices: list[float], avg90: float, atl: float) -> str:
   <path d="{fill_d}" fill="url(#pcgrad)"/>
   <path d="{path_d}" fill="none" stroke="#C85E43" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
   <circle cx="{cx:.1f}" cy="{cy:.1f}" r="4" fill="#C85E43"/>
-  <text x="{PAD_L}" y="{H - 4}" text-anchor="start" font-size="11" fill="#7E7A75">früher</text>
-  <text x="{W - PAD_R}" y="{H - 4}" text-anchor="end" font-size="11" fill="#7E7A75">heute</text>
+  {xaxis}
 </svg>"""
 
 
@@ -986,11 +1043,11 @@ async def price_page(asin: str):
         if not row:
             return _not_found_page("Produkt nicht gefunden")
         hist = await conn.fetch(
-            "SELECT price FROM price_history WHERE asin=$1 ORDER BY id DESC LIMIT 180",
+            "SELECT price, timestamp FROM price_history WHERE asin=$1 ORDER BY id DESC LIMIT 365",
             asin,
         )
 
-    prices = [float(h["price"]) for h in reversed(hist) if h["price"] and h["price"] > 0]
+    points = [(h["price"], h["timestamp"]) for h in reversed(hist) if h["price"] and h["price"] > 0]
 
     name      = html.escape((row["name"] or "Produkt")[:150])
     image     = html.escape(row["image_url"] or "https://www.snagga.de/favicon.svg")
@@ -1014,7 +1071,7 @@ async def price_page(asin: str):
 
     verdict, vcolor, vreason = _price_verdict(current, avg90, atl)
     # Chart nur mit verifizierter Keepa-Historie — nie erfundene Kurven zeigen.
-    chart_svg = _price_chart_svg(prices, avg90, atl) if row["has_real_history"] else ""
+    chart_svg = _price_chart_svg(points, avg90, atl) if row["has_real_history"] else ""
 
     canonical = f"https://www.snagga.de/preis/{asin}"
     title = f"{name} — Preisverlauf & Preis-Check | snagga.de"
