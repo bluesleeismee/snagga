@@ -355,8 +355,13 @@ export default function DealsPage() {
   }, [])
 
   const closeModal = useCallback(() => {
-    if (window.history.state?.snagga === 'modal') window.history.back()
-    else { window.history.replaceState({}, '', '/'); setSelectedDeal(null) }
+    // Modal IMMER direkt schließen und die URL aufräumen — nie history.back()
+    // benutzen: bei per ?asin= geteiltem Deeplink gibt es keinen App-internen
+    // Zurück-Eintrag, dann würde back() die Seite ganz verlassen und das Fenster
+    // bliebe offen (das "X geht nicht"-Verhalten). Der Browser-Zurück-Button wird
+    // weiterhin separat über den popstate-Listener behandelt.
+    setSelectedDeal(null)
+    if (window.location.search) window.history.replaceState({}, '', '/')
   }, [])
 
   useEffect(() => {
