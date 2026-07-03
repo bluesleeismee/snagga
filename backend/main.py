@@ -1003,6 +1003,12 @@ async def price_page(asin: str):
     atl       = row["all_time_low"] or 0
     is_active = row["is_active"]
 
+    # Anzeige-Sicherung: Ein Allzeittief kann logisch nie über dem aktuellen Preis
+    # liegen. Deckt Alt-Datensätze ab, die der stündliche Check (nur aktive Deals)
+    # bzw. der Deep-Sync noch nicht korrigiert hat. Greift für Stats + Urteil.
+    if atl and current and atl > current:
+        atl = current
+
     def eur(v: float) -> str:
         return (f"{v:.2f}".replace(".", ",") + " €") if v and v > 0 else "—"
 
