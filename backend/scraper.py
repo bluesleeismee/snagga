@@ -698,6 +698,38 @@ async def post_next_mastodon_deal():
             )
 
 
+async def check_and_send_price_alerts():
+    """
+    Prüft bestätigte Preisalarme: Ist der aktuelle Preis eines aktiven Produkts
+    auf oder unter den Wunschpreis gefallen, wird eine Alarm-Mail verschickt und
+    der Alarm als benachrichtigt markiert (notified_at). Nur aktive Produkte —
+    damit der verlinkte /deal/{asin} auch wirklich einen Deal zeigt.
+    """
+    import alerts
+    if not alerts.alerts_enabled():
+        return
+    db = await get_pool()
+    async with db.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT a.id, a.asin, a.email, a.target_price, a.token, "
+            "       p.name, p.current_price "
+            "FROM price_alerts a JOIN products p ON p.asin = a.asin "
+            "WHERE a.confirmed = true AND a.notified_at IS NULL "
+            "AND p.is_active = true AND p.current_price > 0 "
+            "AND p.current_price <= a.target_price"
+        )
+        for r in rows:
+            ok = await alerts.send_alert(
+                r["email"], r["asin"], r["name"] or "dein Produkt",
+                float(r["current_price"]), float(r["target_price"]), r["token"],
+            )
+            if ok:
+                await conn.execute(
+                    "UPDATE price_alerts SET notified_at=now() WHERE id=$1", r["id"]
+                )
+            await asyncio.sleep(0.3)  # sanftes Rate-Limit gegen Brevo
+
+
 async def post_next_bluesky_deal():
     """
     Postet GENAU EINEN neuen Top-Deal auf Bluesky. Gleiche zurückhaltende

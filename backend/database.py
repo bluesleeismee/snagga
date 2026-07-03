@@ -74,6 +74,22 @@ CREATE TABLE IF NOT EXISTS price_history (
 )
 """
 
+# Preisalarme: Nutzer hinterlegt E-Mail + Wunschpreis für ein Produkt. Double-
+# Opt-in (confirmed) aus DSGVO-Gründen — ohne Bestätigung wird nie gemailt.
+CREATE_PRICE_ALERTS = """
+CREATE TABLE IF NOT EXISTS price_alerts (
+    id           SERIAL PRIMARY KEY,
+    asin         TEXT NOT NULL,
+    email        TEXT NOT NULL,
+    target_price REAL NOT NULL,
+    token        TEXT NOT NULL UNIQUE,
+    confirmed    BOOLEAN DEFAULT false,
+    created_at   TIMESTAMP DEFAULT now(),
+    confirmed_at TIMESTAMP,
+    notified_at  TIMESTAMP
+)
+"""
+
 
 async def create_pool() -> asyncpg.Pool:
     global pool
@@ -100,6 +116,8 @@ CREATE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_active_updated ON products(last_updated DESC) WHERE is_active = true",
     "CREATE INDEX IF NOT EXISTS idx_active_cat     ON products(category)        WHERE is_active = true",
     "CREATE INDEX IF NOT EXISTS idx_price_history_asin ON price_history(asin)",
+    "CREATE INDEX IF NOT EXISTS idx_alerts_pending ON price_alerts(asin) WHERE confirmed = true AND notified_at IS NULL",
+    "CREATE INDEX IF NOT EXISTS idx_alerts_token ON price_alerts(token)",
 ]
 
 async def init_db():
@@ -107,6 +125,7 @@ async def init_db():
     async with p.acquire() as conn:
         await conn.execute(CREATE_PRODUCTS)
         await conn.execute(CREATE_PRICE_HISTORY)
+        await conn.execute(CREATE_PRICE_ALERTS)
         for stmt in MIGRATE_PRODUCTS:
             try:
                 await conn.execute(stmt)

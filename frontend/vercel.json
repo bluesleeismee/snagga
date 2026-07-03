@@ -5,6 +5,7 @@
     { "source": "/preis/:asin", "destination": "https://snagga.onrender.com/preis/:asin" },
     { "source": "/kategorie/:slug", "destination": "https://snagga.onrender.com/kategorie/:slug" },
     { "source": "/prime-day", "destination": "https://snagga.onrender.com/prime-day" },
+    { "source": "/alarm/:path*", "destination": "https://snagga.onrender.com/alarm/:path*" },
     { "source": "/sitemap.xml", "destination": "https://snagga.onrender.com/sitemap.xml" },
     { "source": "/feed.xml", "destination": "https://snagga.onrender.com/feed.xml" },
     { "source": "/(.*)", "destination": "/index.html" }

@@ -9,7 +9,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from scraper import (
     fetch_and_update_deals, nightly_deep_sync, hourly_keepa_price_check,
-    post_next_mastodon_deal, post_next_bluesky_deal,
+    post_next_mastodon_deal, post_next_bluesky_deal, check_and_send_price_alerts,
 )
 
 SERVICE_URL = os.getenv("RENDER_EXTERNAL_URL", "https://snagga.onrender.com")
@@ -55,6 +55,16 @@ def create_scheduler() -> AsyncIOScheduler:
         IntervalTrigger(minutes=10),
         id="keepalive_ping",
         replace_existing=True,
+    )
+
+    # Preisalarme: kurz nach dem stündlichen Preis-Check (:30) prüfen, ob ein
+    # Wunschpreis erreicht ist, und Benachrichtigungen verschicken.
+    scheduler.add_job(
+        check_and_send_price_alerts,
+        IntervalTrigger(hours=1, start_date="2024-01-01 00:40:00"),
+        id="price_alert_check",
+        replace_existing=True,
+        misfire_grace_time=600,
     )
 
     # Nächtlicher Deep-Sync: vollständige Keepa /product Aktualisierung

@@ -6,18 +6,20 @@ import html
 import json
 import os
 import re
+import secrets
 import time
 from contextlib import asynccontextmanager
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, Form, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
 
 load_dotenv()
 
+import alerts
 from database import get_pool, init_db
 from scraper import fetch_and_update_deals, generate_history
 from scheduler import create_scheduler
@@ -1040,7 +1042,27 @@ async def price_page(asin: str):
                f'<p class="cta-note">Aktiver Deal — Preis zuletzt bestätigt. Als Amazon-Partner verdienen wir an qualifizierten Käufen.</p>')
     else:
         cta = ('<div class="cta cta-wait">Gerade kein aktiver Deal für dieses Produkt.</div>'
-               '<p class="cta-note">🔔 Preisalarm (E-Mail, sobald der Wunschpreis erreicht ist) ist in Vorbereitung.</p>')
+               '<p class="cta-note">Setz dir unten einen Preisalarm — wir mailen dich, sobald der Preis fällt.</p>')
+
+    # Preisalarm-Formular. Wunschpreis-Vorschlag: leicht unter dem aktuellen Preis,
+    # sonst am Allzeittief orientiert.
+    if current and current > 0:
+        suggested = round(current * 0.9, 2)
+    elif atl and atl > 0:
+        suggested = round(atl, 2)
+    else:
+        suggested = ""
+    alert_form = f"""<h2>🔔 Preisalarm setzen</h2>
+<form class="alert-form" method="post" action="https://www.snagga.de/alarm/setzen">
+  <input type="hidden" name="asin" value="{asin}">
+  <p class="alert-intro">Wir schicken dir eine E-Mail, sobald der Preis auf deinen Wunschpreis fällt. Kostenlos, jederzeit abbestellbar.</p>
+  <div class="alert-row">
+    <input type="email" name="email" required placeholder="deine@email.de" aria-label="E-Mail-Adresse">
+    <input type="number" name="target_price" required min="1" step="0.01" value="{suggested}" placeholder="Wunschpreis €" aria-label="Wunschpreis in Euro">
+    <button type="submit">Alarm aktivieren</button>
+  </div>
+  <p class="alert-legal">Du bekommst zuerst eine Bestätigungs-Mail (Double-Opt-in). Deine Adresse nutzen wir ausschließlich für diesen Preisalarm — siehe <a href="https://www.snagga.de/legal">Datenschutz</a>.</p>
+</form>"""
 
     stats_rows = "".join(
         f'<tr><td>{label}</td><td>{eur(val)}</td></tr>'
@@ -1113,6 +1135,15 @@ async def price_page(asin: str):
   table.stats tr:last-child td {{ border-bottom:none; }}
   table.stats td:first-child {{ color:#4A4845; }}
   table.stats td:last-child {{ text-align:right; font-weight:700; }}
+  .alert-form {{ background:#fff; border:1px solid #EAE6E1; padding:20px 22px; margin:8px 0 8px; }}
+  .alert-intro {{ font-size:14px; color:#4A4845; margin:0 0 14px; }}
+  .alert-row {{ display:flex; gap:10px; flex-wrap:wrap; }}
+  .alert-row input {{ flex:1; min-width:140px; padding:11px 13px; border:1px solid #D8D3CC; font-size:15px; font-family:inherit; }}
+  .alert-row input[type=number] {{ flex:0 0 150px; }}
+  .alert-row button {{ background:#153D68; color:#fff; border:none; padding:11px 22px; font-size:15px; font-weight:700; cursor:pointer; }}
+  .alert-row button:hover {{ background:#1b4d84; }}
+  .alert-legal {{ font-size:11.5px; color:#7E7A75; margin:12px 0 0; line-height:1.5; }}
+  .alert-legal a {{ color:#7E7A75; }}
   {_CARD_CSS}
   .back {{ display:inline-block; margin-top:20px; color:#153D68; }}
 </style>
@@ -1140,12 +1171,132 @@ async def price_page(asin: str):
 <h2>Preis-Eckdaten</h2>
 <table class="stats">{stats_rows}</table>
 
+{alert_form}
+
 {similar_block}
 {cat_link}
 <p><a class="back" href="https://www.snagga.de/">← Alle aktuellen Deals</a></p>
 </main>
 </body>
 </html>""")
+
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _simple_page(heading: str, body_html: str, status: int = 200) -> HTMLResponse:
+    """Schlichte, gebrandete Ergebnisseite (Alarm bestätigt/abgemeldet/Fehler)."""
+    return HTMLResponse(status_code=status, content=f"""<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{heading} | snagga.de</title>
+<meta name="robots" content="noindex, follow">
+<style>
+  body {{ font-family: system-ui, sans-serif; background:#FAF8F5; color:#1F1E1D; margin:0; }}
+  header {{ background:#153D68; padding:16px 24px; }}
+  header a {{ color:#EDE9E3; font-size:22px; font-weight:800; text-decoration:none; }}
+  header .accent {{ color:#C85E43; }}
+  main {{ max-width:620px; margin:0 auto; padding:48px 20px; }}
+  h1 {{ font-size:24px; }}
+  p {{ font-size:15px; line-height:1.6; color:#4A4845; }}
+  .back {{ display:inline-block; margin-top:20px; color:#153D68; }}
+</style>
+</head>
+<body>
+<header><a href="https://www.snagga.de/">snagga<span class="accent">.de</span></a></header>
+<main>
+<h1>{heading}</h1>
+{body_html}
+<p><a class="back" href="https://www.snagga.de/">← Zur Startseite</a></p>
+</main>
+</body>
+</html>""")
+
+
+@app.post("/alarm/setzen", response_class=HTMLResponse)
+async def alarm_setzen(
+    asin: str = Form(...),
+    email: str = Form(...),
+    target_price: float = Form(...),
+):
+    """Nimmt einen Preisalarm entgegen und verschickt die Double-Opt-in-Bestätigung."""
+    email = (email or "").strip().lower()
+    if not re.match(r"^[A-Z0-9]{10}$", asin) or not _EMAIL_RE.match(email) or target_price <= 0:
+        return _simple_page("Eingabe ungültig",
+                            "<p>Bitte gib eine gültige E-Mail-Adresse und einen Wunschpreis größer 0 an.</p>",
+                            status=400)
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        prod = await conn.fetchrow("SELECT name FROM products WHERE asin=$1", asin)
+        if not prod:
+            return _simple_page("Produkt nicht gefunden",
+                                "<p>Zu diesem Produkt können wir keinen Alarm setzen.</p>", status=404)
+
+        # Missbrauchsschutz: max. 5 neue Alarme pro E-Mail in 10 Minuten
+        recent = await conn.fetchval(
+            "SELECT COUNT(*) FROM price_alerts WHERE email=$1 AND created_at > now() - interval '10 minutes'",
+            email,
+        )
+        if recent and recent >= 5:
+            return _simple_page("Zu viele Anfragen",
+                                "<p>Du hast gerade viele Alarme gesetzt. Bitte versuch es in ein paar Minuten erneut.</p>",
+                                status=429)
+
+        # Bestehende, noch nicht ausgelöste Alarme für dieselbe (E-Mail, ASIN)
+        # ersetzen — Wunschpreis ändern statt Duplikate anzuhäufen.
+        await conn.execute(
+            "DELETE FROM price_alerts WHERE email=$1 AND asin=$2 AND notified_at IS NULL",
+            email, asin,
+        )
+        token = secrets.token_urlsafe(32)
+        await conn.execute(
+            "INSERT INTO price_alerts (asin, email, target_price, token) VALUES ($1,$2,$3,$4)",
+            asin, email, float(target_price), token,
+        )
+
+    sent = await alerts.send_confirmation(email, asin, prod["name"] or "dieses Produkt", float(target_price), token)
+    if sent:
+        return _simple_page("Fast geschafft! 📬",
+                            f"<p>Wir haben dir eine Bestätigungs-Mail an <strong>{html.escape(email)}</strong> "
+                            f"geschickt. Bitte klick den Link darin, dann ist dein Preisalarm aktiv.</p>"
+                            f"<p style='font-size:13px;color:#7E7A75'>Keine Mail bekommen? Schau im Spam-Ordner nach.</p>")
+    return _simple_page("Preisalarm vorgemerkt",
+                        "<p>Dein Alarm ist gespeichert, aber die Bestätigungs-Mail konnte gerade nicht versendet "
+                        "werden. Bitte versuch es später noch einmal.</p>", status=502)
+
+
+@app.get("/alarm/bestaetigen", response_class=HTMLResponse)
+async def alarm_bestaetigen(token: str = Query(default="")):
+    """Double-Opt-in-Bestätigung: aktiviert den Alarm."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT id, confirmed FROM price_alerts WHERE token=$1", token)
+        if not row:
+            return _simple_page("Link ungültig",
+                                "<p>Dieser Bestätigungslink ist ungültig oder abgelaufen.</p>", status=404)
+        if not row["confirmed"]:
+            await conn.execute(
+                "UPDATE price_alerts SET confirmed=true, confirmed_at=now() WHERE id=$1", row["id"]
+            )
+    return _simple_page("Preisalarm aktiv ✅",
+                        "<p>Dein Preisalarm ist jetzt aktiv. Wir melden uns per E-Mail, sobald dein Wunschpreis "
+                        "erreicht ist. Jede Alarm-Mail enthält einen Abmeldelink.</p>")
+
+
+@app.get("/alarm/abmelden", response_class=HTMLResponse)
+async def alarm_abmelden(token: str = Query(default="")):
+    """Abmeldung: löscht den Alarm dauerhaft."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        deleted = await conn.execute("DELETE FROM price_alerts WHERE token=$1", token)
+    if deleted and deleted.endswith("1"):
+        return _simple_page("Abgemeldet",
+                            "<p>Dein Preisalarm wurde gelöscht. Du bekommst dazu keine weiteren E-Mails.</p>")
+    return _simple_page("Nichts zu tun",
+                        "<p>Dieser Alarm existiert nicht (mehr).</p>")
 
 
 @app.api_route("/prime-day", methods=["GET", "HEAD"], response_class=HTMLResponse)
