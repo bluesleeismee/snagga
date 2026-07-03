@@ -22,11 +22,24 @@ def alerts_enabled() -> bool:
     return bool(BREVO_API_KEY)
 
 
-async def _send(to_email: str, subject: str, html_content: str) -> bool:
-    """Verschickt eine transaktionale Mail über Brevo. False wenn nicht konfiguriert/Fehler."""
+async def _send(to_email: str, subject: str, html_content: str, text_content: str = "") -> bool:
+    """Verschickt eine transaktionale Mail über Brevo. False wenn nicht konfiguriert/Fehler.
+
+    text_content: reine Text-Variante (multipart/alternative). Wichtig für die
+    Zustellbarkeit — HTML-only-Mails werden von Spamfiltern (v.a. bei neuen
+    Absender-Domains) schlechter bewertet.
+    """
     if not BREVO_API_KEY:
         print("  Brevo ✗ kein API-Key gesetzt — Mail nicht versendet")
         return False
+    payload = {
+        "sender": {"name": SENDER_NAME, "email": SENDER_EMAIL},
+        "to":     [{"email": to_email}],
+        "subject": subject,
+        "htmlContent": html_content,
+    }
+    if text_content:
+        payload["textContent"] = text_content
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(
@@ -36,12 +49,7 @@ async def _send(to_email: str, subject: str, html_content: str) -> bool:
                     "content-type": "application/json",
                     "accept":       "application/json",
                 },
-                json={
-                    "sender": {"name": SENDER_NAME, "email": SENDER_EMAIL},
-                    "to":     [{"email": to_email}],
-                    "subject": subject,
-                    "htmlContent": html_content,
-                },
+                json=payload,
             )
             resp.raise_for_status()
             print(f"  Brevo ✓ Mail an {to_email} ({subject})")
@@ -80,7 +88,14 @@ async def send_confirmation(email: str, asin: str, name: str, target: float, tok
     <p style="font-size:12px;color:#7E7A75;line-height:1.5">
       Wenn du das nicht warst, ignoriere diese Mail einfach — ohne Bestätigung wird nichts gespeichert oder versendet.
     </p>"""
-    return await _send(email, "Bitte bestätige deinen Preisalarm — snagga.de", _shell(inner))
+    text = (
+        f"Preisalarm bestätigen\n\n"
+        f"Du möchtest benachrichtigt werden, sobald \"{name}\" auf {_fmt(target)} oder weniger fällt.\n\n"
+        f"Bitte bestätige einmal deine E-Mail-Adresse über diesen Link:\n{confirm_url}\n\n"
+        f"Wenn du das nicht warst, ignoriere diese Mail einfach — ohne Bestätigung wird nichts gespeichert oder versendet.\n\n"
+        f"snagga.de"
+    )
+    return await _send(email, "Bitte bestätige deinen Preisalarm — snagga.de", _shell(inner), text)
 
 
 async def send_alert(email: str, asin: str, name: str, price: float, target: float, token: str) -> bool:
@@ -100,4 +115,12 @@ async def send_alert(email: str, asin: str, name: str, price: float, target: flo
       Preise ändern sich schnell — ohne Gewähr. Diesen Alarm hast du selbst gesetzt.
       <a href="{unsub_url}" style="color:#7E7A75">Abmelden</a>.
     </p>"""
-    return await _send(email, f"Preisalarm: {name[:60]} für {_fmt(price)}", _shell(inner))
+    text = (
+        f"Dein Wunschpreis ist erreicht!\n\n"
+        f"\"{name}\" kostet jetzt {_fmt(price)} (dein Wunschpreis war {_fmt(target)}).\n\n"
+        f"Zum Deal auf snagga.de:\n{deal_url}\n\n"
+        f"Preise ändern sich schnell — ohne Gewähr. Diesen Alarm hast du selbst gesetzt.\n"
+        f"Abmelden: {unsub_url}\n\n"
+        f"snagga.de"
+    )
+    return await _send(email, f"Preisalarm: {name[:60]} für {_fmt(price)}", _shell(inner), text)
