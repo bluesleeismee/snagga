@@ -500,7 +500,7 @@ async def deal_page(asin: str):
     pool = await get_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT name, image_url, current_price, original_price, tag, category, "
+            "SELECT name, brand, image_url, current_price, original_price, tag, category, "
             "rating, reviews, affiliate_url, is_active FROM products WHERE asin=$1",
             asin,
         )
@@ -590,7 +590,7 @@ async def deal_page(asin: str):
     ld_json: dict = {
         "@context":   "https://schema.org/",
         "@type":      "Product",
-        "name":       row["name"] or "Deal",
+        "name":       (row["name"] or "Deal")[:150],
         "image":      [row["image_url"]] if row["image_url"] else [],
         "description": desc,
         "category":   row["category"] or "",
@@ -600,8 +600,45 @@ async def deal_page(asin: str):
             "priceCurrency": "EUR",
             "price":         f"{current:.2f}",
             "availability":  "https://schema.org/InStock",
+            "hasMerchantReturnPolicy": {
+                "@type":               "MerchantReturnPolicy",
+                "applicableCountry":   "DE",
+                "returnPolicyCategory": "https://schema.org/MerchantReturnFiniteReturnWindow",
+                "merchantReturnDays":  30,
+                "returnMethod":        "https://schema.org/ReturnByMail",
+                "returnFees":          "https://schema.org/FreeReturn",
+            },
+            "shippingDetails": {
+                "@type":         "OfferShippingDetails",
+                "shippingRate": {
+                    "@type":   "MonetaryAmount",
+                    "value":   "0",
+                    "currency": "EUR",
+                },
+                "shippingDestination": {
+                    "@type":         "DefinedRegion",
+                    "addressCountry": "DE",
+                },
+                "deliveryTime": {
+                    "@type": "ShippingDeliveryTime",
+                    "handlingTime": {
+                        "@type":   "QuantitativeValue",
+                        "minValue": 0,
+                        "maxValue": 1,
+                        "unitCode": "DAY",
+                    },
+                    "transitTime": {
+                        "@type":   "QuantitativeValue",
+                        "minValue": 1,
+                        "maxValue": 3,
+                        "unitCode": "DAY",
+                    },
+                },
+            },
         },
     }
+    if row["brand"]:
+        ld_json["brand"] = {"@type": "Brand", "name": row["brand"]}
     if rating > 0 and reviews > 0:
         ld_json["aggregateRating"] = {
             "@type":       "AggregateRating",
