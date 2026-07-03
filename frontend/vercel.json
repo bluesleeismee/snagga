@@ -2,6 +2,7 @@
   "rewrites": [
     { "source": "/share/:asin", "destination": "https://snagga.onrender.com/share/:asin" },
     { "source": "/deal/:asin", "destination": "https://snagga.onrender.com/deal/:asin" },
+    { "source": "/preis/:asin", "destination": "https://snagga.onrender.com/preis/:asin" },
     { "source": "/kategorie/:slug", "destination": "https://snagga.onrender.com/kategorie/:slug" },
     { "source": "/prime-day", "destination": "https://snagga.onrender.com/prime-day" },
     { "source": "/sitemap.xml", "destination": "https://snagga.onrender.com/sitemap.xml" },

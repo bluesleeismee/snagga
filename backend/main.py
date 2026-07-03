@@ -718,6 +718,7 @@ async def deal_page(asin: str):
     {rating_html}
     <p class="meta">Kategorie: {category}</p>
     <a class="cta" href="{affiliate}" rel="nofollow sponsored noopener" target="_blank">Zum Angebot bei Amazon →</a>
+    <a class="back" href="https://www.snagga.de/preis/{asin}">📈 Preisverlauf & Preis-Check ansehen →</a>
     {f'<a class="back" href="https://www.snagga.de/kategorie/{SLUG_BY_CATEGORY[row["category"]]}">Alle {category}-Deals ansehen →</a>' if row["category"] in SLUG_BY_CATEGORY else ''}
     <a class="back" href="https://www.snagga.de/">← Alle Deals ansehen</a>
   </div>
@@ -882,6 +883,271 @@ async def category_page(slug: str):
 </html>""")
 
 
+def _price_verdict(current: float, avg90: float, atl: float) -> tuple[str, str, str]:
+    """
+    Urteil "Guter Preis?" — Ja / Warten / Nein, basierend auf aktuellem Preis
+    vs. 90-Tage-Durchschnitt und Allzeittief. Spiegelt chartStatus() im Frontend,
+    gibt aber eine klare Kaufempfehlung als (Label, Farbe, Begründung) zurück.
+    """
+    if not current or current <= 0:
+        return ("Unbekannt", "#7E7A75", "Für dieses Produkt liegt gerade kein aktueller Preis vor.")
+    if atl and current <= atl * 1.02:
+        return ("Ja", "#1E7A3C", "Günstigster Preis seit Messbeginn — besser wird es selten.")
+    if avg90 and current <= avg90 * 0.85:
+        return ("Ja", "#1E7A3C", "Selten so günstig — deutlich unter dem 90-Tage-Durchschnitt.")
+    if avg90 and current <= avg90 * 0.95:
+        return ("Ja", "#2d5a27", "Guter Preis — spürbar unter dem 90-Tage-Durchschnitt.")
+    if avg90 and current <= avg90 * 1.02:
+        return ("Eher warten", "#C85E43", "Nur knapp unter dem Durchschnitt — ein besserer Preis ist wahrscheinlich.")
+    return ("Nein", "#8b1a1a", "Aktuell kein guter Preis — er liegt über dem 90-Tage-Durchschnitt.")
+
+
+def _price_chart_svg(prices: list[float], avg90: float, atl: float) -> str:
+    """Inline-SVG-Preisverlauf (SSR, kein JS) — portiert PriceChart.jsx für die Preisseite."""
+    if not prices or len(prices) < 2:
+        return ""
+    W, H = 760, 240
+    PAD_L, PAD_R, PAD_T, PAD_B = 52, 14, 16, 26
+    chart_w, chart_h = W - PAD_L - PAD_R, H - PAD_T - PAD_B
+
+    minv, maxv = min(prices), max(prices)
+    pad = (maxv - minv) * 0.08 or maxv * 0.05
+    ymin, ymax = max(0, minv - pad), maxv + pad
+    rng = (ymax - ymin) or 1
+    n = len(prices)
+
+    def to_x(i: int) -> float: return PAD_L + (i / (n - 1)) * chart_w
+    def to_y(p: float) -> float: return PAD_T + chart_h - ((p - ymin) / rng) * chart_h
+    def fmt(v: float) -> str: return f"{v:.0f} €"
+
+    pts = [(to_x(i), to_y(p)) for i, p in enumerate(prices)]
+    path_d = " ".join(f"{'M' if i == 0 else 'L'}{x:.1f},{y:.1f}" for i, (x, y) in enumerate(pts))
+    fill_d = f"{path_d} L{pts[-1][0]:.1f},{PAD_T + chart_h:.1f} L{PAD_L:.1f},{PAD_T + chart_h:.1f} Z"
+    cx, cy = pts[-1]
+
+    avg_line = ""
+    if avg90 and ymin <= avg90 <= ymax:
+        ay = to_y(avg90)
+        avg_line = (
+            f'<line x1="{PAD_L}" y1="{ay:.1f}" x2="{W - PAD_R}" y2="{ay:.1f}" stroke="#7E7A75" stroke-width="1.2" stroke-dasharray="4,3"/>'
+            f'<text x="{W - PAD_R}" y="{ay - 4:.1f}" text-anchor="end" font-size="11" fill="#7E7A75">Ø 90 Tage {fmt(avg90)}</text>'
+        )
+    atl_line = ""
+    if atl and ymin <= atl <= ymax:
+        ty = to_y(atl)
+        atl_line = (
+            f'<line x1="{PAD_L}" y1="{ty:.1f}" x2="{W - PAD_R}" y2="{ty:.1f}" stroke="#1E7A3C" stroke-width="1" stroke-dasharray="2,3"/>'
+            f'<text x="{W - PAD_R}" y="{ty + 12:.1f}" text-anchor="end" font-size="11" fill="#1E7A3C">Tief {fmt(atl)}</text>'
+        )
+
+    ymid = (ymax + ymin) / 2
+    return f"""<svg viewBox="0 0 {W} {H}" width="100%" role="img" aria-label="Preisverlauf" style="display:block;overflow:visible">
+  <defs><linearGradient id="pcgrad" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#C85E43" stop-opacity="0.15"/><stop offset="100%" stop-color="#C85E43" stop-opacity="0"/>
+  </linearGradient></defs>
+  <line x1="{PAD_L}" y1="{PAD_T}" x2="{W - PAD_R}" y2="{PAD_T}" stroke="#EAE6E1"/>
+  <line x1="{PAD_L}" y1="{PAD_T + chart_h / 2:.1f}" x2="{W - PAD_R}" y2="{PAD_T + chart_h / 2:.1f}" stroke="#EAE6E1"/>
+  <line x1="{PAD_L}" y1="{PAD_T + chart_h}" x2="{W - PAD_R}" y2="{PAD_T + chart_h}" stroke="#EAE6E1"/>
+  <text x="{PAD_L - 6}" y="{PAD_T + 4}" text-anchor="end" font-size="11" fill="#1F1E1D">{fmt(ymax)}</text>
+  <text x="{PAD_L - 6}" y="{PAD_T + chart_h / 2 + 4:.1f}" text-anchor="end" font-size="11" fill="#1F1E1D">{fmt(ymid)}</text>
+  <text x="{PAD_L - 6}" y="{PAD_T + chart_h + 4}" text-anchor="end" font-size="11" fill="#1F1E1D">{fmt(ymin)}</text>
+  {avg_line}{atl_line}
+  <path d="{fill_d}" fill="url(#pcgrad)"/>
+  <path d="{path_d}" fill="none" stroke="#C85E43" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="{cx:.1f}" cy="{cy:.1f}" r="4" fill="#C85E43"/>
+  <text x="{PAD_L}" y="{H - 4}" text-anchor="start" font-size="11" fill="#7E7A75">früher</text>
+  <text x="{W - PAD_R}" y="{H - 4}" text-anchor="end" font-size="11" fill="#7E7A75">heute</text>
+</svg>"""
+
+
+@app.api_route("/preis/{asin}", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def price_page(asin: str):
+    """
+    Dauerhafte Produkt-/Preisseite. Anders als /deal/{asin} läuft sie NIE ab und
+    ist IMMER indexierbar — auch wenn gerade kein Deal aktiv ist. Sie rankt auf
+    kaufnahe Suchanfragen ("{Produkt} Preisverlauf / günstigster Preis") und macht
+    die bereits bezahlte Keepa-Preishistorie zum zweiten Mal nutzbar. Wachsender
+    Seitenbestand statt ablaufender Deal-Seiten — dreht die SEO-Ökonomie um.
+    """
+    if not re.match(r"^[A-Z0-9]{10}$", asin):
+        return _not_found_page("Produkt nicht gefunden")
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT asin, name, brand, image_url, current_price, original_price, "
+            "all_time_low, avg_price, avg90_price, avg180_price, category, "
+            "affiliate_url, is_active, rating, reviews, tag FROM products WHERE asin=$1",
+            asin,
+        )
+        if not row:
+            return _not_found_page("Produkt nicht gefunden")
+        hist = await conn.fetch(
+            "SELECT price FROM price_history WHERE asin=$1 ORDER BY id DESC LIMIT 180",
+            asin,
+        )
+
+    prices = [float(h["price"]) for h in reversed(hist) if h["price"] and h["price"] > 0]
+
+    name      = html.escape((row["name"] or "Produkt")[:150])
+    image     = html.escape(row["image_url"] or "https://www.snagga.de/favicon.svg")
+    affiliate = html.escape(row["affiliate_url"] or f"https://www.amazon.de/dp/{asin}")
+    category  = row["category"] or ""
+    cat_esc   = html.escape(category)
+    current   = row["current_price"] or 0
+    avg90     = row["avg90_price"] or row["avg_price"] or 0
+    avg180    = row["avg180_price"] or 0
+    atl       = row["all_time_low"] or 0
+    is_active = row["is_active"]
+
+    def eur(v: float) -> str:
+        return (f"{v:.2f}".replace(".", ",") + " €") if v and v > 0 else "—"
+
+    verdict, vcolor, vreason = _price_verdict(current, avg90, atl)
+    chart_svg = _price_chart_svg(prices, avg90, atl)
+
+    canonical = f"https://www.snagga.de/preis/{asin}"
+    title = f"{name} — Preisverlauf & Preis-Check | snagga.de"
+    desc  = html.escape(
+        f"Preisverlauf von {row['name'] or 'diesem Produkt'}: aktueller Preis {eur(current)}, "
+        f"Allzeittief {eur(atl)}, 90-Tage-Schnitt {eur(avg90)}. Lohnt sich der Kauf gerade? snagga sagt es dir."
+    )
+
+    ld_json: dict = {
+        "@context": "https://schema.org/",
+        "@type":    "Product",
+        "name":     (row["name"] or "Produkt")[:150],
+        "image":    [row["image_url"]] if row["image_url"] else [],
+        "category": category,
+    }
+    if row["brand"]:
+        ld_json["brand"] = {"@type": "Brand", "name": row["brand"]}
+    if current > 0:
+        ld_json["offers"] = {
+            "@type": "Offer", "url": canonical, "priceCurrency": "EUR",
+            "price": f"{current:.2f}",
+            "availability": "https://schema.org/InStock" if is_active else "https://schema.org/OutOfStock",
+        }
+    if row["rating"] and row["reviews"]:
+        ld_json["aggregateRating"] = {
+            "@type": "AggregateRating", "ratingValue": f"{row['rating']:.1f}", "reviewCount": int(row["reviews"]),
+        }
+
+    # CTA je nach Deal-Status
+    if is_active and current > 0:
+        cta = (f'<a class="cta cta-buy" href="{affiliate}" target="_blank" rel="nofollow noopener sponsored">'
+               f'Zum Angebot bei Amazon →</a>'
+               f'<p class="cta-note">Aktiver Deal — Preis zuletzt bestätigt. Als Amazon-Partner verdienen wir an qualifizierten Käufen.</p>')
+    else:
+        cta = ('<div class="cta cta-wait">Gerade kein aktiver Deal für dieses Produkt.</div>'
+               '<p class="cta-note">🔔 Preisalarm (E-Mail, sobald der Wunschpreis erreicht ist) ist in Vorbereitung.</p>')
+
+    stats_rows = "".join(
+        f'<tr><td>{label}</td><td>{eur(val)}</td></tr>'
+        for label, val in [
+            ("Aktueller Preis", current),
+            ("Allzeittief", atl),
+            ("Ø 90 Tage", avg90),
+            ("Ø 180 Tage", avg180),
+        ] if val and val > 0
+    )
+
+    # Ähnliche aktive Deals aus derselben Kategorie
+    async with pool.acquire() as conn:
+        similar = await conn.fetch(
+            "SELECT asin, name, image_url, current_price, original_price, tag, category, brand, rating, reviews "
+            "FROM products WHERE is_active=true AND category=$1 AND asin != $2 "
+            "ORDER BY deal_score DESC LIMIT 4",
+            category, asin,
+        )
+    similar_block = (
+        f'<h2>Aktuelle Deals in {cat_esc}</h2><div class="grid">{"".join(_deal_card_html(r) for r in similar)}</div>'
+        if similar else ""
+    )
+    cat_slug = SLUG_BY_CATEGORY.get(category)
+    cat_link = (f'<p><a class="back" href="https://www.snagga.de/kategorie/{cat_slug}">← Alle {cat_esc}-Deals</a></p>'
+                if cat_slug else "")
+
+    chart_block = (f'<div class="chart">{chart_svg}</div>' if chart_svg
+                   else '<p class="nochart">Für dieses Produkt liegen noch nicht genug Preisdaten für einen Verlauf vor.</p>')
+
+    return HTMLResponse(f"""<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{title}</title>
+<meta name="description" content="{desc}">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{canonical}">
+<meta property="og:type" content="website">
+<meta property="og:title" content="{title}">
+<meta property="og:description" content="{desc}">
+<meta property="og:image" content="{image}">
+<meta property="og:url" content="{canonical}">
+<script type="application/ld+json">{json.dumps(ld_json, ensure_ascii=False)}</script>
+<style>
+  body {{ font-family: system-ui, sans-serif; background:#FAF8F5; color:#1F1E1D; margin:0; }}
+  header {{ background:#153D68; padding:16px 24px; }}
+  header a {{ color:#EDE9E3; font-size:22px; font-weight:800; text-decoration:none; }}
+  header .accent {{ color:#C85E43; }}
+  main {{ max-width:900px; margin:0 auto; padding:32px 20px; }}
+  h1 {{ font-size:24px; line-height:1.35; margin:0 0 20px; }}
+  h2 {{ font-size:19px; margin:36px 0 8px; }}
+  .top {{ display:grid; grid-template-columns:200px 1fr; gap:28px; align-items:start; }}
+  @media (max-width:640px) {{ .top {{ grid-template-columns:1fr; }} }}
+  .prod-img {{ background:#fff; border:1px solid #EAE6E1; padding:20px; display:flex; align-items:center; justify-content:center; }}
+  .prod-img img {{ max-width:100%; max-height:200px; object-fit:contain; }}
+  .verdict {{ border-left:5px solid {vcolor}; background:#fff; padding:16px 20px; margin-bottom:16px; }}
+  .verdict .v-head {{ font-size:13px; color:#7E7A75; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px; }}
+  .verdict .v-label {{ font-size:24px; font-weight:800; color:{vcolor}; }}
+  .verdict .v-reason {{ font-size:14px; color:#4A4845; margin-top:4px; }}
+  .cta {{ display:block; text-align:center; padding:14px; font-weight:700; font-size:16px; text-decoration:none; }}
+  .cta-buy {{ background:#C85E43; color:#fff; }}
+  .cta-wait {{ background:#F2EFEA; color:#4A4845; }}
+  .cta-note {{ font-size:12px; color:#7E7A75; margin:8px 0 0; }}
+  .chart {{ background:#fff; border:1px solid #EAE6E1; padding:20px 18px; margin:8px 0 20px; }}
+  .nochart {{ background:#fff; border:1px solid #EAE6E1; padding:20px; color:#7E7A75; font-size:14px; }}
+  table.stats {{ width:100%; border-collapse:collapse; background:#fff; border:1px solid #EAE6E1; }}
+  table.stats td {{ padding:11px 16px; border-bottom:1px solid #EFEBE6; font-size:14px; }}
+  table.stats tr:last-child td {{ border-bottom:none; }}
+  table.stats td:first-child {{ color:#4A4845; }}
+  table.stats td:last-child {{ text-align:right; font-weight:700; }}
+  {_CARD_CSS}
+  .back {{ display:inline-block; margin-top:20px; color:#153D68; }}
+</style>
+{_CARD_SHARE_JS}
+</head>
+<body>
+<header><a href="https://www.snagga.de/">snagga<span class="accent">.de</span></a></header>
+<main>
+<h1>{name}</h1>
+<div class="top">
+  <div class="prod-img"><img src="{image}" alt="{name}"></div>
+  <div>
+    <div class="verdict">
+      <div class="v-head">Guter Preis gerade?</div>
+      <div class="v-label">{verdict}</div>
+      <div class="v-reason">{vreason}</div>
+    </div>
+    {cta}
+  </div>
+</div>
+
+<h2>Preisverlauf</h2>
+{chart_block}
+
+<h2>Preis-Eckdaten</h2>
+<table class="stats">{stats_rows}</table>
+
+{similar_block}
+{cat_link}
+<p><a class="back" href="https://www.snagga.de/">← Alle aktuellen Deals</a></p>
+</main>
+</body>
+</html>""")
+
+
 @app.api_route("/prime-day", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def prime_day_page():
     """
@@ -1031,6 +1297,11 @@ async def sitemap():
             r["category"] for r in
             await conn.fetch("SELECT DISTINCT category FROM products WHERE is_active=true")
         }
+        # Dauerhafte Preisseiten für ALLE je erfassten Produkte (auch inaktive) —
+        # sie laufen nicht ab und bleiben als SEO-Bestand crawlbar.
+        all_products = await conn.fetch(
+            "SELECT asin, last_updated FROM products ORDER BY is_active DESC, deal_score DESC"
+        )
 
     urls = [
         "  <url><loc>https://www.snagga.de/</loc><changefreq>hourly</changefreq><priority>1.0</priority></url>",
@@ -1048,6 +1319,12 @@ async def sitemap():
         urls.append(
             f"  <url><loc>https://www.snagga.de/deal/{row['asin']}</loc>{lastmod}"
             f"<changefreq>daily</changefreq><priority>0.6</priority></url>"
+        )
+    for row in all_products:
+        lastmod = f"<lastmod>{row['last_updated'].date().isoformat()}</lastmod>" if row["last_updated"] else ""
+        urls.append(
+            f"  <url><loc>https://www.snagga.de/preis/{row['asin']}</loc>{lastmod}"
+            f"<changefreq>weekly</changefreq><priority>0.5</priority></url>"
         )
 
     xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
