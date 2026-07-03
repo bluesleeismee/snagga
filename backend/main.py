@@ -882,6 +882,143 @@ async def category_page(slug: str):
 </html>""")
 
 
+@app.api_route("/prime-day", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def prime_day_page():
+    """
+    Dauerhafte Prime-Day-Landingpage. Die URL bleibt jedes Jahr gleich und
+    baut so über die Jahre Ranking auf "Prime Day Deals" auf — vor dem Event
+    Ratgeber-Inhalt (Fake-Rabatte erkennen), während des Events Live-Deals.
+    Positionierung: snagga prüft jeden Rabatt gegen die echte Preishistorie.
+    """
+    canonical = "https://www.snagga.de/prime-day"
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT asin, name, image_url, current_price, original_price, tag, category, brand, rating, reviews "
+            "FROM products WHERE is_active=true "
+            "ORDER BY deal_score DESC LIMIT 24"
+        )
+
+    title = "Prime Day 2026: Nur echte Deals — geprüft gegen die Preishistorie | snagga.de"
+    desc  = ("Nicht jeder Prime-Day-Rabatt ist echt. snagga prüft jedes Angebot gegen "
+             "die tatsächliche Preishistorie: Allzeittief, 90-Tage-Durchschnitt, echter Rabatt.")
+
+    deals_html = f'<div class="grid">{"".join(_deal_card_html(r) for r in rows)}</div>' if rows else ""
+
+    ld_json = {
+        "@context": "https://schema.org/",
+        "@type":    "FAQPage",
+        "mainEntity": [
+            {
+                "@type": "Question",
+                "name":  "Wie erkenne ich Fake-Rabatte am Prime Day?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text":  "Vergleiche den Angebotspreis mit der Preishistorie der letzten Monate, "
+                             "nicht mit dem Streichpreis. Viele 'Rabatte' beziehen sich auf eine UVP, "
+                             "die so nie verlangt wurde. snagga prüft jeden Deal automatisch gegen "
+                             "Allzeittief und 90-Tage-Durchschnitt.",
+                },
+            },
+            {
+                "@type": "Question",
+                "name":  "Wann ist der Amazon Prime Day 2026?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text":  "Amazon kündigt den Termin meist wenige Wochen vorher an — erfahrungsgemäß "
+                             "liegt der Prime Day Mitte Juli. Die besten Deals gibt es oft schon in der "
+                             "Woche davor.",
+                },
+            },
+            {
+                "@type": "Question",
+                "name":  "Sind Prime-Day-Preise wirklich die günstigsten des Jahres?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text":  "Nicht immer. Manche Produkte sind am Prime Day auf Allzeittief, andere "
+                             "waren wenige Wochen vorher günstiger. Entscheidend ist der Vergleich mit "
+                             "der echten Preishistorie statt mit dem Streichpreis.",
+                },
+            },
+        ],
+    }
+    ld_script = f'<script type="application/ld+json">{json.dumps(ld_json, ensure_ascii=False)}</script>'
+
+    cat_nav = "".join(
+        f'<a href="https://www.snagga.de/kategorie/{s}">{html.escape(n)}</a>'
+        for s, n in CATEGORY_SLUGS.items()
+    )
+
+    return HTMLResponse(f"""<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{title}</title>
+<meta name="description" content="{desc}">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{canonical}">
+<meta property="og:type" content="website">
+<meta property="og:title" content="{title}">
+<meta property="og:description" content="{desc}">
+<meta property="og:url" content="{canonical}">
+{ld_script}
+<style>
+  body {{ font-family: system-ui, sans-serif; background:#FAF8F5; color:#1F1E1D; margin:0; }}
+  header {{ background:#153D68; padding:16px 24px; }}
+  header a {{ color:#EDE9E3; font-size:22px; font-weight:800; text-decoration:none; }}
+  header .accent {{ color:#C85E43; }}
+  main {{ max-width:1840px; width:98%; margin:0 auto; padding:32px 0; }}
+  h1 {{ font-size:28px; margin-bottom:4px; }}
+  h2 {{ font-size:21px; margin-top:40px; }}
+  .lead {{ font-size:16px; max-width:820px; }}
+  .tips {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:16px; margin:20px 0; }}
+  .tip {{ background:#fff; padding:20px 22px; box-shadow:0 2px 10px rgba(0,0,0,0.04); }}
+  .tip h3 {{ font-size:15px; margin:0 0 8px; }}
+  .tip p {{ font-size:14px; margin:0; color:#4A4845; }}
+  {_CARD_CSS}
+  .catnav {{ display:flex; flex-wrap:wrap; gap:8px; margin-top:40px; }}
+  .catnav a {{ font-size:13px; background:#fff; border-radius:20px; padding:6px 14px; text-decoration:none; color:#153D68; }}
+  .back {{ display:inline-block; margin-top:20px; color:#153D68; }}
+</style>
+{_CARD_SHARE_JS}
+</head>
+<body>
+<header><a href="https://www.snagga.de/">snagga<span class="accent">.de</span></a></header>
+<main>
+<h1>Prime Day 2026: Nur echte Deals</h1>
+<p class="lead">Am Prime Day glänzen viele Rabatte nur auf dem Papier: Der „−40%"-Streichpreis
+wurde oft so nie verlangt. snagga prüft jedes Angebot automatisch gegen die <strong>echte
+Preishistorie</strong> — Allzeittief, 90-Tage-Durchschnitt, tatsächliche Ersparnis. Hier landet
+nur, was wirklich günstiger ist.</p>
+
+<h2>So erkennst du Fake-Rabatte</h2>
+<div class="tips">
+  <div class="tip"><h3>📉 Preishistorie statt Streichpreis</h3>
+  <p>Der Streichpreis ist meist die UVP — nicht der Preis, der zuletzt galt. Entscheidend ist,
+  was das Produkt in den letzten 90 Tagen wirklich gekostet hat.</p></div>
+  <div class="tip"><h3>🏆 Auf das Allzeittief achten</h3>
+  <p>Ein Deal ist stark, wenn der Preis nahe am tiefsten je gemessenen Preis liegt — nicht,
+  wenn die Prozentzahl gross ist.</p></div>
+  <div class="tip"><h3>⏰ Nicht vom Countdown hetzen lassen</h3>
+  <p>Künstliche Verknappung („nur noch 2 Stunden!") ist ein Verkaufstrick. Gute Preise kommen
+  wieder — die Preishistorie zeigt, wie oft.</p></div>
+  <div class="tip"><h3>⭐ Bewertungen ernst nehmen</h3>
+  <p>Ein billiges Produkt mit 3 Sternen ist kein Deal. snagga listet nur Produkte mit
+  mindestens 4 Sternen und 50+ Bewertungen.</p></div>
+</div>
+
+<h2>Aktuelle Top-Deals — gegen die Preishistorie geprüft</h2>
+{deals_html}
+
+<nav class="catnav">{cat_nav}</nav>
+<p><a class="back" href="https://www.snagga.de/">← Alle Deals ansehen</a></p>
+</main>
+</body>
+</html>""")
+
+
 @app.api_route("/sitemap.xml", methods=["GET", "HEAD"])
 async def sitemap():
     """Dynamische Sitemap — jeder aktive Deal bekommt eine eigene, crawlbare URL."""
@@ -898,6 +1035,7 @@ async def sitemap():
     urls = [
         "  <url><loc>https://www.snagga.de/</loc><changefreq>hourly</changefreq><priority>1.0</priority></url>",
         "  <url><loc>https://www.snagga.de/legal</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>",
+        "  <url><loc>https://www.snagga.de/prime-day</loc><changefreq>daily</changefreq><priority>0.8</priority></url>",
     ]
     for slug, name in CATEGORY_SLUGS.items():
         if name in active_cats:

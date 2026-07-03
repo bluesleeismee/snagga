@@ -698,6 +698,34 @@ async def post_next_mastodon_deal():
             )
 
 
+async def post_next_bluesky_deal():
+    """
+    Postet GENAU EINEN neuen Top-Deal auf Bluesky. Gleiche zurückhaltende
+    Taktung wie Mastodon (feste Uhrzeiten, siehe scheduler.py) — die
+    Spam-Sperre auf mastodon.social soll sich nicht wiederholen.
+    """
+    from bluesky import post_deal as post_deal_bluesky, MIN_SCORE as BLUESKY_MIN_SCORE
+    if not BLUESKY_MIN_SCORE:
+        return
+    db = await get_pool()
+    async with db.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT asin, name, current_price, original_price, deal_score, tag, category "
+            "FROM products WHERE is_active=true AND bluesky_posted IS NULL "
+            "AND deal_score >= $1 ORDER BY deal_score DESC LIMIT 1",
+            BLUESKY_MIN_SCORE,
+        )
+    if not row:
+        return
+    success = await post_deal_bluesky(dict(row))
+    if success:
+        async with db.acquire() as conn:
+            await conn.execute(
+                "UPDATE products SET bluesky_posted=$1 WHERE asin=$2",
+                datetime.utcnow(), row["asin"],
+            )
+
+
 
 
 async def _recalculate_top_picks():

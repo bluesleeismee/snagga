@@ -9,7 +9,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from scraper import (
     fetch_and_update_deals, nightly_deep_sync, hourly_keepa_price_check,
-    post_next_mastodon_deal,
+    post_next_mastodon_deal, post_next_bluesky_deal,
 )
 
 SERVICE_URL = os.getenv("RENDER_EXTERNAL_URL", "https://snagga.onrender.com")
@@ -75,6 +75,17 @@ def create_scheduler() -> AsyncIOScheduler:
             post_next_mastodon_deal,
             CronTrigger(hour=hour, minute=15),
             id=f"mastodon_post_{hour}",
+            replace_existing=True,
+            misfire_grace_time=1800,
+        )
+
+    # Bluesky: gleiche zurückhaltende Taktung wie Mastodon, aber versetzte
+    # Uhrzeiten — die Kanäle sollen nicht minutengleich dasselbe posten.
+    for hour in (10, 15, 20):
+        scheduler.add_job(
+            post_next_bluesky_deal,
+            CronTrigger(hour=hour, minute=45),
+            id=f"bluesky_post_{hour}",
             replace_existing=True,
             misfire_grace_time=1800,
         )
