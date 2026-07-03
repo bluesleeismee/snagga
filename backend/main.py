@@ -1521,10 +1521,11 @@ async def refresh_deals(token: str = Query(default="")):
     return {"message": f"{count} aktive Deals geladen"}
 
 
-@app.post("/deep-sync")
+@app.api_route("/deep-sync", methods=["GET", "POST"])
 async def trigger_deep_sync(token: str = Query(default="")):
     """Manueller Deep-Sync — holt echte Keepa-Historie, ersetzt Alt-/Fake-Daten,
-    berechnet ATL/Ø neu und setzt has_real_history. Nur die Top-DEEPSYNC_LIMIT Deals."""
+    berechnet ATL/Ø neu und setzt has_real_history. Nur die Top-DEEPSYNC_LIMIT Deals.
+    GET erlaubt, damit der Aufruf per Browser-Link möglich ist (admin-token-gesichert)."""
     _check_admin(token)
     from scraper import nightly_deep_sync
     try:
