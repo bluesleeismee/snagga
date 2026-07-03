@@ -1527,21 +1527,36 @@ async def refresh_deals(token: str = Query(default="")):
     return {"message": f"{count} aktive Deals geladen"}
 
 
+# Referenzen auf laufende Hintergrund-Tasks halten (sonst Garbage-Collection)
+_bg_tasks: set = set()
+
+
 @app.api_route("/deep-sync", methods=["GET", "POST"])
 async def trigger_deep_sync(token: str = Query(default="")):
     """Manueller Deep-Sync — holt echte Keepa-Historie, ersetzt Alt-/Fake-Daten,
     berechnet ATL/Ø neu und setzt has_real_history. Nur die Top-DEEPSYNC_LIMIT Deals.
-    GET erlaubt, damit der Aufruf per Browser-Link möglich ist (admin-token-gesichert)."""
+
+    Läuft im HINTERGRUND und antwortet sofort: der Sync dauert mehrere Minuten und
+    würde sonst am HTTP-Gateway-Timeout (502) scheitern. GET erlaubt (Browser-Link).
+    """
     _check_admin(token)
+    import asyncio
     from scraper import nightly_deep_sync
-    try:
-        await nightly_deep_sync()
-    except Exception as exc:
-        import traceback
-        print(f"[DEEP-SYNC ERROR] {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=str(exc))
-    cache_clear()
-    return {"message": "Deep-Sync abgeschlossen — echte Preishistorie aktualisiert."}
+
+    async def _run():
+        try:
+            await nightly_deep_sync()
+            cache_clear()
+            print("[DEEP-SYNC] Hintergrund-Lauf fertig.")
+        except Exception:
+            import traceback
+            print(f"[DEEP-SYNC ERROR] {traceback.format_exc()}")
+
+    task = asyncio.create_task(_run())
+    _bg_tasks.add(task)
+    task.add_done_callback(_bg_tasks.discard)
+    return {"message": "Deep-Sync gestartet — läuft im Hintergrund (~2-4 Min). "
+                       "Danach zeigen die Top-Deal-Preisseiten echte Charts."}
 
 
 @app.get("/debug/keepa-cats")
