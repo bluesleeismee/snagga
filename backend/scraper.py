@@ -43,7 +43,11 @@ TOP_PICKS_COUNT = 10
 MIN_SCORE       = 30
 MIN_PRICE       = 20.0
 DEAL_PAGES      = 16    # 16 × 150 = 2.400 Kandidaten/Run
-DEEPSYNC_LIMIT  = 150   # Deep-Sync nur Top-N nach Score (Token-Budget-Schutz)
+DEEPSYNC_LIMIT  = 500   # Deep-Sync deckt den ganzen aktiven Bestand ab (~283).
+                        # Muss die Zahl aktiver Deals übersteigen, sonst bleiben
+                        # niedriger gerankte Produkte dauerhaft ohne Chart. History
+                        # wird nur für Produkte ohne echte Historie geholt (Token-
+                        # schonend, siehe nightly_deep_sync), daher unkritisch hoch.
 
 CATEGORY_MIN_PRICE: dict[str, float] = {
     "Elektronik & Foto":                 25.0,
@@ -781,19 +785,21 @@ async def nightly_deep_sync():
 
     async with db.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT asin, last_deep_sync FROM products WHERE is_active=true "
+            "SELECT asin, has_real_history FROM products WHERE is_active=true "
             "ORDER BY deal_score DESC LIMIT $1",
             DEEPSYNC_LIMIT,
         )
     asins = [r["asin"] for r in rows]
-    # Immer echte Historie holen (history=1): so werden evtl. vorhandene
-    # simulierte Alt-Daten bei jedem Deep-Sync durch echte Keepa-Punkte ersetzt.
-    new_asins = set(asins)
+    # History (history=1, teurer) nur für Produkte OHNE echten Chart abrufen; alle
+    # übrigen bekommen ein günstiges Preis-/Stats-/Score-Refresh (history=0).
+    # Simulierte Alt-Daten gibt es nicht mehr, daher muss vorhandene echte History
+    # nicht nächtlich neu gezogen werden.
+    new_asins = {r["asin"] for r in rows if not r["has_real_history"]}
     if not asins:
         print("  Keine Deals für Deep-Sync gefunden.")
         return
 
-    print(f"  Deep-Sync für {len(asins)} ASINs ({len(new_asins)} neu mit history) …")
+    print(f"  Deep-Sync für {len(asins)} ASINs ({len(new_asins)} davon mit History-Abruf) …")
     keepa_data = await enrich_with_keepa(asins, domain=3, new_asins=new_asins)
     now        = datetime.utcnow()
 
@@ -868,3 +874,53 @@ async def nightly_deep_sync():
 
     await _recalculate_top_picks()
     print(f"  Deep-Sync fertig: {len(keepa_data)} Produkte aktualisiert.")
+
+
+async def backfill_missing_history(limit: int = 40):
+    """
+    Holt echte Keepa-Historie für aktive Produkte, die noch keinen Chart haben
+    (has_real_history=false) — höchstgerankte zuerst. Läuft stündlich und füllt so
+    neu aufgenommene Produkte zeitnah auf, statt bis zum nächtlichen Deep-Sync
+    (03:00) zu warten. Das Limit hält den Token-Verbrauch pro Lauf klein.
+    """
+    db = await get_pool()
+    async with db.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT asin FROM products WHERE is_active=true AND has_real_history=false "
+            "ORDER BY deal_score DESC LIMIT $1",
+            limit,
+        )
+    asins = [r["asin"] for r in rows]
+    if not asins:
+        return
+
+    print(f"[{datetime.utcnow().isoformat()}] History-Backfill für {len(asins)} Produkte …")
+    keepa_data = await enrich_with_keepa(asins, domain=3, new_asins=set(asins))
+
+    stored = 0
+    async with db.acquire() as conn:
+        for asin, kd in keepa_data.items():
+            if not kd.get("history"):
+                continue
+            recent = kd["history"][-365:]
+            await conn.execute("DELETE FROM price_history WHERE asin=$1", asin)
+            await conn.executemany(
+                "INSERT INTO price_history (asin, price, timestamp) VALUES ($1,$2,$3)",
+                [(asin, pr, ts) for pr, ts in recent],
+            )
+            # Allzeittief konsistent zur eingespielten History nachziehen (min aus
+            # bisherigem ATL und History-Tief; NULLIF fängt den Default 0 ab).
+            hist_prices = [pr for pr, _ in recent if pr and pr > 0]
+            new_atl = min(hist_prices) if hist_prices else None
+            if new_atl:
+                await conn.execute(
+                    "UPDATE products SET has_real_history=true, "
+                    "all_time_low = LEAST(NULLIF(all_time_low, 0), $2) WHERE asin=$1",
+                    asin, new_atl,
+                )
+            else:
+                await conn.execute(
+                    "UPDATE products SET has_real_history=true WHERE asin=$1", asin
+                )
+            stored += 1
+    print(f"  History-Backfill fertig: {stored} Produkte mit neuem Chart.")

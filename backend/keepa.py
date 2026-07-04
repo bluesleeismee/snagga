@@ -12,6 +12,16 @@ KEEPA_BASE = "https://api.keepa.com"
 # Keepa epoch: Minuten von Unix-Epoch bis 2011-01-01 00:00 UTC
 KEEPA_EPOCH = 21_564_000
 
+# Keepa Preis-Typ-Indices (csv- und stats.current-Arrays). Siehe constants.py:
+# 0=AMAZON, 1=NEW, 3=SALES_RANK, 10=NEW_FBA, 16=RATING(×10), 17=REVIEWS,
+# 18=BUY_BOX_SHIPPING. Die Deals laufen über die BuyBox (priceTypes=[18]),
+# daher muss die BuyBox auch bei der History-Extraktion an erster Stelle stehen.
+IDX_AMAZON = 0
+IDX_NEW    = 1
+IDX_SALES  = 3
+IDX_RATING = 16
+IDX_BUYBOX = 18
+
 
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
@@ -239,21 +249,31 @@ def _parse_product(p: dict) -> dict | None:
     if not asin:
         return None
 
-    # Preishistorie: AMAZON (0) > NEW (1)
+    # Preishistorie: BuyBox (18) > Amazon (0) > New (1) — dieselbe Priorität wie
+    # beim aktuellen Preis. Vorher wurde nur Amazon/New gelesen; BuyBox-/Dritt-
+    # anbieter-Deals (der Großteil des Sortiments) hatten dadurch KEINE History.
     csv = p.get("csv") or []
     history: list[tuple[float, datetime]] = []
-    for idx in (0, 1):
+    for idx in (IDX_BUYBOX, IDX_AMAZON, IDX_NEW):
         if idx < len(csv) and csv[idx]:
             history = _parse_flat_csv(csv[idx])
             if history:
                 break
 
-    if not history:
+    stats  = p.get("stats") or {}
+    cur    = stats.get("current") or []
+
+    # Aktueller Preis: bevorzugt letzter History-Punkt, sonst aus stats.current
+    # (BuyBox > Amazon > New). Produkte OHNE History werden NICHT mehr komplett
+    # verworfen — sie erhalten weiter Preis-/Score-/Rating-Updates, nur (noch)
+    # keinen Chart. Fehlt jeder Preis, ist das Produkt unbrauchbar → None.
+    if history:
+        current_price = history[-1][0]
+    else:
+        current_price = _first_pos(cur, IDX_BUYBOX, IDX_AMAZON, IDX_NEW) or 0.0
+    if current_price <= 0:
         return None
 
-    current_price = history[-1][0]
-
-    stats  = p.get("stats") or {}
     atl    = stats.get("atl")    or []
     avg30  = stats.get("avg30")  or []
     avg90  = stats.get("avg90")  or []
@@ -335,29 +355,42 @@ async def enrich_with_keepa(
     if own_client:
         client = httpx.AsyncClient(timeout=45)
 
+    # Chunk-Grösse 20: Keepa lehnt /product mit stats=1 bei zu vielen ASINs mit
+    # 400 ab (dieselbe Grenze wie der Preis-Check). Die frühere Grösse 100 ließ
+    # deshalb ganze Chunks stillschweigend fehlschlagen → fast keine History im
+    # Bestand, selbst bei den Top-Deals.
+    CHUNK = 20
     try:
-        for start in range(0, len(asins), 100):
-            chunk = asins[start : start + 100]
+        for start in range(0, len(asins), CHUNK):
+            chunk = asins[start : start + CHUNK]
             needs_history = any(a in new_set for a in chunk)
-            try:
-                resp = await client.get(
-                    f"{KEEPA_BASE}/product",
-                    params={
-                        "key":     KEEPA_KEY,
-                        "domain":  domain,
-                        "asin":    ",".join(chunk),
-                        "stats":   1,
-                        "history": 1 if needs_history else 0,
-                        "rating":  1,
-                    },
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                tokens = data.get("tokensLeft", "?")
-                print(f"  Keepa /product: {len(data.get('products', []))} · {tokens} Tokens übrig")
-            except Exception as e:
-                print(f"  Keepa /product Fehler (chunk {start}): {e}")
+            data = None
+            for attempt in (1, 2):
+                try:
+                    resp = await client.get(
+                        f"{KEEPA_BASE}/product",
+                        params={
+                            "key":     KEEPA_KEY,
+                            "domain":  domain,
+                            "asin":    ",".join(chunk),
+                            "stats":   1,
+                            "history": 1 if needs_history else 0,
+                            "rating":  1,
+                        },
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                    break
+                except Exception as e:
+                    print(f"  Keepa /product Fehler (chunk {start}, Versuch {attempt}): {e}")
+                    if attempt == 1:
+                        await asyncio.sleep(10.0)  # evtl. Token-Ende → warten, dann retry
+            if data is None:
                 continue
+
+            tokens_left = data.get("tokensLeft")
+            refill_in   = data.get("refillIn")  # ms bis zum nächsten Token-Nachschub
+            print(f"  Keepa /product: {len(data.get('products', []))} · {tokens_left} Tokens übrig")
 
             for p in data.get("products") or []:
                 asin   = p.get("asin", "")
@@ -365,8 +398,18 @@ async def enrich_with_keepa(
                 if parsed and asin:
                     results[asin] = parsed
 
-            if start + 20 < len(asins):
-                await asyncio.sleep(1.0)
+            # Token-bewusstes Pacing: bei wenig Restguthaben auf Nachschub warten,
+            # damit ein voller Deep-Sync nicht ins Token-Minus läuft und Chunks
+            # verliert. Sonst nur kurze Höflichkeitspause.
+            if start + CHUNK < len(asins):
+                if isinstance(tokens_left, (int, float)) and tokens_left < 50:
+                    wait = 5.0
+                    if isinstance(refill_in, (int, float)) and refill_in > 0:
+                        wait = min(refill_in / 1000.0 + 1.0, 65.0)
+                    print(f"  Wenig Keepa-Tokens ({tokens_left}) — warte {wait:.0f}s auf Nachschub")
+                    await asyncio.sleep(wait)
+                else:
+                    await asyncio.sleep(1.0)
     finally:
         if own_client:
             await client.aclose()

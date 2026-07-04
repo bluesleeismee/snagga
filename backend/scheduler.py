@@ -10,6 +10,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from scraper import (
     fetch_and_update_deals, nightly_deep_sync, hourly_keepa_price_check,
     post_next_mastodon_deal, post_next_bluesky_deal, check_and_send_price_alerts,
+    backfill_missing_history,
 )
 
 SERVICE_URL = os.getenv("RENDER_EXTERNAL_URL", "https://snagga.onrender.com")
@@ -74,6 +75,17 @@ def create_scheduler() -> AsyncIOScheduler:
         id="nightly_deep_sync",
         replace_existing=True,
         misfire_grace_time=3600,
+    )
+
+    # Stündlicher History-Backfill (:50): holt echte Keepa-Historie für aktive
+    # Produkte, die noch keinen Chart haben — so bekommen neue Produkte binnen
+    # einer Stunde einen Preisverlauf statt erst beim nächtlichen Deep-Sync.
+    scheduler.add_job(
+        backfill_missing_history,
+        IntervalTrigger(hours=1, start_date="2024-01-01 00:50:00"),
+        id="history_backfill",
+        replace_existing=True,
+        misfire_grace_time=600,
     )
 
     # Mastodon: max. 1 Post zu je einer festen Uhrzeit — bewusst NICHT stündlich.
