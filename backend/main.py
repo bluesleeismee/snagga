@@ -1898,6 +1898,49 @@ async def debug_keepa_cats(token: str = Query(default="")):
     }
 
 
+@app.get("/debug/keepa-raw/{asin}")
+async def debug_keepa_raw(asin: str, token: str = Query(default="")):
+    """Zeigt für eine ASIN, welche Keepa-Preis-Typ-Indizes History (csv) und
+    aktuelle Werte (stats.current) haben — zur Diagnose fehlender Charts."""
+    _check_admin(token)
+    import os, httpx
+    KEEPA_KEY = os.getenv("KEEPA_API_KEY", "")
+    if not KEEPA_KEY:
+        return {"error": "no key"}
+    async with httpx.AsyncClient(timeout=45) as client:
+        r = await client.get("https://api.keepa.com/product",
+                             params={"key": KEEPA_KEY, "domain": 3, "asin": asin,
+                                     "stats": 1, "history": 1, "rating": 1})
+        r.raise_for_status()
+        data = r.json()
+    prods = data.get("products") or []
+    if not prods:
+        return {"asin": asin, "found": False, "tokensConsumed": data.get("tokensConsumed")}
+    p = prods[0]
+    csv = p.get("csv") or []
+    # Pro Index: Anzahl History-Punkte (jedes 2. Element ist ein Preis, -1 = kein Wert)
+    NAMES = {0:"AMAZON",1:"NEW",2:"USED",3:"SALES",10:"NEW_FBA",11:"NEW_FBM",
+             18:"BUYBOX",19:"USED_FBA",32:"BUYBOX_USED"}
+    csv_points = {}
+    for i, series in enumerate(csv):
+        if isinstance(series, list) and series:
+            pts = sum(1 for j in range(1, len(series), 2)
+                      if isinstance(series[j], (int, float)) and series[j] > 0)
+            if pts:
+                csv_points[f"{i}:{NAMES.get(i,'?')}"] = pts
+    stats = p.get("stats") or {}
+    cur = stats.get("current") or []
+    cur_vals = {f"{i}:{NAMES.get(i,'?')}": cur[i]
+                for i in (0,1,2,10,11,18,19,32) if i < len(cur) and isinstance(cur[i],(int,float)) and cur[i] > 0}
+    return {
+        "asin": asin, "found": True,
+        "tokensConsumed": data.get("tokensConsumed"),
+        "csv_history_points_by_index": csv_points,
+        "stats_current_by_index": cur_vals,
+        "read_by_parse_product": "History+Preis nur aus 18/0/1 — alles andere wird ignoriert",
+    }
+
+
 @app.get("/debug/category-tree")
 async def debug_category_tree(token: str = Query(default="")):
     """Holt den kompletten Amazon-DE-Kategoriebaum von Keepa."""
