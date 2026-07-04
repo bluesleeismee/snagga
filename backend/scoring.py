@@ -24,6 +24,20 @@ CATEGORY_MAX_RANK: dict[str, int] = {
     "Auto & Motorrad":            10_000,
 }
 
+# Moderate Ausrichtung auf Elektronik/hochwertige Geräte: Score-Multiplikator je
+# Kategorie. Hebt Elektronik/Computer/Kamera/Games/Großgeräte an und dämpft die
+# günstigen Massen-Kategorien (Küche/Baumarkt/Drogerie), ohne sie leerzuräumen.
+CATEGORY_SCORE_WEIGHT: dict[str, float] = {
+    "Elektronik & Foto":               1.15,
+    "Computer & Zubehör":              1.15,
+    "Kamera & Foto":                   1.15,
+    "Games":                           1.15,
+    "Elektro-Großgeräte":              1.15,
+    "Küche, Haushalt & Wohnen":        0.90,
+    "Baumarkt":                        0.90,
+    "Drogerie & Körperpflege":         0.90,
+}
+
 
 # ---------------------------------------------------------------------------
 # Specificity Penalty
@@ -52,6 +66,13 @@ def specificity_penalty(title: str) -> int:
     # Zubehörteilen (Anker, Apple, Ugreen …) sehr häufig im Titel vorkommen.
     if re.search(r'\b(abdeckplane|abdeckung|organizer|halterung|verlängerung)\b', t):
         p += 18
+
+    # Ramsch/Deko/Verbrauchsware, die zwar rechnerisch gut rabattiert ist, aber
+    # nicht ins Sortiment passt (Perücke, Weihnachts-Ornament, Ersatzfilter …).
+    # Gezielte Substantive statt breiter Wörter ("filter"/"stück"), damit Marken-
+    # produkte (Oral-B-Bürstenköpfe, Webcams, LEVOIT-Geräte) NICHT mitfliegen.
+    if re.search(r'\b(perücke|haarteil|ornament|girlande|kerze|aufkleber|serviette|kissenbezug|bilderhaken|ersatzfilter|hepa[-\s]?filter)\b', t):
+        p += 30
 
     return min(p, 60)
 
@@ -216,6 +237,10 @@ def calculate_deal_score(
     penalty = specificity_penalty(title) if title else 0
     score   = max(0, base_score - penalty)
 
+    # Kategorie-Gewichtung (moderate Elektronik-/Premium-Ausrichtung).
+    weight = CATEGORY_SCORE_WEIGHT.get(category, 1.0)
+    score  = max(0, min(100, int(round(score * weight))))
+
     breakdown = json.dumps({
         "avg90":   round(f_avg, 3),
         "atl":     round(f_atl, 3),
@@ -223,6 +248,7 @@ def calculate_deal_score(
         "stab":    round(f_stab, 3),
         "rank":    round(rank_f, 3),
         "penalty": penalty,
+        "weight":  weight,
     })
     return score, breakdown
 

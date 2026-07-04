@@ -22,6 +22,16 @@ IDX_SALES  = 3
 IDX_RATING = 16
 IDX_BUYBOX = 18
 
+# Elektronik-/Geräte-Kategorien (Teilmenge der Whitelist in fetch_keepa_deals) —
+# für eine separate Discovery-Abfrage mit gelockertem Rabatt-Schwellwert, damit
+# überhaupt mehr elektronische Geräte ins Angebot kommen (bei −15 % rar).
+ELECTRONICS_CAT_IDS = [
+    340843031, 340844031, 368180031, 368181031, 368182031,  # Computer & Zubehör
+    908823031, 908824031, 908825031,                         # Elektro-Großgeräte
+    562066, 569604, 578112, 725718, 124538011,               # Elektronik & Foto
+    300992, 541708, 526742, 124544011,                       # Games
+]
+
 
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
@@ -62,6 +72,7 @@ async def fetch_keepa_deals(
     min_reviews: int   = 50,    # nach Empfang gefiltert
     page:        int   = 0,
     client: httpx.AsyncClient | None = None,
+    include_cats: list[int] | None = None,  # None = volle Whitelist unten
 ) -> list[dict]:
     """
     Ruft den Keepa /deal Endpoint ab.
@@ -115,7 +126,7 @@ async def fetch_keepa_deals(
         "isFilterEnabled":     True,
         "filterErotic":        True,
         "sortType":            1,                   # 1 = nach deltaPercent
-        "includeCategories":   INCLUDE_CAT_IDS,    # Whitelist statt Blacklist
+        "includeCategories":   include_cats or INCLUDE_CAT_IDS,  # optional Teilmenge
     }
 
     own_client = client is None

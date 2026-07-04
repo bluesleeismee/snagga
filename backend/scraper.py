@@ -14,7 +14,7 @@ import httpx
 from datetime import datetime, timedelta
 
 from database import get_pool
-from keepa import fetch_keepa_deals, enrich_with_keepa, fetch_current_prices
+from keepa import fetch_keepa_deals, enrich_with_keepa, fetch_current_prices, ELECTRONICS_CAT_IDS
 from scoring import (
     CATEGORY_MAX_RANK,
     passes_hard_filters,
@@ -43,6 +43,7 @@ TOP_PICKS_COUNT = 10
 MIN_SCORE       = 30
 MIN_PRICE       = 20.0
 DEAL_PAGES      = 16    # 16 × 150 = 2.400 Kandidaten/Run
+ELECTRONICS_PAGES = 6   # Zusatzabfrage nur Elektronik/Geräte (−10 %), ~6 Tokens/Run
 DEEPSYNC_LIMIT  = 500   # Deep-Sync deckt den ganzen aktiven Bestand ab (~283).
                         # Muss die Zahl aktiver Deals übersteigen, sonst bleiben
                         # niedriger gerankte Produkte dauerhaft ohne Chart. History
@@ -267,6 +268,21 @@ _KEYWORD_RE: dict[str, "re.Pattern"] = {
 }
 
 
+_GAMING_PERIPHERAL_RE = re.compile(
+    r'\b(maus|mouse|mauspad|tastatur|keyboard|headset|monitor|'
+    r'gaming[-\s]?stuhl|gaming[-\s]?chair)\b'
+)
+
+
+def _reroute_peripheral(cat: str, title_l: str) -> str:
+    """Gaming-Peripherie (Maus/Tastatur/Headset/Monitor/Stuhl) gehört zu
+    'Computer & Zubehör', damit die Games-Kachel echte Spiele/Konsolen zeigt
+    statt fast nur Mäusen. 'controller' bleibt bewusst in Games."""
+    if cat == "Games" and _GAMING_PERIPHERAL_RE.search(title_l):
+        return "Computer & Zubehör"
+    return cat
+
+
 def classify_category(title: str, root_cat: int = 0) -> str | None:
     """
     Gibt Kategorie zurück oder None wenn das Produkt nicht angezeigt werden soll.
@@ -291,12 +307,12 @@ def classify_category(title: str, root_cat: int = 0) -> str | None:
         # für immer leer. Titel-Keywords zuerst prüfen, dann erst den Fallback.
         if mapped == "Elektronik & Foto" and _KEYWORD_RE["Kamera & Foto"].search(title_l):
             return "Kamera & Foto"
-        return mapped
+        return _reroute_peripheral(mapped, title_l)
 
     # 4. Keyword-Fallback (exhaustiv — kein Catch-all mehr)
     for cat, pattern in _KEYWORD_RE.items():
         if pattern.search(title_l):
-            return cat
+            return _reroute_peripheral(cat, title_l)
 
     # 5. Kein Match → ablehnen
     return None
@@ -477,18 +493,14 @@ async def fetch_and_update_deals():
         candidates = []
         skipped_cat = skipped_price = skipped_filter = skipped_score = 0
         got_any = False
+        seen_asins: set[str] = set()
 
-        for page in range(DEAL_PAGES):
-            page_deals = await fetch_keepa_deals(
-                domain=3, delta_pct=15, min_rating=40, min_reviews=50,
-                page=page, client=client,
-            )
-            if not page_deals:
-                break
-            got_any = True
-
-            # ── 2. Hard Filters + Scoring (direkt pro Seite) ─────────────────
+        # ── 2. Hard Filters + Scoring (pro Seite, gemeinsam für beide Abfragen) ──
+        def process(page_deals):
+            nonlocal skipped_cat, skipped_price, skipped_filter, skipped_score
             for d in page_deals:
+                if d["asin"] in seen_asins:
+                    continue  # Dedup: Elektronik-Zusatzabfrage überschneidet sich mit Hauptabfrage
                 if d["current_price"] < MIN_PRICE:
                     skipped_price += 1
                     continue
@@ -529,7 +541,31 @@ async def fetch_and_update_deals():
                 d["original_price"]  = max(d["avg90"] or d["current_price"] * 1.25,
                                            d["current_price"] * 1.10)
                 d["avg_price"]       = d["avg90"] or d["current_price"]
+                seen_asins.add(d["asin"])
                 candidates.append(d)
+
+        # Hauptabfrage: ganze Whitelist, mind. −15 %
+        for page in range(DEAL_PAGES):
+            page_deals = await fetch_keepa_deals(
+                domain=3, delta_pct=15, min_rating=40, min_reviews=50,
+                page=page, client=client,
+            )
+            if not page_deals:
+                break
+            got_any = True
+            process(page_deals)
+
+        # Zusatzabfrage: nur Elektronik/Geräte, schon ab −10 % → holt mehr echte
+        # Geräte ins Angebot, die bei −15 % kaum im Deal-Stream auftauchen.
+        for page in range(ELECTRONICS_PAGES):
+            page_deals = await fetch_keepa_deals(
+                domain=3, delta_pct=10, min_rating=40, min_reviews=50,
+                page=page, client=client, include_cats=ELECTRONICS_CAT_IDS,
+            )
+            if not page_deals:
+                break
+            got_any = True
+            process(page_deals)
 
         if not got_any:
             print("  Keepa /deals lieferte keine Daten — Abbruch.")
@@ -754,15 +790,33 @@ async def post_next_bluesky_deal():
 
 
 async def _recalculate_top_picks():
-    """Setzt die Top 10 nach aktuellem Score als Top Picks."""
+    """Setzt die Top Picks nach Score — mit Marken-Vielfalt: max. 2 Produkte
+    derselben Marke, damit die prominente Startseiten-Reihe nicht von einer Marke
+    dominiert wird. Greift, sobald Marken via Deep-Sync gefüllt sind; leere Marken
+    zählen nicht mit (dann wie bisher rein nach Score)."""
     db = await get_pool()
     async with db.acquire() as conn:
         await conn.execute("UPDATE products SET is_top_pick=false")
-        await conn.execute(
-            "UPDATE products SET is_top_pick=true WHERE asin IN "
-            "(SELECT asin FROM products WHERE is_active=true ORDER BY deal_score DESC LIMIT $1)",
-            TOP_PICKS_COUNT,
+        rows = await conn.fetch(
+            "SELECT asin, brand FROM products WHERE is_active=true "
+            "ORDER BY deal_score DESC LIMIT $1",
+            TOP_PICKS_COUNT * 4,
         )
+        picks: list[str] = []
+        brand_count: dict[str, int] = {}
+        for r in rows:
+            if len(picks) >= TOP_PICKS_COUNT:
+                break
+            b = (r["brand"] or "").strip().lower()
+            if b:
+                if brand_count.get(b, 0) >= 2:
+                    continue
+                brand_count[b] = brand_count.get(b, 0) + 1
+            picks.append(r["asin"])
+        if picks:
+            await conn.execute(
+                "UPDATE products SET is_top_pick=true WHERE asin = ANY($1)", picks
+            )
 
 
 # ---------------------------------------------------------------------------
