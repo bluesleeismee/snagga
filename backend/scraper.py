@@ -562,8 +562,14 @@ async def fetch_and_update_deals():
                 d["deal_score"]      = score
                 d["score_breakdown"] = breakdown
                 d["tag"]             = determine_tag(d["current_price"], d["atl"], d["avg90"], d["avg180"], atl_confirmed=False)
-                d["original_price"]  = max(d["avg90"] or d["current_price"] * 1.25,
-                                           d["current_price"] * 1.10)
+                # Durchgestrichener Preis = 180-Tage-Ø: deckt sich mit dem Rabatt-
+                # Tooltip ("Durchschnittspreis der letzten 6 Monate") UND mit dem
+                # Deep-Sync, der ebenfalls avg180 nutzt — sonst wechselt der
+                # angezeigte Rabatt je nach Update-Pfad. Fallback: avg90, sonst +25%.
+                # (Aktive Deals liegen per Hard-Filter unter avg180*0.92, also ist
+                #  avg180 immer > current; die Kachel zeigt den Strich ohnehin nur
+                #  bei original_price > current_price.)
+                d["original_price"]  = d["avg180"] or d["avg90"] or round(d["current_price"] * 1.25, 2)
                 d["avg_price"]       = d["avg90"] or d["current_price"]
                 seen_asins.add(d["asin"])
                 candidates.append(d)
