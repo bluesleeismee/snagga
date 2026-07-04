@@ -321,7 +321,7 @@ async def hourly_keepa_price_check():
     async with db.acquire() as conn:
         # Tier-Staffelung: Top 100 (deal_score) stündlich, Rest alle 4h → ~60% Token-Einsparung
         active = await conn.fetch(
-            "SELECT asin, current_price, avg90_price, avg180_price, all_time_low, "
+            "SELECT asin, name, current_price, avg90_price, avg180_price, all_time_low, "
             "category, rating, reviews, sales_rank FROM products "
             "WHERE is_active=true AND ("
             "  last_checked IS NULL "
@@ -368,6 +368,7 @@ async def hourly_keepa_price_check():
             if weak_volatile or not passes_hard_filters(
                 row["rating"], row["reviews"], row["sales_rank"] or 0,
                 row["category"], live_price, avg90, atl, avg180,
+                title=row["name"] or "",
             ):
                 await conn.execute(
                     "UPDATE products SET is_active=false, is_top_pick=false, "
@@ -502,6 +503,7 @@ async def fetch_and_update_deals():
                 if not passes_hard_filters(
                     d["rating"], d["reviews"], d["sales_rank"], cat,
                     d["current_price"], d["avg90"], d["atl"], d["avg180"],
+                    title=d["title"] or "",
                 ):
                     skipped_filter += 1
                     continue

@@ -57,6 +57,38 @@ def specificity_penalty(title: str) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Zustands-Filter (nur Neuware)
+# ---------------------------------------------------------------------------
+
+# Keywords, die auf gebrauchte / generalüberholte / B-Ware hindeuten.
+# Wortgrenzen wo nötig, damit z.B. "Gebrauch"/"Gebrauchsanweisung" NICHT matcht.
+# Case-insensitive über re.IGNORECASE.
+_EXCLUDED_CONDITION_RE = re.compile(
+    r'('
+    r'general[-\s]?überholt'   # generalüberholt / general-überholt / general überholt
+    r'|refurbished|refurb\b'    # refurbished / refurb
+    r'|renewed'
+    r'|\bgebraucht(e[rsmn]?)?\b' # gebraucht/gebrauchte/-er/-es/-en/-em; NICHT "Gebrauch"/"Gebrauchsanweisung"
+    r'|aufbereitet'
+    r'|pre[-\s]?owned'          # pre-owned / pre owned / preowned
+    r'|\bb[-/\s]?ware\b'        # b-ware / b/ware / b ware
+    r'|\bretoure\b'
+    r')',
+    re.IGNORECASE,
+)
+
+
+def is_excluded_condition(title: str) -> bool:
+    """
+    True, wenn der Titel auf gebrauchte / generalüberholte / B-Ware hindeutet.
+    snagga listet ausschliesslich Neuware — solche Produkte werden hart gefiltert.
+    """
+    if not title:
+        return False
+    return _EXCLUDED_CONDITION_RE.search(title) is not None
+
+
+# ---------------------------------------------------------------------------
 # Hard Filters
 # ---------------------------------------------------------------------------
 
@@ -69,8 +101,13 @@ def passes_hard_filters(
     avg90:      float,
     atl:        float,
     avg180:     float = 0,
+    title:      str = "",
 ) -> bool:
     """Gibt True zurück wenn das Produkt alle Mindestanforderungen erfüllt."""
+    # Nur Neuware: gebrauchte / generalüberholte / B-Ware sofort aussortieren.
+    if is_excluded_condition(title):
+        return False
+
     if rating < 4.0:
         return False
 

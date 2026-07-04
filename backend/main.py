@@ -358,8 +358,9 @@ def _deal_card_html(row) -> str:
 
     category = html.escape(row["category"]) if "category" in row.keys() and row["category"] else ""
 
-    # Eyebrow-Label: Marke bevorzugt, sonst Bewertung statt der Kategorie (die
-    # steht schon in der Fusszeile — sonst stuende sie zweimal auf der Kachel).
+    # Eyebrow-Label: Marke bevorzugt, sonst Bewertung. NIE die Kategorie — die
+    # steht schon in der Fusszeile, sonst stuende sie zweimal auf der Kachel.
+    # Fehlen Marke UND Bewertung, bleibt der Eyebrow leer (NBSP haelt die Hoehe).
     rating  = row["rating"]  if "rating"  in row.keys() and row["rating"]  else 0
     reviews = row["reviews"] if "reviews" in row.keys() and row["reviews"] else 0
     if reviews >= 1000:
@@ -370,7 +371,7 @@ def _deal_card_html(row) -> str:
         reviews_txt = ""
     rating_label = (f"{rating:.1f} ★" + (f" · {reviews_txt}" if reviews_txt else "")) if rating > 0 else ""
 
-    brand = html.escape(row["brand"]) if "brand" in row.keys() and row["brand"] else (rating_label or category)
+    brand = html.escape(row["brand"]) if "brand" in row.keys() and row["brand"] else (rating_label or "&nbsp;")
 
     return (
         f'<a class="card" href="https://www.snagga.de/deal/{row["asin"]}">'
