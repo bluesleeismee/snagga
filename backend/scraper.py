@@ -14,7 +14,7 @@ import httpx
 from datetime import datetime, timedelta
 
 from database import get_pool
-from keepa import fetch_keepa_deals, enrich_with_keepa, fetch_current_prices, ELECTRONICS_CAT_IDS
+from keepa import fetch_keepa_deals, enrich_with_keepa, ELECTRONICS_CAT_IDS
 from scoring import (
     CATEGORY_MAX_RANK,
     passes_hard_filters,
@@ -45,10 +45,9 @@ MIN_PRICE       = 20.0
 DEAL_PAGES      = 16    # 16 × 150 = 2.400 Kandidaten/Run
 ELECTRONICS_PAGES = 6   # Zusatzabfrage nur Elektronik/Geräte (−10 %), ~6 Tokens/Run
 DEEPSYNC_LIMIT  = 500   # Deep-Sync deckt den ganzen aktiven Bestand ab (~283).
-                        # Muss die Zahl aktiver Deals übersteigen, sonst bleiben
-                        # niedriger gerankte Produkte dauerhaft ohne Chart. History
-                        # wird nur für Produkte ohne echte Historie geholt (Token-
-                        # schonend, siehe nightly_deep_sync), daher unkritisch hoch.
+                        # Muss die Zahl aktiver Deals übersteigen. History steckt
+                        # im Basis-Token (gratis), daher unkritisch hoch — der
+                        # stündliche Preis-Check hält Charts ohnehin schon aktuell.
 
 CATEGORY_MIN_PRICE: dict[str, float] = {
     "Elektronik & Foto":                 25.0,
@@ -319,14 +318,16 @@ def classify_category(title: str, root_cat: int = 0) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Stündlicher Preis-Check via Keepa /product (minimal, ~2–3 Tokens/ASIN)
+# Stündlicher Preis-Check via Keepa /product (~1 Token/ASIN, History inklusive)
 # ---------------------------------------------------------------------------
 
 async def hourly_keepa_price_check():
     """
-    Prüft die Preise aktiver Deals via Keepa /product (history=0).
+    Prüft die Preise aktiver Deals via Keepa /product — inkl. voller Preishistorie
+    (die im Basis-Token gratis ist). Jedes geprüfte Produkt bekommt so einen
+    aktuellen Chart; ein separater History-Backfill ist nicht mehr nötig.
 
-    Gestaffelt (Token-Budget-Schutz bei bis zu 500 aktiven Deals):
+    Gestaffelt:
       - Top Picks + "Allzeittiefpreis"-Deals + volatile Deals → jede Stunde
       - alle übrigen → nur wenn seit ≥ 3h nicht geprüft
     Preis nicht mehr gut → sofort deaktivieren.
@@ -356,12 +357,16 @@ async def hourly_keepa_price_check():
         print("  Keepa Preis-Check: nichts fällig.")
         return
 
-    asins         = [row["asin"] for row in active]
-    current_prices = await fetch_current_prices(asins, domain=3)
+    asins = [row["asin"] for row in active]
+    # History ist im Basis-Token gratis → gleich die vollen Produktdaten inkl.
+    # Preisverlauf holen und speichern, damit jedes geprüfte Produkt einen
+    # aktuellen Chart hat (ersetzt den früheren separaten History-Backfill).
+    enriched = await enrich_with_keepa(asins, domain=3)
 
-    if not current_prices:
+    if not enriched:
         print("  Keepa Preis-Check: keine Preisdaten erhalten — Abbruch")
         return
+    current_prices = {a: kd["current_price"] for a, kd in enriched.items() if kd.get("current_price")}
 
     # Volatilität: Anzahl Preissprünge >3% über die letzten 12 gespeicherten Punkte.
     # Reihenfolge per id (monoton) statt Zeitstempel (price_history.timestamp ist TEXT).
@@ -402,6 +407,7 @@ async def hourly_keepa_price_check():
                     row["sales_rank"] or 0, row["category"],
                     row["rating"], row["reviews"],
                     price_updated=now,
+                    title=row["name"] or "",
                 )
                 tag = determine_tag(live_price, atl, avg90, avg180, atl_confirmed=False)
                 # last_updated wird mit-refresht: bestätigt-gute Deals laufen nicht aus,
@@ -418,10 +424,27 @@ async def hourly_keepa_price_check():
                     "WHERE asin=$1",
                     asin, live_price, score, tag, now, breakdown, volatile,
                 )
-                await conn.execute(
-                    "INSERT INTO price_history (asin, price, timestamp) VALUES ($1,$2,$3)",
-                    asin, live_price, now,
-                )
+
+                # Kostenlose Keepa-History einspielen → Chart aktuell, Marke mitnehmen.
+                kd   = enriched.get(asin) or {}
+                hist = kd.get("history") or []
+                if hist:
+                    recent = hist[-365:]
+                    await conn.execute("DELETE FROM price_history WHERE asin=$1", asin)
+                    await conn.executemany(
+                        "INSERT INTO price_history (asin, price, timestamp) VALUES ($1,$2,$3)",
+                        [(asin, pr, ts) for pr, ts in recent],
+                    )
+                    await conn.execute(
+                        "UPDATE products SET has_real_history=true, "
+                        "brand = CASE WHEN $2 != '' THEN $2 ELSE brand END WHERE asin=$1",
+                        asin, kd.get("brand") or "",
+                    )
+                else:
+                    await conn.execute(
+                        "INSERT INTO price_history (asin, price, timestamp) VALUES ($1,$2,$3)",
+                        asin, live_price, now,
+                    )
 
     if deactivated > 0:
         await _promote_backups_simple(deactivated)
@@ -839,7 +862,7 @@ async def nightly_deep_sync():
 
     async with db.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT asin, has_real_history, category, name FROM products WHERE is_active=true "
+            "SELECT asin, category, name FROM products WHERE is_active=true "
             "ORDER BY deal_score DESC LIMIT $1",
             DEEPSYNC_LIMIT,
         )
@@ -847,17 +870,13 @@ async def nightly_deep_sync():
     # Kategorie + Titel je ASIN für ein korrekt gewichtetes Re-Scoring (sonst
     # würde der Deep-Sync die Kategorie-Gewichtung/Junk-Abzüge überschreiben).
     meta_by_asin = {r["asin"]: (r["category"] or "Sonstiges", r["name"] or "") for r in rows}
-    # History (history=1, teurer) nur für Produkte OHNE echten Chart abrufen; alle
-    # übrigen bekommen ein günstiges Preis-/Stats-/Score-Refresh (history=0).
-    # Simulierte Alt-Daten gibt es nicht mehr, daher muss vorhandene echte History
-    # nicht nächtlich neu gezogen werden.
-    new_asins = {r["asin"] for r in rows if not r["has_real_history"]}
     if not asins:
         print("  Keine Deals für Deep-Sync gefunden.")
         return
 
-    print(f"  Deep-Sync für {len(asins)} ASINs ({len(new_asins)} davon mit History-Abruf) …")
-    keepa_data = await enrich_with_keepa(asins, domain=3, new_asins=new_asins)
+    # History steckt im Basis-Token → wird für alle mitgeholt (kein Sparzwang mehr).
+    print(f"  Deep-Sync für {len(asins)} ASINs (History inklusive) …")
+    keepa_data = await enrich_with_keepa(asins, domain=3)
     now        = datetime.utcnow()
 
     async with db.acquire() as conn:
@@ -934,57 +953,3 @@ async def nightly_deep_sync():
 
     await _recalculate_top_picks()
     print(f"  Deep-Sync fertig: {len(keepa_data)} Produkte aktualisiert.")
-
-
-async def backfill_missing_history(limit: int = 40):
-    """
-    Holt echte Keepa-Historie für aktive Produkte, die noch keinen Chart haben
-    (has_real_history=false) — höchstgerankte zuerst. Läuft stündlich und füllt so
-    neu aufgenommene Produkte zeitnah auf, statt bis zum nächtlichen Deep-Sync
-    (03:00) zu warten. Das Limit hält den Token-Verbrauch pro Lauf klein.
-    """
-    db = await get_pool()
-    async with db.acquire() as conn:
-        rows = await conn.fetch(
-            "SELECT asin FROM products WHERE is_active=true AND has_real_history=false "
-            "ORDER BY deal_score DESC LIMIT $1",
-            limit,
-        )
-    asins = [r["asin"] for r in rows]
-    if not asins:
-        return
-
-    print(f"[{datetime.utcnow().isoformat()}] History-Backfill für {len(asins)} Produkte …")
-    keepa_data = await enrich_with_keepa(asins, domain=3, new_asins=set(asins))
-
-    stored = 0
-    async with db.acquire() as conn:
-        for asin, kd in keepa_data.items():
-            if not kd.get("history"):
-                continue
-            recent = kd["history"][-365:]
-            await conn.execute("DELETE FROM price_history WHERE asin=$1", asin)
-            await conn.executemany(
-                "INSERT INTO price_history (asin, price, timestamp) VALUES ($1,$2,$3)",
-                [(asin, pr, ts) for pr, ts in recent],
-            )
-            # Allzeittief konsistent zur eingespielten History nachziehen (min aus
-            # bisherigem ATL und History-Tief; NULLIF fängt den Default 0 ab).
-            hist_prices = [pr for pr, _ in recent if pr and pr > 0]
-            new_atl = min(hist_prices) if hist_prices else None
-            brand   = kd.get("brand") or ""  # Marke gleich mitnehmen (kommt aus /product)
-            if new_atl:
-                await conn.execute(
-                    "UPDATE products SET has_real_history=true, "
-                    "all_time_low = LEAST(NULLIF(all_time_low, 0), $2), "
-                    "brand = CASE WHEN $3 != '' THEN $3 ELSE brand END WHERE asin=$1",
-                    asin, new_atl, brand,
-                )
-            else:
-                await conn.execute(
-                    "UPDATE products SET has_real_history=true, "
-                    "brand = CASE WHEN $2 != '' THEN $2 ELSE brand END WHERE asin=$1",
-                    asin, brand,
-                )
-            stored += 1
-    print(f"  History-Backfill fertig: {stored} Produkte mit neuem Chart.")

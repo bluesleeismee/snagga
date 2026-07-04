@@ -350,17 +350,15 @@ async def enrich_with_keepa(
     asins:  list[str],
     domain: int = 3,
     client: httpx.AsyncClient | None = None,
-    new_asins: set[str] | None = None,
 ) -> dict[str, dict]:
     """
-    Deep-Sync: vollständige Produktdaten für eine Liste von ASINs.
-    new_asins: ASINs die noch keine history haben → history=1 nur für diese.
-    Gibt {asin: data_dict} zurück.
+    Vollständige Produktdaten (inkl. Preishistorie) für eine Liste von ASINs.
+    Die History ist im Basis-Token enthalten (kostenlos), daher wird sie IMMER
+    mitgeholt. Gibt {asin: data_dict} zurück.
     """
     if not KEEPA_KEY or not asins:
         return {}
 
-    new_set = new_asins or set()
     results: dict[str, dict] = {}
     own_client = client is None
     if own_client:
@@ -374,7 +372,6 @@ async def enrich_with_keepa(
     try:
         for start in range(0, len(asins), CHUNK):
             chunk = asins[start : start + CHUNK]
-            needs_history = any(a in new_set for a in chunk)
             data = None
             for attempt in (1, 2):
                 try:
@@ -385,7 +382,8 @@ async def enrich_with_keepa(
                             "domain":  domain,
                             "asin":    ",".join(chunk),
                             "stats":   1,
-                            "history": 1 if needs_history else 0,
+                            "history": 1,    # History steckt im Basis-Token → kostenlos
+                            "days":    365,   # nur letzte 365 Tage → kleinere/schnellere Antwort
                             "rating":  1,
                         },
                     )
@@ -399,9 +397,11 @@ async def enrich_with_keepa(
             if data is None:
                 continue
 
-            tokens_left = data.get("tokensLeft")
-            refill_in   = data.get("refillIn")  # ms bis zum nächsten Token-Nachschub
-            print(f"  Keepa /product: {len(data.get('products', []))} · {tokens_left} Tokens übrig")
+            tokens_left     = data.get("tokensLeft")
+            tokens_consumed = data.get("tokensConsumed")  # echte Kosten dieses Requests
+            refill_in       = data.get("refillIn")        # ms bis zum nächsten Token-Nachschub
+            print(f"  Keepa /product: {len(data.get('products', []))} Produkte · "
+                  f"{tokens_consumed} Tokens verbraucht · {tokens_left} übrig")
 
             for p in data.get("products") or []:
                 asin   = p.get("asin", "")
@@ -428,96 +428,6 @@ async def enrich_with_keepa(
     return results
 
 
-# ---------------------------------------------------------------------------
-# /product — Minimaler Preis-Check (stündlich, günstig)
-# Chunk-Grösse 20: Keepa lehnt /product mit stats=1 bei zu vielen ASINs (400)
-# ---------------------------------------------------------------------------
-
-async def fetch_current_prices(
-    asins:  list[str],
-    domain: int = 3,
-    client: httpx.AsyncClient | None = None,
-) -> dict[str, float]:
-    """
-    Holt nur den aktuellen Preis für eine Liste von ASINs.
-    history=0, stats=1 → ~2–3 Tokens/ASIN statt ~10 beim Deep-Sync.
-    Gibt {asin: preis_eur} zurück.
-    """
-    if not KEEPA_KEY or not asins:
-        return {}
-
-    results: dict[str, float] = {}
-    own_client = client is None
-    if own_client:
-        client = httpx.AsyncClient(timeout=30)
-
-    try:
-        for start in range(0, len(asins), 20):
-            chunk = asins[start : start + 20]
-            try:
-                resp = await client.get(
-                    f"{KEEPA_BASE}/product",
-                    params={
-                        "key":     KEEPA_KEY,
-                        "domain":  domain,
-                        "asin":    ",".join(chunk),
-                        "stats":   1,   # aktueller Preis + Durchschnitte
-                        "history": 0,   # keine volle Preishistorie → günstiger
-                        "rating":  0,
-                    },
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                tokens = data.get("tokensLeft", "?")
-                print(f"  Keepa /product (Preis-Check): {len(chunk)} ASINs · {tokens} Tokens übrig")
-            except Exception as e:
-                print(f"  Keepa /product Preis-Check Fehler (chunk {start}): {e}")
-                continue
-
-            IDX_BUYBOX  = 18
-            IDX_AMAZON  = 0
-            IDX_NEW_FBA = 10
-
-            for p in data.get("products") or []:
-                asin = p.get("asin", "")
-                if not asin:
-                    continue
-
-                # Aktuellen Preis aus stats.current (Array nach Preis-Typ-Index)
-                stats = p.get("stats") or {}
-                cur   = stats.get("current") or []
-
-                def _pick(arr, *indices):
-                    for i in indices:
-                        if i < len(arr):
-                            v = arr[i]
-                            if isinstance(v, (int, float)) and v > 0:
-                                return round(v / 100.0, 2)
-                    return None
-
-                price = _pick(cur, IDX_BUYBOX, IDX_AMAZON, IDX_NEW_FBA)
-
-                # Fallback: letzter Eintrag in csv (auch bei history=0 vorhanden)
-                if price is None:
-                    csv = p.get("csv") or []
-                    for idx in (IDX_BUYBOX, IDX_AMAZON, IDX_NEW_FBA):
-                        if idx < len(csv) and csv[idx]:
-                            flat = csv[idx]
-                            for j in range(len(flat) - 1, 0, -2):
-                                v = flat[j]
-                                if isinstance(v, (int, float)) and v > 0:
-                                    price = round(v / 100.0, 2)
-                                    break
-                        if price is not None:
-                            break
-
-                if price is not None:
-                    results[asin] = price
-
-            if start + 20 < len(asins):
-                await asyncio.sleep(1.0)
-    finally:
-        if own_client:
-            await client.aclose()
-
-    return results
+# fetch_current_prices() wurde entfernt: Seit die History im Basis-Token gratis
+# ist, holt der stündliche Preis-Check die vollen Produktdaten direkt über
+# enrich_with_keepa (inkl. History) — ein separater „nur Preis"-Pfad lohnt nicht.
