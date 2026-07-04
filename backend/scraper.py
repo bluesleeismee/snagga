@@ -839,11 +839,14 @@ async def nightly_deep_sync():
 
     async with db.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT asin, has_real_history FROM products WHERE is_active=true "
+            "SELECT asin, has_real_history, category, name FROM products WHERE is_active=true "
             "ORDER BY deal_score DESC LIMIT $1",
             DEEPSYNC_LIMIT,
         )
     asins = [r["asin"] for r in rows]
+    # Kategorie + Titel je ASIN für ein korrekt gewichtetes Re-Scoring (sonst
+    # würde der Deep-Sync die Kategorie-Gewichtung/Junk-Abzüge überschreiben).
+    meta_by_asin = {r["asin"]: (r["category"] or "Sonstiges", r["name"] or "") for r in rows}
     # History (history=1, teurer) nur für Produkte OHNE echten Chart abrufen; alle
     # übrigen bekommen ein günstiges Preis-/Stats-/Score-Refresh (history=0).
     # Simulierte Alt-Daten gibt es nicht mehr, daher muss vorhandene echte History
@@ -867,11 +870,13 @@ async def nightly_deep_sync():
                                           (min(hist_prices) if hist_prices else None)) if v and v > 0]
             kd["all_time_low"] = min(atl_candidates) if atl_candidates else kd["current_price"]
 
+            cat_db, title_db = meta_by_asin.get(asin, ("Sonstiges", ""))
             score, breakdown = calculate_deal_score(
                 kd["current_price"], kd["avg90_price"], kd["all_time_low"],
-                kd["sales_rank"], "Sonstiges",  # Kategorie aus DB holen wenn nötig
+                kd["sales_rank"], cat_db,
                 kd["rating"], kd["reviews"],
                 price_updated=now,
+                title=title_db,
             )
             # Deep-Sync hat echten ATL aus /product → atl_confirmed=True
             tag = determine_tag(kd["current_price"], kd["all_time_low"],
