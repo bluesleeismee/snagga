@@ -840,14 +840,15 @@ async def nightly_deep_sync():
                     score_breakdown = $14,
                     last_checked    = $15,
                     last_deep_sync  = $15,
-                    image_url       = CASE WHEN $16 != '' THEN $16 ELSE image_url END
+                    image_url       = CASE WHEN $16 != '' THEN $16 ELSE image_url END,
+                    brand           = CASE WHEN $17 != '' THEN $17 ELSE brand END
                 WHERE asin = $1
             """,
                 asin,
                 kd["current_price"], kd["original_price"], kd["all_time_low"],
                 kd["avg_price"], kd["avg90_price"], kd["avg180_price"],
                 kd["rating"], kd["reviews"], kd["sales_rank"], kd["is_fba"],
-                score, tag, breakdown, now, kd["image_url"],
+                score, tag, breakdown, now, kd["image_url"], (kd.get("brand") or ""),
             )
 
             # Echte Preishistorie IMMER frisch setzen: alte (evtl. simulierte)
@@ -912,15 +913,19 @@ async def backfill_missing_history(limit: int = 40):
             # bisherigem ATL und History-Tief; NULLIF fängt den Default 0 ab).
             hist_prices = [pr for pr, _ in recent if pr and pr > 0]
             new_atl = min(hist_prices) if hist_prices else None
+            brand   = kd.get("brand") or ""  # Marke gleich mitnehmen (kommt aus /product)
             if new_atl:
                 await conn.execute(
                     "UPDATE products SET has_real_history=true, "
-                    "all_time_low = LEAST(NULLIF(all_time_low, 0), $2) WHERE asin=$1",
-                    asin, new_atl,
+                    "all_time_low = LEAST(NULLIF(all_time_low, 0), $2), "
+                    "brand = CASE WHEN $3 != '' THEN $3 ELSE brand END WHERE asin=$1",
+                    asin, new_atl, brand,
                 )
             else:
                 await conn.execute(
-                    "UPDATE products SET has_real_history=true WHERE asin=$1", asin
+                    "UPDATE products SET has_real_history=true, "
+                    "brand = CASE WHEN $2 != '' THEN $2 ELSE brand END WHERE asin=$1",
+                    asin, brand,
                 )
             stored += 1
     print(f"  History-Backfill fertig: {stored} Produkte mit neuem Chart.")
