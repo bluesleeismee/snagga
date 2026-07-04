@@ -282,6 +282,21 @@ CATEGORY_SLUGS: dict[str, str] = {
 SLUG_BY_CATEGORY = {v: k for k, v in CATEGORY_SLUGS.items()}
 
 
+def _arrow_icon(direction: str = "right") -> str:
+    """
+    Einheitliches Pfeil-Icon für alle Links/Buttons — identisch zum Standard-
+    Pfeil im Frontend (ProductModal-CTA "Zum Produkt auf Amazon"). Ersetzt die
+    reinen Text-Pfeile (→/←), die uneinheitlich mit dem Rest des Sites wirkten.
+    stroke="currentColor" → übernimmt automatisch die Textfarbe des Elternlinks.
+    """
+    pts    = "12,5 19,12 12,19" if direction == "right" else "12,19 5,12 12,5"
+    margin = "margin-left:5px" if direction == "right" else "margin-right:5px"
+    return (f'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+            f'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" '
+            f'style="vertical-align:-2px;{margin}">'
+            f'<line x1="5" y1="12" x2="19" y2="12"/><polyline points="{pts}"/></svg>')
+
+
 # Spiegelt TAG_COLORS aus frontend/src/components/DealCard.jsx
 _TAG_COLORS = {
     "Allzeittiefpreis":    ("#1a1a1a", "#fff"),
@@ -483,7 +498,7 @@ def _not_found_page(message: str) -> HTMLResponse:
 <main>
 <h1>404 — {message}</h1>
 <p>Diese Seite gibt es nicht (mehr).</p>
-<a class="back" href="https://www.snagga.de/">Zu den aktuellen Deals →</a>
+<a class="back" href="https://www.snagga.de/">Zu den aktuellen Deals {_arrow_icon('right')}</a>
 </main>
 </body>
 </html>""")
@@ -567,7 +582,7 @@ async def deal_page(asin: str):
 <h1>Huch! 👀 Dieser Deal ist schon weg</h1>
 <p>„{name}" war ein Snagga-Deal — Deals sind aber flüchtig und laufen ab.</p>
 {similar_block}
-<p><a class="back" href="https://www.snagga.de/">← Alle aktuellen Deals ansehen</a></p>
+<p><a class="back" href="https://www.snagga.de/">{_arrow_icon('left')} Alle aktuellen Deals ansehen</a></p>
 </main>
 </body>
 </html>""")
@@ -721,10 +736,10 @@ async def deal_page(asin: str):
     </div>
     {rating_html}
     <p class="meta">Kategorie: {category}</p>
-    <a class="cta" href="{affiliate}" rel="nofollow sponsored noopener" target="_blank">Zum Angebot bei Amazon →</a>
-    <a class="back" href="https://www.snagga.de/preis/{asin}">📈 Preisverlauf & Preis-Check ansehen →</a>
-    {f'<a class="back" href="https://www.snagga.de/kategorie/{SLUG_BY_CATEGORY[row["category"]]}">Alle {category}-Deals ansehen →</a>' if row["category"] in SLUG_BY_CATEGORY else ''}
-    <a class="back" href="https://www.snagga.de/">← Alle Deals ansehen</a>
+    <a class="cta" href="{affiliate}" rel="nofollow sponsored noopener" target="_blank">Zum Angebot bei Amazon {_arrow_icon('right')}</a>
+    <a class="back" href="https://www.snagga.de/preis/{asin}">📈 Preisverlauf & Preis-Check ansehen {_arrow_icon('right')}</a>
+    {f'<a class="back" href="https://www.snagga.de/kategorie/{SLUG_BY_CATEGORY[row["category"]]}">Alle {category}-Deals ansehen {_arrow_icon("right")}</a>' if row["category"] in SLUG_BY_CATEGORY else ''}
+    <a class="back" href="https://www.snagga.de/">{_arrow_icon('left')} Alle Deals ansehen</a>
   </div>
 </div>
 </body>
@@ -881,7 +896,7 @@ async def category_page(slug: str):
 <p>{desc}</p>
 {body_extra}
 <nav class="catnav">{other_cats}</nav>
-<p><a class="back" href="https://www.snagga.de/">← Alle Deals ansehen</a></p>
+<p><a class="back" href="https://www.snagga.de/">{_arrow_icon('left')} Alle Deals ansehen</a></p>
 </main>
 </body>
 </html>""")
@@ -1020,10 +1035,26 @@ def _price_chart_svg(points: list, avg90: float, atl: float,
                  f'<text x="{W - PAD_R}" y="{H - 8}" text-anchor="end" font-size="11" fill="#7E7A75">heute</text>')
 
     ymid = (ymax + ymin) / 2
+
+    # Hover-Punkte: pro Preispunkt ein unsichtbarer, grosszügig anklickbarer Kreis
+    # mit nativem <title>-Tooltip (Datum + Preis) — funktioniert ohne JS identisch
+    # in der SSR-Seite und im React-Modal (dangerouslySetInnerHTML behält <title> bei).
+    hover_pts = []
+    for i in range(n):
+        pdate = times[i].strftime("%d.%m.%y") if times[i] else ""
+        pprice = f"{prices[i]:.2f}".replace(".", ",") + " €"
+        label = f"{pdate}: {pprice}" if pdate else pprice
+        hover_pts.append(
+            f'<circle class="pp" cx="{xs[i]:.1f}" cy="{ys[i]:.1f}" r="9" fill="transparent">'
+            f'<title>{html.escape(label)}</title></circle>'
+        )
+    hover_layer = "".join(hover_pts)
+
     return f"""<svg viewBox="0 0 {W} {H}" width="100%" role="img" aria-label="Preisverlauf" style="display:block;overflow:visible">
   <defs><linearGradient id="pcgrad" x1="0" y1="0" x2="0" y2="1">
     <stop offset="0%" stop-color="#C85E43" stop-opacity="0.15"/><stop offset="100%" stop-color="#C85E43" stop-opacity="0"/>
   </linearGradient></defs>
+  <style>.pp{{cursor:crosshair}}.pp:hover{{fill:#C85E43;fill-opacity:0.18}}</style>
   {vgrid}
   <line x1="{PAD_L}" y1="{PAD_T}" x2="{W - PAD_R}" y2="{PAD_T}" stroke="#EAE6E1"/>
   <line x1="{PAD_L}" y1="{PAD_T + chart_h / 2:.1f}" x2="{W - PAD_R}" y2="{PAD_T + chart_h / 2:.1f}" stroke="#EAE6E1"/>
@@ -1034,6 +1065,7 @@ def _price_chart_svg(points: list, avg90: float, atl: float,
   {avg_line}{atl_line}
   <path d="{fill_d}" fill="url(#pcgrad)"/>
   <path d="{path_d}" fill="none" stroke="#C85E43" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  {hover_layer}
   <circle cx="{cx:.1f}" cy="{cy:.1f}" r="4" fill="#C85E43"/>
   {xaxis}
 </svg>"""
@@ -1200,7 +1232,7 @@ async def price_page(asin: str):
     # CTA je nach Deal-Status
     if is_active and current > 0:
         cta = (f'<a class="cta cta-buy" href="{affiliate}" target="_blank" rel="nofollow noopener sponsored">'
-               f'Zum Angebot bei Amazon →</a>'
+               f'Zum Angebot bei Amazon {_arrow_icon("right")}</a>'
                f'<p class="cta-note">Aktiver Deal — Preis zuletzt bestätigt. Als Amazon-Partner verdienen wir an qualifizierten Käufen.</p>')
     else:
         cta = ('<div class="cta cta-wait">Gerade kein aktiver Deal für dieses Produkt.</div>'
@@ -1244,7 +1276,7 @@ async def price_page(asin: str):
         if similar else ""
     )
     cat_slug = SLUG_BY_CATEGORY.get(category)
-    cat_link = (f'<p><a class="back" href="https://www.snagga.de/kategorie/{cat_slug}">← Alle {cat_esc}-Deals</a></p>'
+    cat_link = (f'<p><a class="back" href="https://www.snagga.de/kategorie/{cat_slug}">{_arrow_icon("left")} Alle {cat_esc}-Deals</a></p>'
                 if cat_slug else "")
 
     if chart_svg and has_more_history:
@@ -1289,10 +1321,10 @@ async def price_page(asin: str):
   header {{ background:#153D68; padding:16px 24px; }}
   header a {{ color:#EDE9E3; font-size:22px; font-weight:800; text-decoration:none; }}
   header .accent {{ color:#C85E43; }}
-  main {{ max-width:900px; margin:0 auto; padding:32px 20px; }}
+  main {{ max-width:1360px; margin:0 auto; padding:32px 20px; }}
   h1 {{ font-size:24px; line-height:1.35; margin:0 0 20px; }}
   h2 {{ font-size:19px; margin:36px 0 8px; }}
-  .top {{ display:grid; grid-template-columns:200px 1fr; gap:28px; align-items:start; }}
+  .top {{ display:grid; grid-template-columns:260px 1fr; gap:28px; align-items:start; }}
   @media (max-width:640px) {{ .top {{ grid-template-columns:1fr; }} }}
   .prod-img {{ background:#fff; border:1px solid #EAE6E1; padding:20px; display:flex; align-items:center; justify-content:center; }}
   .prod-img img {{ max-width:100%; max-height:200px; object-fit:contain; }}
@@ -1311,15 +1343,17 @@ async def price_page(asin: str):
   table.stats tr:last-child td {{ border-bottom:none; }}
   table.stats td:first-child {{ color:#4A4845; }}
   table.stats td:last-child {{ text-align:right; font-weight:700; }}
-  .alert-form {{ background:#fff; border:1px solid #EAE6E1; padding:20px 22px; margin:8px 0 8px; }}
-  .alert-intro {{ font-size:14px; color:#4A4845; margin:0 0 14px; }}
+  .alert-form {{ background:#fff; border:1px solid #D8D3CC; border-left:4px solid #C85E43; padding:22px 24px; margin:8px 0 8px; box-shadow:0 2px 10px rgba(0,0,0,0.05); }}
+  .alert-intro {{ font-size:14px; color:#3A3835; margin:0 0 14px; }}
   .alert-row {{ display:flex; gap:10px; flex-wrap:wrap; }}
-  .alert-row input {{ flex:1; min-width:140px; padding:11px 13px; border:1px solid #D8D3CC; font-size:15px; font-family:inherit; }}
+  .alert-row input {{ flex:1; min-width:140px; padding:12px 14px; border:1.5px solid #B0A99D; color:#1F1E1D; font-size:15px; font-family:inherit; }}
+  .alert-row input::placeholder {{ color:#8A8478; }}
+  .alert-row input:focus {{ outline:none; border-color:#153D68; box-shadow:0 0 0 3px rgba(21,61,104,0.14); }}
   .alert-row input[type=number] {{ flex:0 0 150px; }}
-  .alert-row button {{ background:#153D68; color:#fff; border:none; padding:11px 22px; font-size:15px; font-weight:700; cursor:pointer; }}
+  .alert-row button {{ background:#153D68; color:#fff; border:none; padding:12px 24px; font-size:15px; font-weight:700; cursor:pointer; }}
   .alert-row button:hover {{ background:#1b4d84; }}
-  .alert-legal {{ font-size:11.5px; color:#7E7A75; margin:12px 0 0; line-height:1.5; }}
-  .alert-legal a {{ color:#7E7A75; }}
+  .alert-legal {{ font-size:11.5px; color:#6B6560; margin:12px 0 0; line-height:1.5; }}
+  .alert-legal a {{ color:#6B6560; }}
   {_CARD_CSS}
   .back {{ display:inline-block; margin-top:20px; color:#153D68; }}
 </style>
@@ -1351,7 +1385,7 @@ async def price_page(asin: str):
 
 {similar_block}
 {cat_link}
-<p><a class="back" href="https://www.snagga.de/">← Alle aktuellen Deals</a></p>
+<p><a class="back" href="https://www.snagga.de/">{_arrow_icon('left')} Alle aktuellen Deals</a></p>
 </main>
 </body>
 </html>""")
@@ -1385,7 +1419,7 @@ def _simple_page(heading: str, body_html: str, status: int = 200) -> HTMLRespons
 <main>
 <h1>{heading}</h1>
 {body_html}
-<p><a class="back" href="https://www.snagga.de/">← Zur Startseite</a></p>
+<p><a class="back" href="https://www.snagga.de/">{_arrow_icon('left')} Zur Startseite</a></p>
 </main>
 </body>
 </html>""")
@@ -1624,7 +1658,7 @@ nur, was wirklich günstiger ist.</p>
 {deals_html}
 
 <nav class="catnav">{cat_nav}</nav>
-<p><a class="back" href="https://www.snagga.de/">← Alle Deals ansehen</a></p>
+<p><a class="back" href="https://www.snagga.de/">{_arrow_icon('left')} Alle Deals ansehen</a></p>
 </main>
 </body>
 </html>""")

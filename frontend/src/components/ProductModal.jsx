@@ -422,16 +422,6 @@ export default function ProductModal({ deal, onClose }) {
             display: 'flex', flexDirection: 'column', gap: 28,
           }}
         >
-          {/* Urteil "Guter Preis?" */}
-          {detail && detail.current_price > 0 && detail.verdict && detail.verdict.label !== 'Unbekannt' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-              <span style={{ background: detail.verdict.color, color: '#fff', padding: '7px 15px', fontSize: 13, fontWeight: 700 }}>
-                Guter Preis? {detail.verdict.label}
-              </span>
-              <span style={{ fontSize: 13, color: 'var(--muted)', flex: 1, minWidth: 220 }}>{detail.verdict.reason}</span>
-            </div>
-          )}
-
           {/* Preisverlauf */}
           <div>
             <div style={sectionLabel}>Preisverlauf</div>
@@ -475,13 +465,16 @@ export default function ProductModal({ deal, onClose }) {
           )}
 
           {/* Preisalarm */}
-          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 24 }}>
+          <div style={{
+            borderTop: '1px solid var(--border)', borderLeft: '4px solid var(--accent)',
+            background: 'var(--bg-img)', padding: '20px 20px 20px 18px', marginTop: 4,
+          }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>🔔 Preisalarm setzen</div>
             {alarmState === 'ok' ? (
               <p style={{ fontSize: 14, color: '#1E7A3C', lineHeight: 1.5 }}>✅ {alarmMsg}</p>
             ) : (
               <form onSubmit={submitAlarm}>
-                <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 14, lineHeight: 1.5 }}>
+                <p style={{ fontSize: 13, color: 'var(--text)', marginBottom: 14, lineHeight: 1.5 }}>
                   Wir mailen dich, sobald der Preis auf deinen Wunschpreis fällt. Kostenlos, jederzeit abbestellbar.
                 </p>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -520,9 +513,12 @@ export default function ProductModal({ deal, onClose }) {
           <a
             href={`https://www.snagga.de/preis/${deal.asin}`}
             target="_blank" rel="noopener noreferrer"
-            style={{ fontSize: 12, color: 'var(--muted)', textDecoration: 'underline' }}
+            style={{ fontSize: 12, color: 'var(--muted)', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: 5 }}
           >
-            Dauerhafte Preisseite öffnen →
+            Dauerhafte Preisseite öffnen
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12,5 19,12 12,19"/>
+            </svg>
           </a>
         </div>
       </div>
@@ -537,7 +533,8 @@ const sectionLabel = {
 }
 
 const alarmInput = {
-  border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text)',
+  border: '1.5px solid color-mix(in srgb, var(--text) 32%, transparent)',
+  background: 'var(--bg-card)', color: 'var(--text)',
   padding: '0 14px', height: 46, fontSize: 14, fontFamily: 'inherit',
 }
 
