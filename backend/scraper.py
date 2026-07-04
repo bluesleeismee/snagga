@@ -642,7 +642,7 @@ async def fetch_and_update_deals():
                        current_price, original_price, all_time_low, avg_price,
                        avg90_price, avg180_price,
                        deal_score, rating, reviews, prime,
-                       last_updated, last_checked, affiliate_url,
+                       last_updated, last_checked, affiliate_url,  -- last_checked NULL bei Neuanlage → Preis-Check greift es beim nächsten Lauf und liefert die History (Chart)
                        is_active, is_backup, is_top_pick, is_fba,
                        sales_rank, tag, score_breakdown, first_seen)
                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
@@ -662,7 +662,6 @@ async def fetch_and_update_deals():
                         rating          = EXCLUDED.rating,
                         reviews         = EXCLUDED.reviews,
                         last_updated    = EXCLUDED.last_updated,
-                        last_checked    = EXCLUDED.last_checked,
                         affiliate_url   = EXCLUDED.affiliate_url,
                         is_active       = EXCLUDED.is_active,
                         is_backup       = EXCLUDED.is_backup,
@@ -676,7 +675,8 @@ async def fetch_and_update_deals():
                     p["current_price"], p["original_price"], p["atl"] or p["current_price"], p["avg_price"],
                     p["avg90"] or 0.0, p["avg180"] or 0.0,
                     p["deal_score"], p["rating"], p["reviews"], True,
-                    now, now,
+                    now, None,   # last_updated=now, last_checked=NULL: Discovery (/deal) liefert KEINE History.
+                                 # NULL signalisiert dem stündlichen Preis-Check, dass /product + History noch fehlen.
                     f"https://www.amazon.de/dp/{asin}?tag={_affiliate_tag_for(p['category'])}",
                     is_active, is_backup, is_top_pick, p["is_fba"],
                     p["sales_rank"] or 0, p["tag"], p["score_breakdown"], now,
