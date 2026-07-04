@@ -353,6 +353,39 @@ function snaggaShare(e, btn) {
 """
 
 
+# Interaktives Chart-Fadenkreuz. Wird als <script> auf der /preis-Seite geladen.
+# Im React-Modal ist dieselbe Logik als window-Funktion definiert (Frontend), da
+# <script>-Tags aus dangerouslySetInnerHTML NICHT ausgeführt werden — die inline
+# on*-Handler am SVG rufen in beiden Fällen window.__chartHover/__chartLeave auf.
+_CHART_HOVER_JS = """
+<script>
+window.__chartHover=function(evt,rect){
+  var svg=rect.ownerSVGElement; if(!svg)return;
+  var pts=svg.__pts||(svg.__pts=JSON.parse(svg.getAttribute('data-pts')||'[]'));
+  if(!pts.length)return;
+  var pt=svg.createSVGPoint(); pt.x=evt.clientX; pt.y=evt.clientY;
+  var ctm=svg.getScreenCTM(); if(!ctm)return;
+  var loc=pt.matrixTransform(ctm.inverse());
+  var best=pts[0],bd=1e9;
+  for(var i=0;i<pts.length;i++){var d=Math.abs(pts[i][0]-loc.x); if(d<bd){bd=d;best=pts[i];}}
+  var line=svg.querySelector('.cx-line'),dot=svg.querySelector('.cx-dot'),
+      tip=svg.querySelector('.cx-tip'),td=svg.querySelector('.cx-tip-d'),tp=svg.querySelector('.cx-tip-p');
+  if(!line||!dot||!tip)return;
+  line.setAttribute('x1',best[0]);line.setAttribute('x2',best[0]);line.style.display='';
+  dot.setAttribute('cx',best[0]);dot.setAttribute('cy',best[1]);dot.style.display='';
+  td.textContent=best[2];tp.textContent=best[3];
+  var tw=118,x=best[0]+12; if(x+tw>746)x=best[0]-tw-12; if(x<2)x=2;
+  var y=best[1]-48; if(y<2)y=best[1]+14;
+  tip.setAttribute('transform','translate('+x+','+y+')');tip.style.display='';
+};
+window.__chartLeave=function(rect){
+  var svg=rect.ownerSVGElement; if(!svg)return;
+  ['.cx-line','.cx-dot','.cx-tip'].forEach(function(s){var e=svg.querySelector(s); if(e)e.style.display='none';});
+};
+</script>
+"""
+
+
 def _deal_card_html(row) -> str:
     """Deal-Karte für Kategorie-Seiten und die 'Ähnliche Deals'-Liste — matcht DealCard.jsx."""
     name     = html.escape((row["name"] or "Deal")[:160])
@@ -1036,38 +1069,39 @@ def _price_chart_svg(points: list, avg90: float, atl: float,
 
     ymid = (ymax + ymin) / 2
 
-    # Hover-Punkte: pro Preispunkt ein unsichtbarer, grosszügig anklickbarer Kreis
-    # mit nativem <title>-Tooltip (Datum + Preis) — funktioniert ohne JS identisch
-    # in der SSR-Seite und im React-Modal (dangerouslySetInnerHTML behält <title> bei).
-    hover_pts = []
-    for i in range(n):
-        pdate = times[i].strftime("%d.%m.%y") if times[i] else ""
-        pprice = f"{prices[i]:.2f}".replace(".", ",") + " €"
-        label = f"{pdate}: {pprice}" if pdate else pprice
-        hover_pts.append(
-            f'<circle class="pp" cx="{xs[i]:.1f}" cy="{ys[i]:.1f}" r="9" fill="transparent">'
-            f'<title>{html.escape(label)}</title></circle>'
-        )
-    hover_layer = "".join(hover_pts)
+    # Interaktiver Hover: Datenpunkte als JSON am SVG. Ein globales __chartHover
+    # (SSR per <script>, Modal per window-Funktion) liest sie und bewegt Fadenkreuz,
+    # Punkt und Tooltip. Inline on*-Handler laufen auch, wenn das SVG per innerHTML/
+    # dangerouslySetInnerHTML eingefügt wird (<script>-Tags dagegen NICHT).
+    pts_data = json.dumps([[round(xs[i], 1), round(ys[i], 1),
+                            (times[i].strftime("%d.%m.%y") if times[i] else ""),
+                            (f"{prices[i]:.2f}".replace(".", ",") + " €")] for i in range(n)])
+    x_right = W - PAD_R
 
-    return f"""<svg viewBox="0 0 {W} {H}" width="100%" role="img" aria-label="Preisverlauf" style="display:block;overflow:visible">
+    return f"""<svg viewBox="0 0 {W} {H}" width="100%" role="img" aria-label="Preisverlauf" data-pts='{html.escape(pts_data, quote=True)}' style="display:block;overflow:visible">
   <defs><linearGradient id="pcgrad" x1="0" y1="0" x2="0" y2="1">
     <stop offset="0%" stop-color="#C85E43" stop-opacity="0.15"/><stop offset="100%" stop-color="#C85E43" stop-opacity="0"/>
   </linearGradient></defs>
-  <style>.pp{{cursor:crosshair}}.pp:hover{{fill:#C85E43;fill-opacity:0.18}}</style>
   {vgrid}
-  <line x1="{PAD_L}" y1="{PAD_T}" x2="{W - PAD_R}" y2="{PAD_T}" stroke="#EAE6E1"/>
-  <line x1="{PAD_L}" y1="{PAD_T + chart_h / 2:.1f}" x2="{W - PAD_R}" y2="{PAD_T + chart_h / 2:.1f}" stroke="#EAE6E1"/>
-  <line x1="{PAD_L}" y1="{PAD_T + chart_h}" x2="{W - PAD_R}" y2="{PAD_T + chart_h}" stroke="#EAE6E1"/>
+  <line x1="{PAD_L}" y1="{PAD_T}" x2="{x_right}" y2="{PAD_T}" stroke="#EAE6E1"/>
+  <line x1="{PAD_L}" y1="{PAD_T + chart_h / 2:.1f}" x2="{x_right}" y2="{PAD_T + chart_h / 2:.1f}" stroke="#EAE6E1"/>
+  <line x1="{PAD_L}" y1="{PAD_T + chart_h}" x2="{x_right}" y2="{PAD_T + chart_h}" stroke="#EAE6E1"/>
   <text x="{PAD_L - 6}" y="{PAD_T + 4}" text-anchor="end" font-size="11" fill="#1F1E1D">{fmt(ymax)}</text>
   <text x="{PAD_L - 6}" y="{PAD_T + chart_h / 2 + 4:.1f}" text-anchor="end" font-size="11" fill="#1F1E1D">{fmt(ymid)}</text>
   <text x="{PAD_L - 6}" y="{PAD_T + chart_h + 4}" text-anchor="end" font-size="11" fill="#1F1E1D">{fmt(ymin)}</text>
   {avg_line}{atl_line}
   <path d="{fill_d}" fill="url(#pcgrad)"/>
   <path d="{path_d}" fill="none" stroke="#C85E43" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-  {hover_layer}
   <circle cx="{cx:.1f}" cy="{cy:.1f}" r="4" fill="#C85E43"/>
   {xaxis}
+  <line class="cx-line" x1="0" y1="{PAD_T}" x2="0" y2="{PAD_T + chart_h}" stroke="#7E7A75" stroke-width="1" stroke-dasharray="3,3" style="display:none;pointer-events:none"/>
+  <circle class="cx-dot" r="4.5" fill="#153D68" stroke="#fff" stroke-width="1.5" style="display:none;pointer-events:none"/>
+  <g class="cx-tip" style="display:none;pointer-events:none">
+    <rect rx="3" fill="#1F1E1D" opacity="0.92" width="118" height="40"/>
+    <text class="cx-tip-d" x="9" y="16" font-size="11" fill="#D8D3CC"></text>
+    <text class="cx-tip-p" x="9" y="32" font-size="13" font-weight="700" fill="#fff"></text>
+  </g>
+  <rect class="cx-hit" x="{PAD_L}" y="{PAD_T}" width="{chart_w}" height="{chart_h}" fill="transparent" style="cursor:crosshair" onmousemove="window.__chartHover&amp;&amp;window.__chartHover(event,this)" onmouseleave="window.__chartLeave&amp;&amp;window.__chartLeave(this)"/>
 </svg>"""
 
 
@@ -1083,6 +1117,12 @@ def _compute_detail(row, hist_rows) -> dict:
     avg90   = row["avg90_price"] or row["avg_price"] or 0
     avg180  = row["avg180_price"] or 0
     atl     = row["all_time_low"] or 0
+    # ATL konsistent zum angezeigten Chart: das echte Tief der gespeicherten
+    # Historie einbeziehen. Sonst behauptet das Urteil "günstigster Preis seit
+    # Messbeginn", obwohl der Chart sichtbar einen tieferen Punkt zeigt.
+    hist_min = min((p for p, _ in points), default=0)
+    if hist_min and (not atl or hist_min < atl):
+        atl = hist_min
     # Anzeige-Sicherung: Ein Allzeittief kann logisch nie über dem aktuellen Preis liegen.
     if atl and current and atl > current:
         atl = current
@@ -1112,6 +1152,7 @@ def _compute_detail(row, hist_rows) -> dict:
         "verdict": verdict, "vcolor": vcolor, "vreason": vreason,
         "chart_svg": chart_svg, "chart_svg_full": chart_svg_full,
         "has_more_history": has_more, "suggested": suggested,
+        "is_active": bool(row["is_active"]) if "is_active" in row.keys() else True,
     }
 
 
@@ -1229,14 +1270,24 @@ async def price_page(asin: str):
             "@type": "AggregateRating", "ratingValue": f"{row['rating']:.1f}", "reviewCount": int(row["reviews"]),
         }
 
+    # Urteil "Guter Preis?" NUR bei aktiven Deals — bei inaktiven Produkten ist
+    # der gespeicherte Preis veraltet, ein "günstigster Preis"-Urteil wäre
+    # irreführend (der aktuelle Amazon-Preis wird gar nicht mehr live geprüft).
+    if is_active and current > 0:
+        verdict_block = (f'<div class="verdict"><div class="v-head">Guter Preis gerade?</div>'
+                         f'<div class="v-label">{verdict}</div>'
+                         f'<div class="v-reason">{vreason}</div></div>')
+    else:
+        verdict_block = ''
+
     # CTA je nach Deal-Status
     if is_active and current > 0:
         cta = (f'<a class="cta cta-buy" href="{affiliate}" target="_blank" rel="nofollow noopener sponsored">'
                f'Zum Angebot bei Amazon {_arrow_icon("right")}</a>'
                f'<p class="cta-note">Aktiver Deal — Preis zuletzt bestätigt. Als Amazon-Partner verdienen wir an qualifizierten Käufen.</p>')
     else:
-        cta = ('<div class="cta cta-wait">Gerade kein aktiver Deal für dieses Produkt.</div>'
-               '<p class="cta-note">Setz dir unten einen Preisalarm — wir mailen dich, sobald der Preis fällt.</p>')
+        cta = ('<p class="cta-note" style="margin-top:0">Dieses Produkt ist gerade kein aktiver Deal. '
+               'Sieh dir den Preisverlauf an und setz dir unten einen Preisalarm — wir mailen dich, sobald der Preis fällt.</p>')
 
     # Preisalarm-Formular. Wunschpreis-Vorschlag: leicht unter dem aktuellen Preis,
     # sonst am Allzeittief orientiert.
@@ -1284,7 +1335,7 @@ async def price_page(asin: str):
         _toggle_btn = (
             '<button type="button" onclick="'
             "var f=document.getElementById('chart-full'),s=document.getElementById('chart-365');"
-            "if(f.style.display==='none'){f.style.display='';s.style.display='none';this.textContent='Nur letzte 365 Tage';}"
+            "if(f.style.display==='none'){f.style.display='';s.style.display='none';this.textContent='Letzte 365 Tage anzeigen';}"
             "else{f.style.display='none';s.style.display='';this.textContent='Gesamte Preishistorie anzeigen';}"
             '" style="margin-top:10px;background:none;border:1px solid #EAE6E1;color:#153D68;'
             'padding:7px 14px;font-size:13px;cursor:pointer">Gesamte Preishistorie anzeigen</button>'
@@ -1366,11 +1417,7 @@ async def price_page(asin: str):
 <div class="top">
   <div class="prod-img"><img src="{image}" alt="{name}"></div>
   <div>
-    <div class="verdict">
-      <div class="v-head">Guter Preis gerade?</div>
-      <div class="v-label">{verdict}</div>
-      <div class="v-reason">{vreason}</div>
-    </div>
+    {verdict_block}
     {cta}
   </div>
 </div>
@@ -1387,6 +1434,7 @@ async def price_page(asin: str):
 {cat_link}
 <p><a class="back" href="https://www.snagga.de/">{_arrow_icon('left')} Alle aktuellen Deals</a></p>
 </main>
+{_CHART_HOVER_JS}
 </body>
 </html>""")
 

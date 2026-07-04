@@ -3,6 +3,36 @@ import { fmtPrice, discount, fmtAge, AGE_COLORS, fmtReviews, shareOrCopy } from 
 import { useBreakpoint } from '../hooks/useBreakpoint.js'
 import { api } from '../api.js'
 
+// Chart-Fadenkreuz für den per dangerouslySetInnerHTML injizierten Chart-SVG.
+// Spiegelt _CHART_HOVER_JS in backend/main.py (muss synchron bleiben) — die
+// inline on*-Attribute des SVG rufen diese globalen Handler auf. <script>-Tags
+// aus injiziertem HTML laufen nicht, inline-Handler + window-Funktion aber schon.
+if (typeof window !== 'undefined' && !window.__chartHover) {
+  window.__chartHover = function (evt, rect) {
+    const svg = rect.ownerSVGElement; if (!svg) return
+    const pts = svg.__pts || (svg.__pts = JSON.parse(svg.getAttribute('data-pts') || '[]'))
+    if (!pts.length) return
+    const pt = svg.createSVGPoint(); pt.x = evt.clientX; pt.y = evt.clientY
+    const ctm = svg.getScreenCTM(); if (!ctm) return
+    const loc = pt.matrixTransform(ctm.inverse())
+    let best = pts[0], bd = 1e9
+    for (let i = 0; i < pts.length; i++) { const d = Math.abs(pts[i][0] - loc.x); if (d < bd) { bd = d; best = pts[i] } }
+    const line = svg.querySelector('.cx-line'), dot = svg.querySelector('.cx-dot'),
+      tip = svg.querySelector('.cx-tip'), td = svg.querySelector('.cx-tip-d'), tp = svg.querySelector('.cx-tip-p')
+    if (!line || !dot || !tip) return
+    line.setAttribute('x1', best[0]); line.setAttribute('x2', best[0]); line.style.display = ''
+    dot.setAttribute('cx', best[0]); dot.setAttribute('cy', best[1]); dot.style.display = ''
+    td.textContent = best[2]; tp.textContent = best[3]
+    let x = best[0] + 12; if (x + 118 > 746) x = best[0] - 118 - 12; if (x < 2) x = 2
+    let y = best[1] - 48; if (y < 2) y = best[1] + 14
+    tip.setAttribute('transform', `translate(${x},${y})`); tip.style.display = ''
+  }
+  window.__chartLeave = function (rect) {
+    const svg = rect.ownerSVGElement; if (!svg) return
+    ;['.cx-line', '.cx-dot', '.cx-tip'].forEach(s => { const e = svg.querySelector(s); if (e) e.style.display = 'none' })
+  }
+}
+
 function useProductImages(asin, primaryUrl) {
   return primaryUrl ? [primaryUrl] : []
 }
@@ -317,7 +347,10 @@ export default function ProductModal({ deal, onClose }) {
           style={{
             padding: isMobile ? '28px 24px 40px' : '48px 44px',
             display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-            overflowY: 'auto',
+            // Auf Mobile/Tablet (gestapelt) KEIN eigener Scrollbereich → das ganze
+            // Modal scrollt als Einheit (statt schmalem inneren Scroll).
+            overflowY: isStacked ? 'visible' : 'auto',
+            minWidth: 0,
           }}
         >
           <div>
@@ -442,7 +475,7 @@ export default function ProductModal({ deal, onClose }) {
                       onClick={() => setShowFullChart(v => !v)}
                       style={{ marginTop: 10, background: 'none', border: '1px solid var(--border)', color: 'var(--muted)', padding: '7px 14px', fontSize: 13, cursor: 'pointer' }}
                     >
-                      {showFullChart ? 'Nur letzte 365 Tage' : 'Gesamte Preishistorie anzeigen'}
+                      {showFullChart ? 'Letzte 365 Tage anzeigen' : 'Gesamte Preishistorie anzeigen'}
                     </button>
                   )}
                 </div>
