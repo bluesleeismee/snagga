@@ -285,7 +285,7 @@ SLUG_BY_CATEGORY = {v: k for k, v in CATEGORY_SLUGS.items()}
 def _arrow_icon(direction: str = "right") -> str:
     """
     Einheitliches Pfeil-Icon für alle Links/Buttons — identisch zum Standard-
-    Pfeil im Frontend (ProductModal-CTA "Zum Produkt auf Amazon"). Ersetzt die
+    Pfeil im Frontend (CTA "Zum Angebot bei Amazon"). Ersetzt die
     reinen Text-Pfeile (→/←), die uneinheitlich mit dem Rest des Sites wirkten.
     stroke="currentColor" → übernimmt automatisch die Textfarbe des Elternlinks.
     """
@@ -302,9 +302,25 @@ _TAG_COLORS = {
     "Allzeittiefpreis":    ("#1a1a1a", "#fff"),
     "Historisch günstig":  ("#2d5a27", "#fff"),
     "Stark gefallen":      ("#8b1a1a", "#fff"),
-    "Seltene Gelegenheit": ("#1a3d6b", "#fff"),
     "Preis gefallen":      ("#C85E43", "#fff"),
 }
+
+# Kurznamen für die Anzeige — muss mit CAT_LABELS in frontend/src/utils.js
+# übereinstimmen, damit SSR-Kacheln/-Seiten dieselbe Bezeichnung zeigen wie die SPA.
+_CATEGORY_LABELS = {
+    "Drogerie & Körperpflege":         "Körperpflege",
+    "Küche, Haushalt & Wohnen":        "Küche & Haushalt",
+    "Musikinstrumente & DJ-Equipment": "Musik",
+    "Elektro-Großgeräte":              "Grossgeräte",
+    "Computer & Zubehör":              "Computer",
+    "Elektronik & Foto":               "Elektronik",
+    "Auto & Motorrad":                 "Auto",
+    "Sport & Freizeit":                "Sport",
+    "Kamera & Foto":                   "Kamera",
+}
+
+def _cat_label(category: str) -> str:
+    return _CATEGORY_LABELS.get(category, category or "")
 
 # Repliziert das Kachel-Layout von DealCard.jsx 1:1 (Maße, Farben, Grid-
 # Breakpoints) für serverseitig gerenderte Seiten (Kategorie, ähnliche Deals).
@@ -404,7 +420,7 @@ def _deal_card_html(row) -> str:
     else:
         tag_html = '<div class="card-tag card-tag-empty">&nbsp;</div>'
 
-    category = html.escape(row["category"]) if "category" in row.keys() and row["category"] else ""
+    category = html.escape(_cat_label(row["category"])) if "category" in row.keys() and row["category"] else ""
 
     # Eyebrow-Label: Marke bevorzugt, sonst Bewertung. NIE die Kategorie — die
     # steht schon in der Fusszeile, sonst stuende sie zweimal auf der Kachel.
@@ -623,7 +639,7 @@ async def deal_page(asin: str):
     current  = row["current_price"]  or 0
     original = row["original_price"] or 0
     tag      = html.escape(row["tag"] or "")
-    category = html.escape(row["category"] or "")
+    category = html.escape(_cat_label(row["category"]) or "")
     rating   = row["rating"]  or 0
     reviews  = row["reviews"] or 0
     disc = round((original - current) / original * 100) if original > current else 0

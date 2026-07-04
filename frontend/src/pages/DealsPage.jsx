@@ -3,7 +3,7 @@ import DealCard from '../components/DealCard.jsx'
 import ProductModal from '../components/ProductModal.jsx'
 import { useBreakpoint } from '../hooks/useBreakpoint.js'
 import { api } from '../api.js'
-import { fmtPrice, discount } from '../utils.js'
+import { fmtPrice, discount, fmtReviews, catLabel } from '../utils.js'
 
 const SORTS = [
   { id: 'score',      label: 'Bester Deal' },
@@ -13,21 +13,10 @@ const SORTS = [
   { id: 'newest',     label: 'Neueste' },
 ]
 
-// Kurznamen nur für die Anzeige — interne Kategorie/DB bleibt unverändert.
+// catLabel + CAT_LABELS liegen jetzt in utils.js (geteilt mit DealCard, damit
+// Chips, Grid-Titel und Kacheln dieselbe Kurzbezeichnung zeigen).
 // Flaggen (DE/AT/CH) entfernt: Keepa liefert nur amazon.de, AT/CH nicht
 // unterscheidbar. Assets bleiben unter /public/flags/ archiviert für später.
-const CAT_LABELS = {
-  'Drogerie & Körperpflege':         'Körperpflege',
-  'Küche, Haushalt & Wohnen':        'Küche & Haushalt',
-  'Musikinstrumente & DJ-Equipment': 'Musik',
-  'Elektro-Großgeräte':              'Grossgeräte',
-  'Computer & Zubehör':              'Computer',
-  'Elektronik & Foto':               'Elektronik',
-  'Auto & Motorrad':                 'Auto',
-  'Sport & Freizeit':                'Sport',
-  'Kamera & Foto':                   'Kamera',
-}
-const catLabel = (c) => CAT_LABELS[c] || c
 
 // Muss mit CATEGORY_SLUGS in backend/main.py übereinstimmen — dort werden
 // diese Slugs für die dauerhaften /kategorie/{slug}-SEO-Seiten verwendet.
@@ -201,7 +190,8 @@ function BestPicksSlider({ deals, onOpen }) {
                   <div style={{ flex: 1, padding: '20px 18px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                     <div>
                       <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--muted)', fontWeight: 500, marginBottom: 6 }}>
-                        {deal.brand || deal.category}
+                        {/* Marke bevorzugt, sonst Bewertung — NIE die Kategorie (steht unten in der Fusszeile) */}
+                        {deal.brand || (deal.rating > 0 ? `${deal.rating.toFixed(1)} ★${fmtReviews(deal.reviews) ? ' · ' + fmtReviews(deal.reviews) : ''}` : ' ')}
                       </div>
                       <h3 style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.4, marginBottom: 10, color: 'var(--text)' }}>
                         {deal.name}
@@ -215,7 +205,7 @@ function BestPicksSlider({ deals, onOpen }) {
                         )}
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                        {deal.category}
+                        {catLabel(deal.category)}
                         {deal.prime && <span style={{ color: '#00A8E0', fontWeight: 600, marginLeft: 8 }}>Prime</span>}
                       </div>
                     </div>
@@ -618,7 +608,7 @@ export default function DealsPage() {
               ? `${catLabel([...selectedCats][0])} Deals`
               : selectedCats.size > 1
                 ? [...selectedCats].map(catLabel).join(' + ')
-                : sortBy === 'newest' ? 'Neueste Picks' : 'Alle Picks'
+                : sortBy === 'newest' ? 'Neueste Deals' : 'Alle Deals'
           }
           {!loading && (
             <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--muted)', marginLeft: 10 }}>

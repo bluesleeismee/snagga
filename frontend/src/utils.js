@@ -1,3 +1,19 @@
+// Kurznamen für die Anzeige — interne Kategorie/DB bleibt unverändert.
+// Muss mit CATEGORY_LABELS in backend/main.py übereinstimmen, damit Chips,
+// Grid-Titel und Kacheln (SPA + SSR) dieselbe Bezeichnung zeigen.
+export const CAT_LABELS = {
+  'Drogerie & Körperpflege':         'Körperpflege',
+  'Küche, Haushalt & Wohnen':        'Küche & Haushalt',
+  'Musikinstrumente & DJ-Equipment': 'Musik',
+  'Elektro-Großgeräte':              'Grossgeräte',
+  'Computer & Zubehör':              'Computer',
+  'Elektronik & Foto':               'Elektronik',
+  'Auto & Motorrad':                 'Auto',
+  'Sport & Freizeit':                'Sport',
+  'Kamera & Foto':                   'Kamera',
+}
+export const catLabel = (c) => CAT_LABELS[c] || c
+
 /** Preis → "248 €" */
 export function fmtPrice(p) {
   if (p == null) return '—'
@@ -50,7 +66,7 @@ export const AGE_COLORS = {
   stale: '#888888',
 }
 
-/** Anzahl Bewertungen → "1.234" oder "12,3T" */
+/** Anzahl Bewertungen → "1234" oder "12,3T" */
 export function fmtReviews(n) {
   if (!n || n <= 0) return null
   if (n >= 1000) return (n / 1000).toFixed(1).replace('.', ',') + 'T'

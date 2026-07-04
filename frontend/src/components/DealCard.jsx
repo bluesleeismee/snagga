@@ -1,11 +1,10 @@
 import React, { useState } from 'react'
-import { fmtPrice, discount, fmtAge, AGE_COLORS, fmtReviews, shareOrCopy } from '../utils.js'
+import { fmtPrice, discount, fmtAge, AGE_COLORS, fmtReviews, shareOrCopy, catLabel } from '../utils.js'
 
 const TAG_COLORS = {
   'Allzeittiefpreis':  { bg: '#1a1a1a', text: '#fff' },
   'Historisch günstig':{ bg: '#2d5a27', text: '#fff' },
   'Stark gefallen':    { bg: '#8b1a1a', text: '#fff' },
-  'Seltene Gelegenheit':{ bg: '#1a3d6b', text: '#fff' },
   'Preis gefallen':    { bg: 'var(--accent)', text: '#fff' },
 }
 
@@ -153,7 +152,7 @@ export default function DealCard({ deal, onClick }) {
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           fontSize: 11, color: 'var(--muted)', marginTop: 'auto',
         }}>
-          <span>{deal.category}</span>
+          <span>{catLabel(deal.category)}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {deal.prime && <span style={{ color: '#00A8E0', fontWeight: 600 }}>Prime</span>}
             {/* Share button — DSGVO-konform, kein Cookie, kein Tracker */}
