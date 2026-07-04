@@ -742,6 +742,7 @@ async def deal_page(asin: str):
   .meta {{ font-size:13px; color:#7E7A75; margin:0 0 8px; }}
   .cta {{ display:flex; align-items:center; justify-content:center; gap:10px; background:#C85E43; color:#fff; padding:16px 28px; font-size:14px; font-weight:600; text-decoration:none; margin-top:20px; }}
   .back {{ display:block; margin-top:16px; color:#153D68; font-size:14px; text-decoration:none; }}
+  .affiliate-note {{ font-size:12px; color:#7E7A75; line-height:1.5; margin:18px 0 0; }}
 </style>
 {_CARD_SHARE_JS}
 </head>
@@ -770,6 +771,7 @@ async def deal_page(asin: str):
     {rating_html}
     <p class="meta">Kategorie: {category}</p>
     <a class="cta" href="{affiliate}" rel="nofollow sponsored noopener" target="_blank">Zum Angebot bei Amazon {_arrow_icon('right')}</a>
+    <p class="affiliate-note">* Affiliate-Hinweis: Als Amazon-Partner verdienen wir an qualifizierten Käufen — für dich entstehen keine Mehrkosten. Der angezeigte Preis kann abweichen; massgeblich ist der Preis bei Amazon zum Kaufzeitpunkt.</p>
     <a class="back" href="https://www.snagga.de/preis/{asin}">📈 Preisverlauf & Preis-Check ansehen {_arrow_icon('right')}</a>
     {f'<a class="back" href="https://www.snagga.de/kategorie/{SLUG_BY_CATEGORY[row["category"]]}">Alle {category}-Deals ansehen {_arrow_icon("right")}</a>' if row["category"] in SLUG_BY_CATEGORY else ''}
     <a class="back" href="https://www.snagga.de/">{_arrow_icon('left')} Alle Deals ansehen</a>
@@ -1284,10 +1286,10 @@ async def price_page(asin: str):
     if is_active and current > 0:
         cta = (f'<a class="cta cta-buy" href="{affiliate}" target="_blank" rel="nofollow noopener sponsored">'
                f'Zum Angebot bei Amazon {_arrow_icon("right")}</a>'
-               f'<p class="cta-note">Aktiver Deal — Preis zuletzt bestätigt. Als Amazon-Partner verdienen wir an qualifizierten Käufen.</p>')
+               f'<p class="cta-note">Aktiver Deal — Preis zuletzt bestätigt.</p>')
     else:
         cta = ('<p class="cta-note" style="margin-top:0">Dieses Produkt ist gerade kein aktiver Deal. '
-               'Sieh dir den Preisverlauf an und setz dir unten einen Preisalarm — wir mailen dich, sobald der Preis fällt.</p>')
+               'Sieh dir den Preisverlauf an und setz dir unten einen Preisalarm — wir schicken dir eine E-Mail, sobald der Preis fällt.</p>')
 
     # Preisalarm-Formular. Wunschpreis-Vorschlag: leicht unter dem aktuellen Preis,
     # sonst am Allzeittief orientiert.
@@ -1419,6 +1421,7 @@ async def price_page(asin: str):
   <div>
     {verdict_block}
     {cta}
+    <p class="cta-note">* Affiliate-Hinweis: Als Amazon-Partner verdienen wir an qualifizierten Käufen — für dich entstehen keine Mehrkosten. Der angezeigte Preis kann abweichen; massgeblich ist der Preis bei Amazon zum Kaufzeitpunkt.</p>
   </div>
 </div>
 

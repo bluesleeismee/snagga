@@ -508,7 +508,7 @@ export default function ProductModal({ deal, onClose }) {
             ) : (
               <form onSubmit={submitAlarm}>
                 <p style={{ fontSize: 13, color: 'var(--text)', marginBottom: 14, lineHeight: 1.5 }}>
-                  Wir mailen dich, sobald der Preis auf deinen Wunschpreis fällt. Kostenlos, jederzeit abbestellbar.
+                  Wir schicken dir eine E-Mail, sobald der Preis auf deinen Wunschpreis fällt. Kostenlos, jederzeit abbestellbar.
                 </p>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                   <input
