@@ -412,17 +412,18 @@ async def hourly_keepa_price_check():
                 tag = determine_tag(live_price, atl, avg90, avg180, atl_confirmed=False)
                 # last_updated wird mit-refresht: bestätigt-gute Deals laufen nicht aus,
                 # auch wenn Keepa sie nicht mehr als "frischen" Deal im /deal-Stream meldet.
-                # is_volatile steuert die Prüf-Frequenz (volatil → stündlich statt 3h).
+                # (Volatilität steuert oben nur die weak_volatile-Deaktivierung; die
+                #  Prüf-Frequenz ergibt sich aus deal_score-Perzentil + last_checked.)
                 # all_time_low mitziehen: fällt der Preis unter das gespeicherte
                 # Tief, ist das neue Tief der aktuelle Preis. Verhindert den
                 # unmöglichen Zustand "aktueller Preis < Allzeittief" zwischen
                 # zwei Deep-Syncs. NULLIF(...,0) fängt den Default 0 ab.
                 await conn.execute(
                     "UPDATE products SET current_price=$2, deal_score=$3, tag=$4, "
-                    "last_checked=$5, last_updated=$5, score_breakdown=$6, is_volatile=$7, "
+                    "last_checked=$5, last_updated=$5, score_breakdown=$6, "
                     "all_time_low = LEAST(NULLIF(all_time_low, 0), $2) "
                     "WHERE asin=$1",
-                    asin, live_price, score, tag, now, breakdown, volatile,
+                    asin, live_price, score, tag, now, breakdown,
                 )
 
                 # Kostenlose Keepa-History einspielen → Chart aktuell, Marke mitnehmen.
