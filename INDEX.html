@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>snagga.de — Projekt-Referenz</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0f1117;
+    color: #e2e8f0;
+    line-height: 1.7;
+    padding: 48px 24px 80px;
+  }
+
+  .container { max-width: 960px; margin: 0 auto; }
+
+  .header { border-left: 4px solid #e05c3a; padding-left: 20px; margin-bottom: 16px; }
+  .header h1 { font-size: 34px; font-weight: 800; color: #fff; letter-spacing: -0.5px; }
+  .header .subtitle { font-size: 13px; color: #64748b; margin-top: 4px; }
+
+  .updated {
+    display: inline-block; margin: 20px 0 40px; padding: 6px 14px;
+    background: #1a1f2e; border: 1px solid #2d3748; font-size: 12px; color: #64748b;
+  }
+  .updated b { color: #e05c3a; }
+
+  .laien-box {
+    background: #10233b; border: 1px solid #1e3a5f; border-left: 4px solid #3b82f6;
+    padding: 20px 24px; margin-bottom: 40px; font-size: 15px;
+  }
+  .laien-box .kicker { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #60a5fa; margin-bottom: 8px; }
+  .laien-box p { color: #cbd5e1; margin-bottom: 8px; }
+  .laien-box p:last-child { margin-bottom: 0; }
+
+  h2 {
+    font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 20px; padding-bottom: 10px;
+    border-bottom: 1px solid #2d3748; display: flex; align-items: center; gap: 10px;
+  }
+  section { margin-bottom: 48px; }
+
+  .doc-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .doc-card {
+    background: #1a1f2e; border: 1px solid #2d3748; padding: 22px 24px;
+    text-decoration: none; display: block; transition: border-color 0.15s, transform 0.15s;
+  }
+  .doc-card:hover { border-color: #e05c3a; transform: translateY(-2px); }
+  .doc-card .icon { font-size: 22px; margin-bottom: 10px; }
+  .doc-card h3 { font-size: 16px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+  .doc-card p { font-size: 13px; color: #94a3b8; margin: 0; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-bottom: 16px; }
+  thead tr { background: #1a1f2e; }
+  thead th {
+    text-align: left; padding: 10px 14px; color: #64748b; font-weight: 600;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; border-bottom: 1px solid #2d3748;
+  }
+  tbody tr { border-bottom: 1px solid #1e2330; }
+  tbody td { padding: 10px 14px; color: #cbd5e1; vertical-align: top; }
+  tbody td:first-child { color: #e2e8f0; font-weight: 500; }
+
+  .status { display: inline-block; padding: 2px 9px; border-radius: 3px; font-size: 11px; font-weight: 700; }
+  .status-live { background: #14532d; color: #4ade80; }
+  .status-teil { background: #713f12; color: #fbbf24; }
+  .status-plan { background: #1f2937; color: #9ca3af; }
+
+  code { background: #1a1f2e; padding: 2px 6px; font-size: 12px; color: #e05c3a; font-family: monospace; }
+
+  .footer { margin-top: 60px; padding-top: 24px; border-top: 1px solid #2d3748; font-size: 12px; color: #334155; text-align: center; }
+  .footer a { color: #64748b; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <h1>snagga.de — Projekt-Referenz</h1>
+    <div class="subtitle">Zentrale Übersicht · Intern · Nicht veröffentlichen</div>
+  </div>
+  <div class="updated">Zuletzt komplett überarbeitet: <b>04. Juli 2026</b> (Keepa-Token-Modell, Preishistorie für alle, Produktauswahl, Charts)</div>
+
+  <div class="laien-box">
+    <div class="kicker">📖 Kurz gesagt</div>
+    <p><b>snagga.de</b> ist eine automatisierte Amazon-Deal-Seite für den deutschen Markt. Ein Programm durchsucht rund um die Uhr Amazon nach echten Preissenkungen, prüft jeden Fund gegen strenge Qualitätsregeln, und zeigt nur die besten Treffer auf der Webseite — plus automatischen Posts auf Telegram und Mastodon. Verdient wird über Amazons Partnerprogramm (kleine Provision, kein Aufpreis für Käufer).</p>
+    <p>Dieses Dokument ist der Einstiegspunkt. Jede der vier Unterseiten erklärt ein Thema zuerst in einfachen Worten, dann (in aufklappbaren Technik-Boxen) im Detail für Entwickler.</p>
+  </div>
+
+  <section>
+    <h2>Die vier Dokumente</h2>
+    <div class="doc-grid">
+      <a class="doc-card" href="STRATEGIE.html">
+        <div class="icon">🎯</div>
+        <h3>Strategie</h3>
+        <p>Was ist snagga.de, für wen, warum, und nach welchen Prinzipien werden Deals ausgewählt.</p>
+      </a>
+      <a class="doc-card" href="ARCHITEKTUR.html">
+        <div class="icon">🏗️</div>
+        <h3>Architektur</h3>
+        <p>Der technische Aufbau: Server, Datenbank, Hosting, Zeitpläne, Schnittstellen.</p>
+      </a>
+      <a class="doc-card" href="PIPELINE_DOKUMENTATION.html">
+        <div class="icon">⚙️</div>
+        <h3>Deal-Pipeline</h3>
+        <p>Wie ein Amazon-Produkt zum "Deal" auf der Seite wird — Schritt für Schritt, inkl. Bugfix-Historie.</p>
+      </a>
+      <a class="doc-card" href="FILTER_DOKUMENTATION.html">
+        <div class="icon">🔍</div>
+        <h3>Filter & Bewertung</h3>
+        <p>Die genauen Regeln: Kategorisierung, Mindestanforderungen, Score-Formel, Tags.</p>
+      </a>
+      <a class="doc-card" href="MARKETING_REICHWEITE.html">
+        <div class="icon">📣</div>
+        <h3>Marketing & Reichweite</h3>
+        <p>Telegram, Mastodon, SEO, Amazon-Tag-Segmentierung — wie Sichtbarkeit entsteht.</p>
+      </a>
+      <a class="doc-card" href="MARKETING_STRATEGIE_2026.html">
+        <div class="icon">🚀</div>
+        <h3>Wachstumsstrategie 2026</h3>
+        <p>Diagnose, Positionierung als "Fake-Rabatt-Detektor" und Fahrplan Phase 0–3 bis Black Friday.</p>
+      </a>
+      <a class="doc-card" href="Snagga_Amazon_Guidelines.html">
+        <div class="icon">⚖️</div>
+        <h3>Amazon-Partnerprogramm-Regeln</h3>
+        <p>Compliance-Richtlinien: was erlaubt ist, was Pflicht ist, was verboten ist.</p>
+      </a>
+    </div>
+  </section>
+
+  <section>
+    <h2>Status auf einen Blick</h2>
+    <table>
+      <thead><tr><th>Bereich</th><th>Status</th><th>Kurz</th></tr></thead>
+      <tbody>
+        <tr><td>Website</td><td><span class="status status-live">LIVE</span></td><td>snagga.de, React-Frontend auf Vercel, FastAPI-Backend auf Render</td></tr>
+        <tr><td>Deal-Pipeline</td><td><span class="status status-live">LIVE</span></td><td>Stündliche Discovery + Preis-Checks laufen automatisch</td></tr>
+        <tr><td>Produktseiten &amp; Preishistorie</td><td><span class="status status-live">LIVE</span></td><td>Modal + dauerhafte <code>/preis</code>-Seiten mit interaktivem Chart (Keepa-History gratis) + E-Mail-Preisalarm</td></tr>
+        <tr><td>Telegram-Bot</td><td><span class="status status-live">LIVE</span></td><td>Postet automatisch neue Top-Deals im Kanal @snagga_deals</td></tr>
+        <tr><td>Mastodon-Bot</td><td><span class="status status-live">LIVE</span></td><td>@snagga_deals auf mastodon.social, postet parallel zu Telegram</td></tr>
+        <tr><td>Google-Suche (SEO)</td><td><span class="status status-teil">EINGERICHTET</span></td><td>Sitemap + eigene Deal-Seiten gebaut, bei Google eingereicht, Indexierung läuft ab</td></tr>
+        <tr><td>Amazon-Tag-Segmentierung</td><td><span class="status status-teil">EINGERICHTET</span></td><td>11 Kategorie-Tags angelegt, Wirkung wird gerade verifiziert</td></tr>
+        <tr><td>RSS-Feed</td><td><span class="status status-plan">IDEE</span></td><td>Noch nicht gebaut</td></tr>
+        <tr><td>Discord-Webhook</td><td><span class="status status-plan">IDEE</span></td><td>Noch nicht gebaut</td></tr>
+        <tr><td>Community-Deals-Feature</td><td><span class="status status-plan">ZURÜCKGESTELLT</span></td><td>Bewusst auf später verschoben (siehe Strategie)</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Die wichtigsten Links</h2>
+    <table>
+      <thead><tr><th>Was</th><th>URL</th></tr></thead>
+      <tbody>
+        <tr><td>Website</td><td><code>https://snagga.de</code></td></tr>
+        <tr><td>Backend-API</td><td><code>https://snagga.onrender.com</code></td></tr>
+        <tr><td>GitHub-Repo</td><td><code>github.com/bluesleeismee/snagga</code></td></tr>
+        <tr><td>Telegram-Kanal</td><td><code>t.me/snagga_deals</code></td></tr>
+        <tr><td>Mastodon-Profil</td><td><code>mastodon.social/@snagga_deals</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <div class="footer">snagga.de — internes Referenz-Dokument · nicht für Kunden/Öffentlichkeit bestimmt</div>
+</div>
+</body>
+</html>

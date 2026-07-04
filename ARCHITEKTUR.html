@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>snagga.de — Architektur</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; line-height: 1.7; padding: 48px 24px 80px; }
+  .container { max-width: 900px; margin: 0 auto; }
+  .breadcrumb { font-size: 12px; color: #64748b; margin-bottom: 20px; }
+  .breadcrumb a { color: #64748b; }
+  .header { border-left: 4px solid #e05c3a; padding-left: 20px; margin-bottom: 32px; }
+  .header h1 { font-size: 32px; font-weight: 800; color: #fff; letter-spacing: -0.5px; }
+  .header .subtitle { font-size: 13px; color: #64748b; margin-top: 4px; }
+
+  .laien-box { background: #10233b; border: 1px solid #1e3a5f; border-left: 4px solid #3b82f6; padding: 20px 24px; margin-bottom: 48px; font-size: 15px; }
+  .laien-box .kicker { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #60a5fa; margin-bottom: 8px; }
+  .laien-box p { color: #cbd5e1; margin-bottom: 8px; }
+  .laien-box p:last-child { margin-bottom: 0; }
+
+  section { margin-bottom: 52px; }
+  h2 { font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #2d3748; display: flex; align-items: center; gap: 10px; }
+  h2 .num { background: #e05c3a; color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 2px; }
+  h3 { font-size: 14px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin: 24px 0 12px; }
+  p { color: #94a3b8; font-size: 14px; margin-bottom: 12px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-bottom: 16px; }
+  thead tr { background: #1a1f2e; }
+  thead th { text-align: left; padding: 10px 14px; color: #64748b; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; border-bottom: 1px solid #2d3748; }
+  tbody tr { border-bottom: 1px solid #1e2330; transition: background 0.15s; }
+  tbody tr:hover { background: #1a1f2e; }
+  tbody td { padding: 10px 14px; color: #cbd5e1; vertical-align: top; }
+  tbody td:first-child { color: #e2e8f0; font-weight: 500; }
+
+  code { background: #1a1f2e; padding: 2px 6px; font-size: 12px; color: #e05c3a; font-family: monospace; }
+  pre { background: #1a1f2e; border: 1px solid #2d3748; padding: 18px 20px; font-family: 'Fira Code', 'Cascadia Code', monospace; font-size: 13px; color: #a5f3fc; overflow-x: auto; margin: 12px 0 20px; line-height: 1.6; }
+
+  /* Flow diagram */
+  .flow-diagram { display: flex; flex-direction: column; gap: 4px; margin: 20px 0 28px; }
+  .flow-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .flow-box { background: #1a1f2e; border: 1px solid #2d3748; padding: 12px 18px; font-size: 13px; font-weight: 600; color: #e2e8f0; text-align: center; }
+  .flow-box.accent { border-color: #e05c3a; color: #fb923c; }
+  .flow-box .sub { display: block; font-size: 11px; font-weight: 400; color: #64748b; margin-top: 2px; }
+  .flow-arrow { color: #475569; font-size: 18px; }
+  .flow-indent { margin-left: 30px; }
+
+  .status { display: inline-block; padding: 2px 9px; border-radius: 3px; font-size: 11px; font-weight: 700; }
+  .status-live { background: #14532d; color: #4ade80; }
+  .status-warn { background: #713f12; color: #fbbf24; }
+
+  details { background: #1a1f2e; border: 1px solid #2d3748; margin: 12px 0 20px; padding: 0; }
+  summary { cursor: pointer; padding: 12px 16px; font-size: 13px; font-weight: 600; color: #e05c3a; list-style: none; display: flex; align-items: center; gap: 8px; }
+  summary::before { content: "▸"; transition: transform 0.15s; }
+  details[open] summary::before { transform: rotate(90deg); }
+  details .inner { padding: 4px 16px 16px; }
+
+  .footer { margin-top: 60px; padding-top: 24px; border-top: 1px solid #2d3748; font-size: 12px; color: #334155; text-align: center; }
+  .footer a { color: #64748b; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="breadcrumb"><a href="INDEX.html">← Projekt-Referenz</a></div>
+  <div class="header">
+    <h1>snagga.de — Architektur</h1>
+    <div class="subtitle">Stand: 01. Juli 2026 · Intern · Nicht veröffentlichen</div>
+  </div>
+
+  <div class="laien-box">
+    <div class="kicker">📖 Kurz gesagt</div>
+    <p>Die Seite besteht aus zwei getrennten Programmen: einem, das im Browser läuft und alles anzeigt (das "Frontend"), und einem, das im Hintergrund rund um die Uhr auf einem Server läuft, Amazon-Daten holt und in einer Datenbank speichert (das "Backend"). Beide sind bei unterschiedlichen Hosting-Anbietern, die automatisch neu ausliefern, sobald wir Code-Änderungen hochladen ("push").</p>
+  </div>
+
+  <section>
+    <h2><span class="num">01</span> System-Überblick</h2>
+    <div class="flow-diagram">
+      <div class="flow-row">
+        <div class="flow-box">Besucher-Browser</div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-box accent">Frontend<span class="sub">React/Vite auf Vercel</span></div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-box accent">Backend<span class="sub">FastAPI auf Render</span></div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-box">PostgreSQL<span class="sub">Supabase</span></div>
+      </div>
+      <div class="flow-row flow-indent">
+        <span class="flow-arrow">↑</span>
+      </div>
+      <div class="flow-row flow-indent">
+        <div class="flow-box">Keepa-API<span class="sub">Amazon-Preisdaten</span></div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-box accent">Backend (Scheduler)<span class="sub">stündliche Jobs</span></div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-box">Telegram + Mastodon<span class="sub">Bot-Posts</span></div>
+      </div>
+    </div>
+    <p>Das Backend hat zwei Rollen gleichzeitig: es beantwortet Anfragen der Webseite (klassischer Web-Server) <i>und</i> führt im Hintergrund zeitgesteuerte Aufgaben aus (der "Scheduler", siehe Abschnitt 4) — beides im selben Prozess, auf demselben Server.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">02</span> Stack</h2>
+    <table>
+      <thead><tr><th>Teil</th><th>Technologie</th><th>Hosting</th></tr></thead>
+      <tbody>
+        <tr><td>Frontend</td><td>React 18 + Vite</td><td>Vercel (kostenlos)</td></tr>
+        <tr><td>Backend</td><td>Python, FastAPI, asyncpg, APScheduler</td><td>Render (Free-Tier Web Service)</td></tr>
+        <tr><td>Datenbank</td><td>PostgreSQL</td><td>Supabase (kostenlos)</td></tr>
+        <tr><td>Externe Preisdaten</td><td>Keepa API</td><td>€49/Monat, 20 Tokens/Min (28.800/Tag). 1 Token = 1 Produkt inkl. Preishistorie — <a href="PIPELINE_DOKUMENTATION.html" style="color:#e05c3a">Token-Modell</a></td></tr>
+        <tr><td>Analytics</td><td>Umami</td><td>Cookiefrei, DSGVO-konform</td></tr>
+      </tbody>
+    </table>
+    <details>
+      <summary>Technik: warum Render Free-Tier ein Keepalive-Ping braucht</summary>
+      <div class="inner">
+        <p>Render schläft kostenlose Web-Services nach Inaktivität ein. Ein eigener Scheduler-Job pingt alle 10 Minuten die eigene <code>/health</code>-Route, damit der Server nie einschläft und die stündlichen Jobs zuverlässig pünktlich feuern.</p>
+      </div>
+    </details>
+  </section>
+
+  <section>
+    <h2><span class="num">03</span> Deployment</h2>
+    <p>Kein manueller Deploy-Schritt nötig: <code>git push</code> auf den <code>main</code>-Branch löst bei <b>beiden</b> Hostern automatisch einen Neubau aus (Vercel für <code>frontend/</code>, Render für <code>backend/</code>). Ein Deploy dauert üblicherweise 1–3 Minuten.</p>
+    <table>
+      <thead><tr><th>Repo</th><th>Branch</th><th>Wer deployt</th></tr></thead>
+      <tbody>
+        <tr><td><code>github.com/bluesleeismee/snagga</code></td><td><code>main</code></td><td>Vercel + Render, beide automatisch</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="num">04</span> Zeitgesteuerte Jobs (Scheduler)</h2>
+    <table>
+      <thead><tr><th>Job</th><th>Zeitplan</th><th>Macht was</th></tr></thead>
+      <tbody>
+        <tr><td>Discovery</td><td>stündlich, Minute :05</td><td>Neue Kandidaten via Keepa <code>/deal</code> holen, filtern, bewerten, in DB schreiben, Telegram/Mastodon-Posts auslösen</td></tr>
+        <tr><td>Preis-Check</td><td>stündlich, Minute :30</td><td>Aktive Deals via Keepa <code>/product</code> erneut prüfen; nicht mehr gute Deals deaktivieren, gute bestätigen. <b>Seit 04.07.:</b> holt dabei die (gratis) volle Preishistorie + Marke mit und speichert sie → jedes aktive Produkt hat dauerhaft einen Chart. Ersetzt den früheren separaten History-Backfill.</td></tr>
+        <tr><td>Keepalive-Ping</td><td>alle 10 Minuten</td><td>Hält den Render Free-Tier-Server wach</td></tr>
+        <tr><td>Deep-Sync</td><td>täglich 03:00 Uhr</td><td>Vollständige Aktualisierung <b>aller</b> aktiven Deals (bis 500): Sales Rank, Ø-Preise, echter ATL, Rating, Marke, Preisverlauf + Re-Scoring. Vorher nur Top-150 (Spar-Annahme, hinfällig da History gratis).</td></tr>
+      </tbody>
+    </table>
+    <p>Genauer Ablauf inkl. Filter-Reihenfolge: <a href="PIPELINE_DOKUMENTATION.html" style="color:#e05c3a">Pipeline-Dokumentation</a>.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">05</span> Datenbank-Schema (Kernauszug)</h2>
+    <p>Tabelle <code>products</code> — eine Zeile pro Amazon-Produkt (ASIN als Primärschlüssel):</p>
+    <table>
+      <thead><tr><th>Spalte</th><th>Bedeutung</th></tr></thead>
+      <tbody>
+        <tr><td><code>asin</code></td><td>Amazon-Produkt-ID, Primärschlüssel</td></tr>
+        <tr><td><code>category</code></td><td>Eine der 11 App-Kategorien</td></tr>
+        <tr><td><code>current_price</code> / <code>original_price</code></td><td>Aktueller Preis / Referenzpreis für den %-Rabatt</td></tr>
+        <tr><td><code>deal_score</code></td><td>0–100, siehe Filter-Dokumentation</td></tr>
+        <tr><td><code>tag</code></td><td>Automatisch gesetztes Label (Allzeittiefpreis etc.)</td></tr>
+        <tr><td><code>is_active</code> / <code>is_backup</code> / <code>is_top_pick</code></td><td>Pool-Zugehörigkeit</td></tr>
+        <tr><td><code>first_seen</code></td><td>Wann das Produkt zum ersten Mal gefunden wurde (Basis für die "vor X Tagen"-Anzeige)</td></tr>
+        <tr><td><code>last_updated</code> / <code>last_checked</code></td><td>Letzte Bestätigung, dass der Deal noch gültig ist</td></tr>
+        <tr><td><code>affiliate_url</code></td><td>Fertiger Amazon-Link inkl. kategoriespezifischem Tracking-Tag</td></tr>
+        <tr><td><code>telegram_posted</code> / <code>mastodon_posted</code></td><td>Zeitstempel, falls schon auf dem jeweiligen Kanal gepostet (verhindert Doppel-Posts)</td></tr>
+        <tr><td><code>sales_rank</code>, <code>rating</code>, <code>reviews</code></td><td>Amazon-Popularitätsdaten</td></tr>
+      </tbody>
+    </table>
+    <p>Tabelle <code>price_history</code> — Preisverlauf pro ASIN für die Chart-Anzeige im Produkt-Modal.</p>
+    <details>
+      <summary>Technik: first_seen vs. last_updated</summary>
+      <div class="inner">
+        <p>Bis 01.07.2026 zeigte die Karten-Alters-Anzeige <code>last_updated</code>, der aber jede Stunde vom Preis-Check-Job aufgefrischt wird — jeder Deal sah dadurch permanent "1–2 Stunden alt" aus, egal wie lange er schon existierte. Seither zeigt die Anzeige <code>first_seen</code> (echtes Erstfund-Datum), <code>last_updated</code> bleibt intern für die Ablauf-Logik.</p>
+      </div>
+    </details>
+  </section>
+
+  <section>
+    <h2><span class="num">06</span> API-Endpunkte</h2>
+    <table>
+      <thead><tr><th>Endpunkt</th><th>Zweck</th></tr></thead>
+      <tbody>
+        <tr><td><code>GET /deals</code></td><td>Liste aktiver Deals (Frontend-Hauptabfrage)</td></tr>
+        <tr><td><code>GET /product/{asin}</code></td><td>Einzelner Deal inkl. Preisverlauf (für das Modal)</td></tr>
+        <tr><td><code>GET /categories</code></td><td>Liste der Kategorien</td></tr>
+        <tr><td><code>GET /share/{asin}</code></td><td>Server-gerenderte Vorschauseite für Social-Shares (Telegram/WhatsApp-Linkvorschau), leitet Menschen sofort zur echten Seite weiter</td></tr>
+        <tr><td><code>GET /deal/{asin}</code></td><td>Echte, von Google indexierbare Detailseite pro Produkt (kein Redirect)</td></tr>
+        <tr><td><code>GET /sitemap.xml</code></td><td>Dynamische Sitemap, listet alle aktiven Deal-Seiten</td></tr>
+        <tr><td><code>POST /refresh</code></td><td>Manuell einen Discovery-Lauf anstoßen (Admin, 5-Min-Cooldown)</td></tr>
+        <tr><td><code>GET /test-telegram</code> / <code>/test-mastodon</code></td><td>Diagnose: Testnachricht auf dem jeweiligen Kanal senden (Admin)</td></tr>
+        <tr><td><code>GET /admin/mark-all-posted</code></td><td>Alle aktiven Deals als "schon gepostet" markieren, verhindert Flut bei Erst-Einrichtung eines neuen Kanals (Admin)</td></tr>
+        <tr><td><code>GET /health</code></td><td>Health-Check (auch für Keepalive-Ping)</td></tr>
+      </tbody>
+    </table>
+    <p>"Admin"-Endpunkte verlangen einen <code>?token=</code>-Parameter, der mit <code>ADMIN_TOKEN</code> übereinstimmen muss.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">07</span> Umgebungsvariablen (Render)</h2>
+    <table>
+      <thead><tr><th>Variable</th><th>Zweck</th></tr></thead>
+      <tbody>
+        <tr><td><code>DATABASE_URL</code></td><td>Verbindung zur Supabase-Postgres-Datenbank</td></tr>
+        <tr><td><code>KEEPA_API_KEY</code></td><td>Zugang zur Keepa-API</td></tr>
+        <tr><td><code>ADMIN_TOKEN</code></td><td>Schutz für Admin-/Debug-Endpunkte</td></tr>
+        <tr><td><code>TELEGRAM_BOT_TOKEN</code> / <code>TELEGRAM_CHANNEL_ID</code> / <code>TELEGRAM_MIN_SCORE</code></td><td>Telegram-Bot-Zugang + Mindest-Score fürs Posten (aktuell 45)</td></tr>
+        <tr><td><code>MASTODON_INSTANCE_URL</code> / <code>MASTODON_ACCESS_TOKEN</code> / <code>MASTODON_MIN_SCORE</code></td><td>Mastodon-Bot-Zugang + Mindest-Score</td></tr>
+        <tr><td><code>AMAZON_CATEGORY_TAGS</code></td><td>JSON-Zuordnung Kategorie → eigener Amazon-Tracking-Tag</td></tr>
+        <tr><td><code>DEEP_SYNC_HOUR</code> / <code>DEEP_SYNC_MINUTE</code></td><td>Uhrzeit des nächtlichen Deep-Sync (Default 03:00)</td></tr>
+        <tr><td><code>FRONTEND_URL</code></td><td>Für CORS-Freigabe</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="num">08</span> Frontend-Struktur</h2>
+    <table>
+      <thead><tr><th>Datei</th><th>Rolle</th></tr></thead>
+      <tbody>
+        <tr><td><code>pages/DealsPage.jsx</code></td><td>Hauptseite: Header, Filter, Grid, Best-Picks-Slider</td></tr>
+        <tr><td><code>components/DealCard.jsx</code></td><td>Einzelne Deal-Kachel im Grid</td></tr>
+        <tr><td><code>components/ProductModal.jsx</code></td><td>Detail-Ansicht beim Klick auf eine Kachel</td></tr>
+        <tr><td><code>components/PriceChart.jsx</code></td><td>Preisverlauf-Diagramm im Modal</td></tr>
+        <tr><td><code>hooks/useBreakpoint.js</code></td><td>Mobile/Tablet/Desktop-Erkennung (Grenzen: 640px, 1024px)</td></tr>
+        <tr><td><code>api.js</code></td><td>Zentrale Backend-Anbindung</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <div class="footer"><a href="INDEX.html">← zurück zur Projekt-Referenz</a></div>
+</div>
+</body>
+</html>

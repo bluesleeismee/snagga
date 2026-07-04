@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>snagga.de — Filter & Bewertung</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; line-height: 1.7; padding: 48px 24px 80px; }
+  .container { max-width: 900px; margin: 0 auto; }
+  .breadcrumb { font-size: 12px; color: #64748b; margin-bottom: 20px; }
+  .breadcrumb a { color: #64748b; }
+  .header { border-left: 4px solid #e05c3a; padding-left: 20px; margin-bottom: 32px; }
+  .header h1 { font-size: 32px; font-weight: 800; color: #fff; letter-spacing: -0.5px; }
+  .header .subtitle { font-size: 13px; color: #64748b; margin-top: 4px; }
+
+  .laien-box { background: #10233b; border: 1px solid #1e3a5f; border-left: 4px solid #3b82f6; padding: 20px 24px; margin-bottom: 48px; font-size: 15px; }
+  .laien-box .kicker { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #60a5fa; margin-bottom: 8px; }
+  .laien-box p { color: #cbd5e1; margin-bottom: 8px; }
+  .laien-box p:last-child { margin-bottom: 0; }
+
+  section { margin-bottom: 52px; }
+  h2 { font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #2d3748; display: flex; align-items: center; gap: 10px; }
+  h2 .num { background: #e05c3a; color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 2px; }
+  h3 { font-size: 14px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin: 24px 0 12px; }
+  p { color: #94a3b8; font-size: 14px; margin-bottom: 12px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-bottom: 16px; }
+  thead tr { background: #1a1f2e; }
+  thead th { text-align: left; padding: 10px 14px; color: #64748b; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; border-bottom: 1px solid #2d3748; }
+  tbody tr { border-bottom: 1px solid #1e2330; transition: background 0.15s; }
+  tbody tr:hover { background: #1a1f2e; }
+  tbody td { padding: 10px 14px; color: #cbd5e1; vertical-align: top; }
+  tbody td:first-child { color: #e2e8f0; font-weight: 500; }
+
+  code { background: #1a1f2e; padding: 2px 6px; font-size: 12px; color: #e05c3a; font-family: monospace; }
+  pre { background: #1a1f2e; border: 1px solid #2d3748; padding: 18px 20px; font-family: 'Fira Code', 'Cascadia Code', monospace; font-size: 13px; color: #a5f3fc; overflow-x: auto; margin: 12px 0 20px; line-height: 1.6; }
+
+  .score-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 16px 0; }
+  .score-card { background: #1a1f2e; border: 1px solid #2d3748; padding: 16px; text-align: center; }
+  .score-card .pct { font-size: 28px; font-weight: 800; color: #e05c3a; }
+  .score-card .label { font-size: 12px; color: #64748b; margin-top: 4px; line-height: 1.4; }
+
+  .tag-pill { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; }
+  .tag-atl { background: #14532d; color: #4ade80; }
+  .tag-hist { background: #1e3a5f; color: #60a5fa; }
+  .tag-stark { background: #7c2d12; color: #fb923c; }
+  .tag-selten { background: #3b1f5e; color: #c084fc; }
+  .tag-fallen { background: #1f2937; color: #9ca3af; }
+
+  .kw-cloud { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 20px; }
+  .kw { background: #1a1f2e; border: 1px solid #2d3748; color: #94a3b8; font-size: 12px; padding: 3px 9px; border-radius: 3px; }
+  .kw.excl { color: #f87171; border-color: #4c1d1d; }
+
+  details { background: #1a1f2e; border: 1px solid #2d3748; margin: 12px 0 20px; padding: 0; }
+  summary { cursor: pointer; padding: 12px 16px; font-size: 13px; font-weight: 600; color: #e05c3a; list-style: none; display: flex; align-items: center; gap: 8px; }
+  summary::before { content: "▸"; transition: transform 0.15s; }
+  details[open] summary::before { transform: rotate(90deg); }
+  details .inner { padding: 4px 16px 16px; }
+
+  .footer { margin-top: 60px; padding-top: 24px; border-top: 1px solid #2d3748; font-size: 12px; color: #334155; text-align: center; }
+  .footer a { color: #64748b; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="breadcrumb"><a href="INDEX.html">← Projekt-Referenz</a></div>
+  <div class="header">
+    <h1>snagga.de — Filter & Bewertung</h1>
+    <div class="subtitle">Stand: 01. Juli 2026 · Intern · Nicht veröffentlichen</div>
+  </div>
+
+  <div class="laien-box">
+    <div class="kicker">📖 Kurz gesagt</div>
+    <p>Bevor ein Produkt als "Deal" gilt, muss es mehrere Mindestanforderungen erfüllen (gute Bewertung, genug Käufer, echter statt künstlicher Rabatt) — das sind K.O.-Kriterien, keine Kompromisse. Wer die besteht, bekommt danach eine Punktzahl von 0–100, die bestimmt, wie weit oben er auf der Seite erscheint und ob er automatisch bei Telegram/Mastodon gepostet wird.</p>
+  </div>
+
+  <section>
+    <h2><span class="num">01</span> Kategorisierung</h2>
+    <p>Jedes Produkt wird genau einer von 11 Kategorien zugeordnet oder komplett verworfen (kein "Sonstiges"-Auffangbecken). Genauer Algorithmus: <a href="PIPELINE_DOKUMENTATION.html" style="color:#e05c3a">Pipeline-Dokumentation, Abschnitt 3</a>.</p>
+    <h3>Sales-Rank-Schwellen pro Kategorie</h3>
+    <table>
+      <thead><tr><th>Kategorie</th><th>Max. Sales Rank</th><th>Bedeutet</th></tr></thead>
+      <tbody>
+        <tr><td>Games</td><td>5.000</td><td>Strengste Schwelle — nur echte Bestseller</td></tr>
+        <tr><td>Elektronik & Foto</td><td>18.000</td><td>Angehoben 01.07. (war 8.000, zu streng für den größten Katalog)</td></tr>
+        <tr><td>Computer & Zubehör</td><td>18.000</td><td>Gleicher Fix wie oben</td></tr>
+        <tr><td>Kamera & Foto</td><td>10.000</td><td></td></tr>
+        <tr><td>Elektro-Großgeräte</td><td>10.000</td><td></td></tr>
+        <tr><td>Auto & Motorrad</td><td>10.000</td><td>+ höhere Mindest-Reviews (siehe unten)</td></tr>
+        <tr><td>Musikinstrumente & DJ-Equipment</td><td>15.000</td><td></td></tr>
+        <tr><td>Küche, Haushalt & Wohnen</td><td>20.000</td><td></td></tr>
+        <tr><td>Sport & Freizeit</td><td>25.000</td><td></td></tr>
+        <tr><td>Baumarkt</td><td>30.000</td><td>Großzügigste Schwelle — Nischenprodukte sollen nicht ausgeschlossen werden</td></tr>
+        <tr><td>Drogerie & Körperpflege</td><td>30.000</td><td></td></tr>
+      </tbody>
+    </table>
+    <p><i>Niedrigere Zahl = strenger.</i> Sales Rank ist Amazons eigene Popularitäts-Rangliste pro Kategorie — Rang 1 ist der meistverkaufte Artikel.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">02</span> Mindestpreise</h2>
+    <p>Standard: <b>20 €</b>. Manche Kategorien haben einen höheren, kategoriespezifischen Mindestpreis, um zu verhindern, dass sehr billige Kleinartikel mit hohem relativem Rabatt-% die Liste fluten.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">03</span> Qualitäts-Hardfilter</h2>
+    <table>
+      <thead><tr><th>Kriterium</th><th>Regel</th></tr></thead>
+      <tbody>
+        <tr><td>Nur Neuware <span style="color:#4ade80;font-size:11px">(seit 04.07.)</span></td><td>Titel mit „gebraucht", „generalüberholt", „refurbished", „renewed", „B-Ware", „Retoure" etc. werden hart verworfen. Wortgrenzen, damit „Gebrauch"/„Gebrauchsanweisung" nicht fälschlich matchen.</td></tr>
+        <tr><td>Rating</td><td>≥ 4.0 ★ (harte Grenze, keine Ausnahme)</td></tr>
+        <tr><td>Reviews</td><td>≥ 100 · Auto & Motorrad: ≥ 500 (filtert Nischen-Ersatzteile)</td></tr>
+        <tr><td>Sales Rank</td><td>≤ kategoriespezifische Schwelle (Tabelle oben)</td></tr>
+        <tr><td>Referenzpreis vorhanden</td><td>90-Tage- <i>oder</i> 180-Tage-Durchschnitt muss existieren, sonst kein Vergleich möglich → verwerfen</td></tr>
+      </tbody>
+    </table>
+    <h3>Anti-Spike-Schutz</h3>
+    <p>Der aktuelle Preis muss <b>gleichzeitig</b> unter 92% des 90-Tage- <i>und</i> des 180-Tage-Durchschnitts liegen. Das verhindert Fake-Rabatte durch kurzzeitige Preisspitzen (z.B. normal 30€ → kurz auf 60€ hochgesetzt → zurück auf 30€, was ohne diese Regel wie ein satter Rabatt aussehen würde, obwohl der "wahre" Preis unverändert ist).</p>
+    <details>
+      <summary>Technik: der 365-Tage-Anker gegen längere Preis-Spikes</summary>
+      <div class="inner">
+        <p>Liegt der 180-Tage-Durchschnitt deutlich über dem 365-Tage-Durchschnitt (mehr als 20% höher), war vermutlich auch der 180-Tage-Wert selbst durch einen länger andauernden Spike verzerrt. In diesem Fall muss der aktuelle Preis zusätzlich nahe am 365-Tage-Wert liegen, sonst wird der Deal verworfen.</p>
+      </div>
+    </details>
+  </section>
+
+  <section>
+    <h2><span class="num">04</span> Deal-Score (0–100 Punkte)</h2>
+    <div class="score-grid">
+      <div class="score-card"><div class="pct">40%</div><div class="label">Abstand zum<br>90-Tage-Ø</div></div>
+      <div class="score-card"><div class="pct">30%</div><div class="label">Abstand zum<br>All-Time-Low</div></div>
+      <div class="score-card"><div class="pct">20%</div><div class="label">Popularität</div></div>
+      <div class="score-card"><div class="pct">10%</div><div class="label">Stabilität</div></div>
+    </div>
+    <h3>Kategorie-Gewichtung <span style="color:#4ade80;font-size:12px">(seit 04.07.)</span></h3>
+    <p>Nach der Berechnung wird der Score mit einem Kategorie-Faktor multipliziert (moderate Ausrichtung auf hochwertige Geräte): Elektronik &amp; Foto, Computer &amp; Zubehör, Kamera &amp; Foto, Games, Elektro-Großgeräte <b>×1.15</b>; Küche/Haushalt, Baumarkt, Drogerie <b>×0.9</b>; Rest ×1.0. So dominieren nicht die günstigen Massen-Kategorien die Startseite, ohne sie ganz zu verdrängen.</p>
+    <h3>Popularität im Detail (20%)</h3>
+    <p>Zusammengesetzt aus: Sales-Rank-Faktor (50%, invertiert — niedriger Rank = hoher Faktor), Rating-Faktor (30%, ab 4.0★ linear bis 5.0★), Review-Faktor (20%, logarithmisch bis 10.000 Reviews).</p>
+    <h3>Stabilität (10%)</h3>
+    <p>Voller Faktor, wenn der Preis seit ≥ 24 Stunden auf diesem Niveau ist; reduzierter Faktor bei ganz frischen Preisänderungen (Schutz vor kurzfristigen Glitches).</p>
+    <h3>Spezifitäts- &amp; Ramsch-Abzug</h3>
+    <p>Nischen-/Ramschprodukte werden nicht hart geblockt, sondern per Punktabzug (bis zu −60) bestraft: erkennbar an Phrasen wie "passend für", "kompatibel mit", markenspezifischen Ersatzteil-Hinweisen ("für BMW", "für Nissan" etc.) oder mehreren langen Nummern-Codes im Titel (Modell-Nummern). <b>Seit 04.07.</b> zusätzlich −30 für gezielte Ramsch-/Deko-/Verbrauchswörter: Perücke, Haarteil, Ornament, Girlande, Kerze, Aufkleber, Serviette, Kissenbezug, Bilderhaken, Ersatzfilter, HEPA-Filter. Bewusst präzise Substantive — damit echte Markenprodukte (Oral-B-Bürstenköpfe, Webcams, LEVOIT-Geräte) nicht mitfliegen.</p>
+    <details>
+      <summary>Technik: Mindest-Scores im System</summary>
+      <div class="inner">
+        <table>
+          <thead><tr><th>Schwelle</th><th>Wert</th><th>Wo</th></tr></thead>
+          <tbody>
+            <tr><td>Aufnahme in die Datenbank</td><td>≥ 30</td><td>Discovery-Job</td></tr>
+            <tr><td>Telegram-Post</td><td>≥ 45</td><td><code>TELEGRAM_MIN_SCORE</code>, angepasst 01.07. (war 80, faktisch unerreichbar)</td></tr>
+            <tr><td>Mastodon-Post</td><td>≥ 45</td><td><code>MASTODON_MIN_SCORE</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
+  </section>
+
+  <section>
+    <h2><span class="num">05</span> Tags (automatisch, max. 1 pro Deal)</h2>
+    <p>Priorität absteigend — der erste zutreffende gewinnt:</p>
+    <table>
+      <thead><tr><th>Tag</th><th>Bedingung</th></tr></thead>
+      <tbody>
+        <tr><td><span class="tag-pill tag-atl">Allzeittiefpreis</span></td><td>Preis ≤ echter ATL × 1.03 — <b>nur</b> wenn der ATL aus dem nächtlichen Deep-Sync bestätigt ist</td></tr>
+        <tr><td><span class="tag-pill tag-hist">Historisch günstig</span></td><td>Preis ≤ 80% des 180-Tage-Ø</td></tr>
+        <tr><td><span class="tag-pill tag-stark">Stark gefallen</span></td><td>Preis ≤ 70% des Referenzpreises</td></tr>
+        <tr><td><span class="tag-pill tag-selten">Seltene Gelegenheit</span></td><td>Preis ≤ ATL × 1.08</td></tr>
+        <tr><td><span class="tag-pill tag-fallen">Preis gefallen</span></td><td>Preis ≤ 85% des Referenzpreises</td></tr>
+      </tbody>
+    </table>
+    <p>Kein Tag ≠ kein guter Deal — nur, dass keine der Schwellen erreicht wurde (Score kann trotzdem über der Mindestgrenze liegen).</p>
+  </section>
+
+  <section>
+    <h2><span class="num">06</span> Titel-Ausschlussliste (kategorieunabhängig)</h2>
+    <p>Diese Wörter/Phrasen führen <b>immer</b> zum Verwerfen, egal was die rootCat sagt — Sicherheitsnetz gegen falsch einsortierte Amazon-Kategorien:</p>
+    <div class="kw-cloud">
+      <span class="kw excl">Papier / Druckerpapier</span><span class="kw excl">Spielzeug / Puzzle / Lego</span><span class="kw excl">Bücher</span><span class="kw excl">Kleidung / Schuhe</span><span class="kw excl">Nahrungsergänzung</span><span class="kw excl">Lebensmittel</span><span class="kw excl">Intime Produkte</span><span class="kw excl">Fahrzeug-Ersatzteile (markenspezifisch)</span><span class="kw excl">Heimtextilien/Deko</span><span class="kw excl">Handarbeit (Häkeln/Stricken)</span><span class="kw excl">Medizin-Teststreifen</span><span class="kw excl">US-Importe ohne DE-Bezug</span>
+    </div>
+    <details>
+      <summary>Fremdsprachen-Tastaturen (ergänzt 01.07.2026)</summary>
+      <div class="inner">
+        <p>Amazon trennt Tastaturen nicht nach Sprach-Layout in eigene Kategorien — norwegische, ukrainische, schwedische, russische, kyrillische, polnische, tschechische, ungarische, türkische, griechische und nordische/skandinavische Layouts wurden deshalb bisher mit angezeigt, obwohl für ein DACH-Publikum irrelevant. Jetzt per Titel-Keyword ausgeschlossen.</p>
+      </div>
+    </details>
+  </section>
+
+  <section>
+    <h2><span class="num">07</span> Laufende Überwachung</h2>
+    <p>Jede Stunde werden alle aktiven Deals erneut gegen dieselben Hardfilter geprüft (Preis-Check-Job). Ein Deal, dessen Preis wieder steigt oder der aus anderen Gründen die Filter nicht mehr besteht, wird sofort deaktiviert — unabhängig vom sonstigen 4-Stunden-Ablauffenster. Details zum Zusammenspiel der beiden stündlichen Jobs: <a href="PIPELINE_DOKUMENTATION.html" style="color:#e05c3a">Pipeline-Dokumentation</a>.</p>
+  </section>
+
+  <div class="footer"><a href="INDEX.html">← zurück zur Projekt-Referenz</a></div>
+</div>
+</body>
+</html>
