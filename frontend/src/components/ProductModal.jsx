@@ -21,6 +21,7 @@ export default function ProductModal({ deal, onClose }) {
   // Quelle wie die SSR-Preisseite, damit das Modal exakt dasselbe zeigt.
   const [detail, setDetail]       = useState(null)
   const [detailErr, setDetailErr] = useState(false)
+  const [showFullChart, setShowFullChart] = useState(false)
   // Preisalarm-Formular direkt im Modal (kein Wegnavigieren).
   const [alarmEmail, setAlarmEmail] = useState('')
   const [alarmPrice, setAlarmPrice] = useState('')
@@ -29,7 +30,7 @@ export default function ProductModal({ deal, onClose }) {
 
   // Beim Öffnen eines Produkts Details laden und Formularzustand zurücksetzen.
   useEffect(() => {
-    setAlarmState('idle'); setAlarmMsg(''); setAlarmEmail(''); setAlarmPrice('')
+    setAlarmState('idle'); setAlarmMsg(''); setAlarmEmail(''); setAlarmPrice(''); setShowFullChart(false)
     if (!deal?.asin) return
     let cancelled = false
     setDetail(null); setDetailErr(false)
@@ -441,7 +442,20 @@ export default function ProductModal({ deal, onClose }) {
               <p style={{ fontSize: 13, color: 'var(--muted)' }}>Preisverlauf konnte gerade nicht geladen werden.</p>
             )}
             {detail && (detail.has_real_history && detail.chart_svg
-              ? <div style={{ background: '#fff', border: '1px solid var(--border)', padding: '14px 12px 8px' }} dangerouslySetInnerHTML={{ __html: detail.chart_svg }} />
+              ? <div>
+                  <div
+                    style={{ background: '#fff', border: '1px solid var(--border)', padding: '14px 12px 8px' }}
+                    dangerouslySetInnerHTML={{ __html: (showFullChart && detail.chart_svg_full) ? detail.chart_svg_full : detail.chart_svg }}
+                  />
+                  {detail.has_more_history && (
+                    <button
+                      onClick={() => setShowFullChart(v => !v)}
+                      style={{ marginTop: 10, background: 'none', border: '1px solid var(--border)', color: 'var(--muted)', padding: '7px 14px', fontSize: 13, cursor: 'pointer' }}
+                    >
+                      {showFullChart ? 'Nur letzte 365 Tage' : 'Gesamte Preishistorie anzeigen'}
+                    </button>
+                  )}
+                </div>
               : <p style={{ fontSize: 13, color: 'var(--muted)' }}>Der geprüfte Preisverlauf für dieses Produkt wird gerade aufgebaut — schau bald wieder vorbei.</p>
             )}
           </div>

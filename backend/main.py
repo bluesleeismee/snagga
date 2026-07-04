@@ -9,7 +9,7 @@ import re
 import secrets
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -923,15 +923,34 @@ def _parse_ts(raw) -> Optional[datetime]:
         return None
 
 
-def _price_chart_svg(points: list, avg90: float, atl: float) -> str:
+def _price_chart_svg(points: list, avg90: float, atl: float,
+                     current: float = 0, days: int | None = None) -> str:
     """
     Inline-SVG-Preisverlauf als TREPPENKURVE mit echter Zeitachse (SSR, kein JS).
     points: chronologische Liste (Preis, Zeitstempel). Der Preis hält konstant bis
     zur nächsten Änderung (step-after) — so wie Keepa, statt schräger Interpolation.
-    X-Position ist zeitproportional; fällt das Zeitstempel-Parsing aus, wird gleich-
-    mäßig nach Index verteilt (Fallback, damit der Chart nie bricht).
+    current: aktueller Preis — wird als letzter Punkt angehängt, damit die Linie
+             immer beim heutigen Preis endet (die Keepa-Serie kann nachlaufen).
+    days:    zeigt nur die letzten N Tage (Default-Ansicht); None = ganze History.
     """
     parsed = [(float(p), _parse_ts(ts)) for p, ts in points if p and float(p) > 0]
+
+    # Aktuellen Preis als Schlusspunkt anhängen, damit die Linie beim heutigen
+    # Preis endet (behebt "Linie hängt in der Vergangenheit fest").
+    if current and current > 0:
+        now_dt = datetime.utcnow()
+        last_p, last_t = parsed[-1] if parsed else (None, None)
+        if last_p is None or abs(last_p - current) > 0.005 or (last_t and last_t < now_dt - timedelta(days=1)):
+            parsed.append((float(current), now_dt))
+
+    # Optional auf die letzten `days` Tage fenstern (Default). Bleiben dabei <2
+    # Punkte übrig (z.B. seltene Preisänderungen), ganze Serie zeigen.
+    if days and parsed:
+        cutoff   = datetime.utcnow() - timedelta(days=days)
+        windowed = [x for x in parsed if x[1] and x[1] >= cutoff]
+        if len(windowed) >= 2:
+            parsed = windowed
+
     if len(parsed) < 2:
         return ""
     prices = [p for p, _ in parsed]
@@ -1037,7 +1056,19 @@ def _compute_detail(row, hist_rows) -> dict:
         atl = current
     verdict, vcolor, vreason = _price_verdict(current, avg90, atl)
     # Chart nur mit verifizierter Keepa-Historie — nie erfundene Kurven zeigen.
-    chart_svg = _price_chart_svg(points, avg90, atl) if row["has_real_history"] else ""
+    # Default: letzte 365 Tage (endet beim aktuellen Preis). Zusätzlich die
+    # gesamte History für den "alles anzeigen"-Umschalter.
+    if row["has_real_history"]:
+        chart_svg      = _price_chart_svg(points, avg90, atl, current=current, days=365)
+        chart_svg_full = _price_chart_svg(points, avg90, atl, current=current)
+    else:
+        chart_svg = chart_svg_full = ""
+    # Umschalter nur zeigen, wenn es History älter als 365 Tage gibt.
+    has_more = False
+    if row["has_real_history"] and points:
+        oldest = _parse_ts(points[0][1])
+        has_more = bool(oldest and oldest < datetime.utcnow() - timedelta(days=365)
+                        and chart_svg_full and chart_svg_full != chart_svg)
     if current and current > 0:
         suggested = round(current * 0.9, 2)
     elif atl and atl > 0:
@@ -1047,7 +1078,8 @@ def _compute_detail(row, hist_rows) -> dict:
     return {
         "current": current, "avg90": avg90, "avg180": avg180, "atl": atl,
         "verdict": verdict, "vcolor": vcolor, "vreason": vreason,
-        "chart_svg": chart_svg, "suggested": suggested,
+        "chart_svg": chart_svg, "chart_svg_full": chart_svg_full,
+        "has_more_history": has_more, "suggested": suggested,
     }
 
 
@@ -1071,7 +1103,7 @@ async def api_product_detail(asin: str):
         if not row:
             raise HTTPException(status_code=404, detail="Produkt nicht gefunden")
         hist = await conn.fetch(
-            "SELECT price, timestamp FROM price_history WHERE asin=$1 ORDER BY id DESC LIMIT 365",
+            "SELECT price, timestamp FROM price_history WHERE asin=$1 ORDER BY id DESC LIMIT 2000",
             asin,
         )
     d = _compute_detail(row, hist)
@@ -1084,6 +1116,8 @@ async def api_product_detail(asin: str):
         "avg180":           d["avg180"],
         "has_real_history": bool(row["has_real_history"]),
         "chart_svg":        d["chart_svg"],
+        "chart_svg_full":   d["chart_svg_full"],
+        "has_more_history": d["has_more_history"],
         "suggested_target": d["suggested"],
         "is_active":        bool(row["is_active"]),
     }
@@ -1113,7 +1147,7 @@ async def price_page(asin: str):
         if not row:
             return _not_found_page("Produkt nicht gefunden")
         hist = await conn.fetch(
-            "SELECT price, timestamp FROM price_history WHERE asin=$1 ORDER BY id DESC LIMIT 365",
+            "SELECT price, timestamp FROM price_history WHERE asin=$1 ORDER BY id DESC LIMIT 2000",
             asin,
         )
 
@@ -1130,6 +1164,8 @@ async def price_page(asin: str):
     current, avg90, avg180, atl = detail["current"], detail["avg90"], detail["avg180"], detail["atl"]
     verdict, vcolor, vreason    = detail["verdict"], detail["vcolor"], detail["vreason"]
     chart_svg                   = detail["chart_svg"]
+    chart_svg_full              = detail["chart_svg_full"]
+    has_more_history            = detail["has_more_history"]
 
     def eur(v: float) -> str:
         return (f"{v:.2f}".replace(".", ",") + " €") if v and v > 0 else "—"
@@ -1211,8 +1247,27 @@ async def price_page(asin: str):
     cat_link = (f'<p><a class="back" href="https://www.snagga.de/kategorie/{cat_slug}">← Alle {cat_esc}-Deals</a></p>'
                 if cat_slug else "")
 
-    chart_block = (f'<div class="chart">{chart_svg}</div>' if chart_svg
-                   else '<p class="nochart">Der geprüfte Preisverlauf für dieses Produkt wird gerade aufgebaut — schau bald wieder vorbei.</p>')
+    if chart_svg and has_more_history:
+        # Default: 365 Tage. Button blendet ohne Reload die gesamte History ein.
+        _toggle_btn = (
+            '<button type="button" onclick="'
+            "var f=document.getElementById('chart-full'),s=document.getElementById('chart-365');"
+            "if(f.style.display==='none'){f.style.display='';s.style.display='none';this.textContent='Nur letzte 365 Tage';}"
+            "else{f.style.display='none';s.style.display='';this.textContent='Gesamte Preishistorie anzeigen';}"
+            '" style="margin-top:10px;background:none;border:1px solid #EAE6E1;color:#153D68;'
+            'padding:7px 14px;font-size:13px;cursor:pointer">Gesamte Preishistorie anzeigen</button>'
+        )
+        chart_block = (
+            '<div class="chart">'
+            f'<div id="chart-365">{chart_svg}</div>'
+            f'<div id="chart-full" style="display:none">{chart_svg_full}</div>'
+            + _toggle_btn +
+            '</div>'
+        )
+    elif chart_svg:
+        chart_block = f'<div class="chart">{chart_svg}</div>'
+    else:
+        chart_block = '<p class="nochart">Der geprüfte Preisverlauf für dieses Produkt wird gerade aufgebaut — schau bald wieder vorbei.</p>'
 
     return HTMLResponse(f"""<!DOCTYPE html>
 <html lang="de">

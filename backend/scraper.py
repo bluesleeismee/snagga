@@ -429,7 +429,7 @@ async def hourly_keepa_price_check():
                 kd   = enriched.get(asin) or {}
                 hist = kd.get("history") or []
                 if hist:
-                    recent = hist[-365:]
+                    recent = hist[-2000:]  # volle History speichern (Chart-Default zeigt 365 Tage)
                     await conn.execute("DELETE FROM price_history WHERE asin=$1", asin)
                     await conn.executemany(
                         "INSERT INTO price_history (asin, price, timestamp) VALUES ($1,$2,$3)",
@@ -933,7 +933,7 @@ async def nightly_deep_sync():
             # Punkte löschen, echte Keepa-Serie einspielen, has_real_history setzen.
             # Erst ab jetzt wird für dieses Produkt überhaupt ein Chart gezeigt.
             if kd["history"]:
-                recent = kd["history"][-365:]
+                recent = kd["history"][-2000:]  # volle History (Chart-Default zeigt 365 Tage)
                 await conn.execute("DELETE FROM price_history WHERE asin=$1", asin)
                 await conn.executemany(
                     "INSERT INTO price_history (asin, price, timestamp) VALUES ($1,$2,$3)",

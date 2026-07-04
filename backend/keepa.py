@@ -260,16 +260,21 @@ def _parse_product(p: dict) -> dict | None:
     if not asin:
         return None
 
-    # Preishistorie: BuyBox (18) > Amazon (0) > New (1) — dieselbe Priorität wie
-    # beim aktuellen Preis. Vorher wurde nur Amazon/New gelesen; BuyBox-/Dritt-
-    # anbieter-Deals (der Großteil des Sortiments) hatten dadurch KEINE History.
+    # Preishistorie: die FRISCHESTE verfügbare Reihe wählen (jüngster letzter Punkt)
+    # unter BuyBox(18)/Amazon(0)/New(1). Feste Priorität nahm sonst z.B. eine
+    # veraltete Amazon-Reihe (Amazon verkauft das Produkt nicht mehr), während der
+    # aktuelle Preis aus BuyBox/Drittanbieter stammt → die Chart-Linie endete Jahre
+    # in der Vergangenheit statt beim heutigen Preis.
     csv = p.get("csv") or []
     history: list[tuple[float, datetime]] = []
+    best_ts = None
     for idx in (IDX_BUYBOX, IDX_AMAZON, IDX_NEW):
         if idx < len(csv) and csv[idx]:
-            history = _parse_flat_csv(csv[idx])
-            if history:
-                break
+            series = _parse_flat_csv(csv[idx])
+            if series:
+                last_ts = series[-1][1]
+                if best_ts is None or last_ts > best_ts:
+                    best_ts, history = last_ts, series
 
     stats  = p.get("stats") or {}
     cur    = stats.get("current") or []
@@ -383,8 +388,8 @@ async def enrich_with_keepa(
                             "asin":    ",".join(chunk),
                             "stats":   1,
                             "history": 1,    # History steckt im Basis-Token → kostenlos
-                            "days":    365,   # nur letzte 365 Tage → kleinere/schnellere Antwort
-                            "rating":  1,
+                            "rating":  1,    # volle History holen: Default zeigt 365 Tage,
+                                             # auf Klick die gesamte (Fensterung im Chart-Render)
                         },
                     )
                     resp.raise_for_status()
