@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { fmtPrice, discount, fmtAge, AGE_COLORS, fmtReviews, shareOrCopy } from '../utils.js'
 import { useBreakpoint } from '../hooks/useBreakpoint.js'
+import { api } from '../api.js'
 
 function useProductImages(asin, primaryUrl) {
   return primaryUrl ? [primaryUrl] : []
@@ -15,6 +16,37 @@ export default function ProductModal({ deal, onClose }) {
   const images = useProductImages(deal?.asin, deal?.image_url)
   const touchStartX = useRef(null)
   const touchStartY = useRef(null)
+
+  // Detaildaten (Urteil, Chart-SVG, Preis-Eckdaten, Wunschpreis) — dieselbe
+  // Quelle wie die SSR-Preisseite, damit das Modal exakt dasselbe zeigt.
+  const [detail, setDetail]       = useState(null)
+  const [detailErr, setDetailErr] = useState(false)
+  // Preisalarm-Formular direkt im Modal (kein Wegnavigieren).
+  const [alarmEmail, setAlarmEmail] = useState('')
+  const [alarmPrice, setAlarmPrice] = useState('')
+  const [alarmState, setAlarmState] = useState('idle') // idle | sending | ok | error
+  const [alarmMsg, setAlarmMsg]     = useState('')
+
+  // Beim Öffnen eines Produkts Details laden und Formularzustand zurücksetzen.
+  useEffect(() => {
+    setAlarmState('idle'); setAlarmMsg(''); setAlarmEmail(''); setAlarmPrice('')
+    if (!deal?.asin) return
+    let cancelled = false
+    setDetail(null); setDetailErr(false)
+    api.productDetail(deal.asin)
+      .then(d => { if (!cancelled) { setDetail(d); if (d?.suggested_target != null && d.suggested_target !== '') setAlarmPrice(String(d.suggested_target)) } })
+      .catch(() => { if (!cancelled) setDetailErr(true) })
+    return () => { cancelled = true }
+  }, [deal?.asin])
+
+  const submitAlarm = async e => {
+    e.preventDefault()
+    if (alarmState === 'sending') return
+    setAlarmState('sending'); setAlarmMsg('')
+    const res = await api.setAlarm(deal.asin, alarmEmail.trim(), alarmPrice)
+    setAlarmState(res.ok ? 'ok' : 'error')
+    setAlarmMsg(res.message)
+  }
 
   // Swipe-down or swipe-left on details panel → close modal
   const handleDetailTouchStart = e => {
@@ -379,10 +411,120 @@ export default function ProductModal({ deal, onClose }) {
             </a>
           </div>
         </div>
+
+        {/* ── FULL-WIDTH: Urteil · Preisverlauf · Preisalarm ── */}
+        <div
+          style={{
+            gridColumn: '1 / -1',
+            borderTop: '1px solid var(--border)',
+            padding: isMobile ? '24px 24px 40px' : '32px 44px 40px',
+            display: 'flex', flexDirection: 'column', gap: 28,
+          }}
+        >
+          {/* Urteil "Guter Preis?" */}
+          {detail && detail.current_price > 0 && detail.verdict && detail.verdict.label !== 'Unbekannt' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+              <span style={{ background: detail.verdict.color, color: '#fff', padding: '7px 15px', fontSize: 13, fontWeight: 700 }}>
+                Guter Preis? {detail.verdict.label}
+              </span>
+              <span style={{ fontSize: 13, color: 'var(--muted)', flex: 1, minWidth: 220 }}>{detail.verdict.reason}</span>
+            </div>
+          )}
+
+          {/* Preisverlauf */}
+          <div>
+            <div style={sectionLabel}>Preisverlauf</div>
+            {!detail && !detailErr && (
+              <div style={{ height: 120, display: 'flex', alignItems: 'center', color: 'var(--muted)', fontSize: 13 }}>Lädt …</div>
+            )}
+            {detailErr && (
+              <p style={{ fontSize: 13, color: 'var(--muted)' }}>Preisverlauf konnte gerade nicht geladen werden.</p>
+            )}
+            {detail && (detail.has_real_history && detail.chart_svg
+              ? <div style={{ background: '#fff', border: '1px solid var(--border)', padding: '14px 12px 8px' }} dangerouslySetInnerHTML={{ __html: detail.chart_svg }} />
+              : <p style={{ fontSize: 13, color: 'var(--muted)' }}>Der geprüfte Preisverlauf für dieses Produkt wird gerade aufgebaut — schau bald wieder vorbei.</p>
+            )}
+          </div>
+
+          {/* Preis-Eckdaten */}
+          {detail && (
+            <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap' }}>
+              {[['Aktueller Preis', detail.current_price], ['Allzeittief', detail.atl], ['Ø 90 Tage', detail.avg90], ['Ø 180 Tage', detail.avg180]]
+                .filter(([, v]) => v > 0)
+                .map(([label, v]) => (
+                  <div key={label}>
+                    <div style={{ ...sectionLabel, marginBottom: 4 }}>{label}</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{fmtPrice(v)}</div>
+                  </div>
+                ))}
+            </div>
+          )}
+
+          {/* Preisalarm */}
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 24 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>🔔 Preisalarm setzen</div>
+            {alarmState === 'ok' ? (
+              <p style={{ fontSize: 14, color: '#1E7A3C', lineHeight: 1.5 }}>✅ {alarmMsg}</p>
+            ) : (
+              <form onSubmit={submitAlarm}>
+                <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 14, lineHeight: 1.5 }}>
+                  Wir mailen dich, sobald der Preis auf deinen Wunschpreis fällt. Kostenlos, jederzeit abbestellbar.
+                </p>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <input
+                    type="email" required placeholder="deine@email.de" value={alarmEmail}
+                    onChange={e => setAlarmEmail(e.target.value)} aria-label="E-Mail-Adresse"
+                    style={{ ...alarmInput, flex: 1, minWidth: 200 }}
+                  />
+                  <input
+                    type="number" required min="1" step="0.01" placeholder="Wunschpreis €" value={alarmPrice}
+                    onChange={e => setAlarmPrice(e.target.value)} aria-label="Wunschpreis in Euro"
+                    style={{ ...alarmInput, width: 150 }}
+                  />
+                  <button
+                    type="submit" disabled={alarmState === 'sending'}
+                    style={{
+                      background: 'var(--accent)', color: '#fff', border: 'none', padding: '0 22px', height: 46,
+                      fontSize: 14, fontWeight: 600, cursor: alarmState === 'sending' ? 'default' : 'pointer',
+                      opacity: alarmState === 'sending' ? 0.7 : 1,
+                    }}
+                  >
+                    {alarmState === 'sending' ? 'Sende …' : 'Alarm aktivieren'}
+                  </button>
+                </div>
+                {alarmState === 'error' && (
+                  <p style={{ fontSize: 13, color: '#8b1a1a', marginTop: 10 }}>{alarmMsg}</p>
+                )}
+                <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 12, lineHeight: 1.5 }}>
+                  Double-Opt-in: Du bekommst zuerst eine Bestätigungs-Mail. Deine Adresse nutzen wir ausschließlich für diesen Preisalarm.
+                </p>
+              </form>
+            )}
+          </div>
+
+          {/* Dauerhafte, teilbare Preisseite (SEO) */}
+          <a
+            href={`https://www.snagga.de/preis/${deal.asin}`}
+            target="_blank" rel="noopener noreferrer"
+            style={{ fontSize: 12, color: 'var(--muted)', textDecoration: 'underline' }}
+          >
+            Dauerhafte Preisseite öffnen →
+          </a>
+        </div>
       </div>
     </div>
     </>
   )
+}
+
+const sectionLabel = {
+  fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.5,
+  color: 'var(--muted)', fontWeight: 600, marginBottom: 12,
+}
+
+const alarmInput = {
+  border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text)',
+  padding: '0 14px', height: 46, fontSize: 14, fontFamily: 'inherit',
 }
 
 function arrowStyle(side) {

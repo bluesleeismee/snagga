@@ -15,7 +15,7 @@ from typing import Optional
 from dotenv import load_dotenv
 from fastapi import FastAPI, Form, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel
 
 load_dotenv()
@@ -1020,6 +1020,75 @@ def _price_chart_svg(points: list, avg90: float, atl: float) -> str:
 </svg>"""
 
 
+def _compute_detail(row, hist_rows) -> dict:
+    """
+    Gemeinsame Berechnung der Produktdetails: Preise, geklemmtes Allzeittief,
+    Kauf-Urteil, Preisverlauf-Chart (SVG) und Wunschpreis-Vorschlag. EINE Quelle
+    für die SSR-Preisseite (/preis) UND das JSON fürs Modal (/produkt) — so
+    zeigen beide garantiert dieselben Zahlen, dasselbe Urteil und denselben Chart.
+    """
+    points  = [(h["price"], h["timestamp"]) for h in reversed(hist_rows) if h["price"] and h["price"] > 0]
+    current = row["current_price"] or 0
+    avg90   = row["avg90_price"] or row["avg_price"] or 0
+    avg180  = row["avg180_price"] or 0
+    atl     = row["all_time_low"] or 0
+    # Anzeige-Sicherung: Ein Allzeittief kann logisch nie über dem aktuellen Preis liegen.
+    if atl and current and atl > current:
+        atl = current
+    verdict, vcolor, vreason = _price_verdict(current, avg90, atl)
+    # Chart nur mit verifizierter Keepa-Historie — nie erfundene Kurven zeigen.
+    chart_svg = _price_chart_svg(points, avg90, atl) if row["has_real_history"] else ""
+    if current and current > 0:
+        suggested = round(current * 0.9, 2)
+    elif atl and atl > 0:
+        suggested = round(atl, 2)
+    else:
+        suggested = ""
+    return {
+        "current": current, "avg90": avg90, "avg180": avg180, "atl": atl,
+        "verdict": verdict, "vcolor": vcolor, "vreason": vreason,
+        "chart_svg": chart_svg, "suggested": suggested,
+    }
+
+
+@app.get("/produkt/{asin}")
+async def api_product_detail(asin: str):
+    """
+    JSON-Detaildaten fürs Produkt-Modal: Urteil, Preis-Eckdaten, Chart-SVG und
+    Wunschpreis-Vorschlag — dieselbe Quelle wie die SSR-Seite /preis/{asin}, damit
+    das Modal exakt dasselbe zeigt. Der Chart kommt als fertiges SVG (1:1 identisch
+    zur Preisseite); das Frontend bettet ihn direkt ein.
+    """
+    if not re.match(r"^[A-Z0-9]{10}$", asin):
+        raise HTTPException(status_code=404, detail="Produkt nicht gefunden")
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT asin, name, avg_price, avg90_price, avg180_price, all_time_low, "
+            "current_price, is_active, has_real_history FROM products WHERE asin=$1",
+            asin,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Produkt nicht gefunden")
+        hist = await conn.fetch(
+            "SELECT price, timestamp FROM price_history WHERE asin=$1 ORDER BY id DESC LIMIT 365",
+            asin,
+        )
+    d = _compute_detail(row, hist)
+    return {
+        "asin":             asin,
+        "verdict":          {"label": d["verdict"], "color": d["vcolor"], "reason": d["vreason"]},
+        "current_price":    d["current"],
+        "atl":              d["atl"],
+        "avg90":            d["avg90"],
+        "avg180":           d["avg180"],
+        "has_real_history": bool(row["has_real_history"]),
+        "chart_svg":        d["chart_svg"],
+        "suggested_target": d["suggested"],
+        "is_active":        bool(row["is_active"]),
+    }
+
+
 @app.api_route("/preis/{asin}", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def price_page(asin: str):
     """
@@ -1048,31 +1117,22 @@ async def price_page(asin: str):
             asin,
         )
 
-    points = [(h["price"], h["timestamp"]) for h in reversed(hist) if h["price"] and h["price"] > 0]
-
     name      = html.escape((row["name"] or "Produkt")[:150])
     image     = html.escape(row["image_url"] or "https://www.snagga.de/favicon.svg")
     affiliate = html.escape(row["affiliate_url"] or f"https://www.amazon.de/dp/{asin}")
     category  = row["category"] or ""
     cat_esc   = html.escape(category)
-    current   = row["current_price"] or 0
-    avg90     = row["avg90_price"] or row["avg_price"] or 0
-    avg180    = row["avg180_price"] or 0
-    atl       = row["all_time_low"] or 0
     is_active = row["is_active"]
 
-    # Anzeige-Sicherung: Ein Allzeittief kann logisch nie über dem aktuellen Preis
-    # liegen. Deckt Alt-Datensätze ab, die der stündliche Check (nur aktive Deals)
-    # bzw. der Deep-Sync noch nicht korrigiert hat. Greift für Stats + Urteil.
-    if atl and current and atl > current:
-        atl = current
+    # Zahlen, Urteil und Chart kommen aus derselben Quelle wie /produkt/{asin},
+    # damit Modal und SSR-Preisseite garantiert identisch sind.
+    detail = _compute_detail(row, hist)
+    current, avg90, avg180, atl = detail["current"], detail["avg90"], detail["avg180"], detail["atl"]
+    verdict, vcolor, vreason    = detail["verdict"], detail["vcolor"], detail["vreason"]
+    chart_svg                   = detail["chart_svg"]
 
     def eur(v: float) -> str:
         return (f"{v:.2f}".replace(".", ",") + " €") if v and v > 0 else "—"
-
-    verdict, vcolor, vreason = _price_verdict(current, avg90, atl)
-    # Chart nur mit verifizierter Keepa-Historie — nie erfundene Kurven zeigen.
-    chart_svg = _price_chart_svg(points, avg90, atl) if row["has_real_history"] else ""
 
     canonical = f"https://www.snagga.de/preis/{asin}"
     title = f"{name} — Preisverlauf & Preis-Check | snagga.de"
@@ -1112,12 +1172,7 @@ async def price_page(asin: str):
 
     # Preisalarm-Formular. Wunschpreis-Vorschlag: leicht unter dem aktuellen Preis,
     # sonst am Allzeittief orientiert.
-    if current and current > 0:
-        suggested = round(current * 0.9, 2)
-    elif atl and atl > 0:
-        suggested = round(atl, 2)
-    else:
-        suggested = ""
+    suggested = detail["suggested"]
     alert_form = f"""<h2>🔔 Preisalarm setzen</h2>
 <form class="alert-form" method="post" action="https://www.snagga.de/alarm/setzen">
   <input type="hidden" name="asin" value="{asin}">
@@ -1286,20 +1341,33 @@ async def alarm_setzen(
     asin: str = Form(...),
     email: str = Form(...),
     target_price: float = Form(...),
+    ajax: str = Form(default=""),
 ):
-    """Nimmt einen Preisalarm entgegen und verschickt die Double-Opt-in-Bestätigung."""
+    """Nimmt einen Preisalarm entgegen und verschickt die Double-Opt-in-Bestätigung.
+
+    Wird das Formular per fetch aus dem Produkt-Modal abgeschickt (ajax=1), kommt
+    die Antwort als JSON zurück, damit der Nutzer die Seite nicht verlässt. Der
+    klassische Formular-POST (SSR-Preisseite) liefert weiterhin eine HTML-Seite.
+    """
+    def _resp(heading: str, body_html: str, plain: str, status: int = 200):
+        if ajax == "1":
+            return JSONResponse({"ok": status == 200, "message": plain}, status_code=status)
+        return _simple_page(heading, body_html, status=status)
+
     email = (email or "").strip().lower()
     if not re.match(r"^[A-Z0-9]{10}$", asin) or not _EMAIL_RE.match(email) or target_price <= 0:
-        return _simple_page("Eingabe ungültig",
-                            "<p>Bitte gib eine gültige E-Mail-Adresse und einen Wunschpreis größer 0 an.</p>",
-                            status=400)
+        return _resp("Eingabe ungültig",
+                     "<p>Bitte gib eine gültige E-Mail-Adresse und einen Wunschpreis größer 0 an.</p>",
+                     "Bitte gib eine gültige E-Mail-Adresse und einen Wunschpreis größer 0 an.",
+                     status=400)
 
     pool = await get_pool()
     async with pool.acquire() as conn:
         prod = await conn.fetchrow("SELECT name FROM products WHERE asin=$1", asin)
         if not prod:
-            return _simple_page("Produkt nicht gefunden",
-                                "<p>Zu diesem Produkt können wir keinen Alarm setzen.</p>", status=404)
+            return _resp("Produkt nicht gefunden",
+                         "<p>Zu diesem Produkt können wir keinen Alarm setzen.</p>",
+                         "Zu diesem Produkt können wir keinen Alarm setzen.", status=404)
 
         # Missbrauchsschutz: max. 5 neue Alarme pro E-Mail in 10 Minuten
         recent = await conn.fetchval(
@@ -1307,9 +1375,10 @@ async def alarm_setzen(
             email,
         )
         if recent and recent >= 5:
-            return _simple_page("Zu viele Anfragen",
-                                "<p>Du hast gerade viele Alarme gesetzt. Bitte versuch es in ein paar Minuten erneut.</p>",
-                                status=429)
+            return _resp("Zu viele Anfragen",
+                         "<p>Du hast gerade viele Alarme gesetzt. Bitte versuch es in ein paar Minuten erneut.</p>",
+                         "Du hast gerade viele Alarme gesetzt. Bitte versuch es in ein paar Minuten erneut.",
+                         status=429)
 
         # Bestehende, noch nicht ausgelöste Alarme für dieselbe (E-Mail, ASIN)
         # ersetzen — Wunschpreis ändern statt Duplikate anzuhäufen.
@@ -1325,13 +1394,17 @@ async def alarm_setzen(
 
     sent = await alerts.send_confirmation(email, asin, prod["name"] or "dieses Produkt", float(target_price), token)
     if sent:
-        return _simple_page("Fast geschafft! 📬",
-                            f"<p>Wir haben dir eine Bestätigungs-Mail an <strong>{html.escape(email)}</strong> "
-                            f"geschickt. Bitte klick den Link darin, dann ist dein Preisalarm aktiv.</p>"
-                            f"<p style='font-size:13px;color:#7E7A75'>Keine Mail bekommen? Schau im Spam-Ordner nach.</p>")
-    return _simple_page("Preisalarm vorgemerkt",
-                        "<p>Dein Alarm ist gespeichert, aber die Bestätigungs-Mail konnte gerade nicht versendet "
-                        "werden. Bitte versuch es später noch einmal.</p>", status=502)
+        return _resp("Fast geschafft! 📬",
+                     f"<p>Wir haben dir eine Bestätigungs-Mail an <strong>{html.escape(email)}</strong> "
+                     f"geschickt. Bitte klick den Link darin, dann ist dein Preisalarm aktiv.</p>"
+                     f"<p style='font-size:13px;color:#7E7A75'>Keine Mail bekommen? Schau im Spam-Ordner nach.</p>",
+                     f"Bestätigungs-Mail an {email} verschickt. Bitte klick den Link darin, dann ist dein Preisalarm aktiv. "
+                     f"(Keine Mail? Schau im Spam-Ordner nach.)")
+    return _resp("Preisalarm vorgemerkt",
+                 "<p>Dein Alarm ist gespeichert, aber die Bestätigungs-Mail konnte gerade nicht versendet "
+                 "werden. Bitte versuch es später noch einmal.</p>",
+                 "Dein Alarm ist gespeichert, aber die Bestätigungs-Mail konnte gerade nicht versendet werden. "
+                 "Bitte versuch es später noch einmal.", status=502)
 
 
 @app.get("/alarm/bestaetigen", response_class=HTMLResponse)
