@@ -25,6 +25,7 @@ import alerts
 from database import get_pool, init_db
 from keepa import enrich_with_keepa
 from scraper import fetch_and_update_deals, AFFILIATE_TAG, classify_category, _affiliate_tag_for
+from scoring import is_catalog_quality
 from scheduler import create_scheduler
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
@@ -1529,6 +1530,14 @@ async def price_page(asin: str):
     def eur(v: float) -> str:
         return (f"{v:.2f}".replace(".", ",") + " €") if v and v > 0 else "—"
 
+    # Indexierbar nur "gutes Zeug": aktiver Deal ODER Katalog-Quality. Dünne
+    # No-Name-Seiten (Ramsch) bekommen noindex → raus aus Google (verhindert
+    # Thin-Content-Abwertung der Domain); erreichbar bleiben sie trotzdem.
+    indexable = is_active or is_catalog_quality(
+        row["rating"] or 0, row["reviews"] or 0, row["brand"] or "", row["name"] or ""
+    )
+    robots = "index, follow" if indexable else "noindex, follow"
+
     canonical = f"https://www.snagga.de/preis/{asin}"
     title = f"{name} — Preisverlauf & Preis-Check | snagga.de"
     desc  = html.escape(
@@ -1661,7 +1670,7 @@ async def price_page(asin: str):
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{title}</title>
 <meta name="description" content="{desc}">
-<meta name="robots" content="index, follow">
+<meta name="robots" content="{robots}">
 <link rel="canonical" href="{canonical}">
 <meta property="og:type" content="website">
 <meta property="og:title" content="{title}">
@@ -2032,11 +2041,20 @@ async def sitemap():
             r["category"] for r in
             await conn.fetch("SELECT DISTINCT category FROM products WHERE is_active=true")
         }
-        # Dauerhafte Preisseiten für ALLE je erfassten Produkte (auch inaktive) —
-        # sie laufen nicht ab und bleiben als SEO-Bestand crawlbar.
-        all_products = await conn.fetch(
-            "SELECT asin, last_updated FROM products ORDER BY is_active DESC, deal_score DESC"
+        # Dauerhafte Preisseiten NUR für "gutes Zeug" (aktive Deals ODER
+        # Katalog-Quality). Dünne No-Name-Seiten (Ramsch) kommen NICHT in die
+        # Sitemap — sie sind zusätzlich per noindex ausgeschlossen (Thin Content
+        # würde sonst Googles Qualitätsbild der Domain drücken).
+        catalog_rows = await conn.fetch(
+            "SELECT asin, last_updated, is_active, rating, reviews, brand, name "
+            "FROM products ORDER BY is_active DESC, deal_score DESC"
         )
+        all_products = [
+            r for r in catalog_rows
+            if r["is_active"] or is_catalog_quality(
+                r["rating"] or 0, r["reviews"] or 0, r["brand"] or "", r["name"] or ""
+            )
+        ]
 
     urls = [
         "  <url><loc>https://www.snagga.de/</loc><changefreq>hourly</changefreq><priority>1.0</priority></url>",

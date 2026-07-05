@@ -10,6 +10,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from scraper import (
     fetch_and_update_deals, nightly_deep_sync, hourly_keepa_price_check,
     post_next_mastodon_deal, post_next_bluesky_deal, check_and_send_price_alerts,
+    catalog_backfill_charts,
 )
 
 SERVICE_URL = os.getenv("RENDER_EXTERNAL_URL", "https://snagga.onrender.com")
@@ -72,6 +73,17 @@ def create_scheduler() -> AsyncIOScheduler:
         nightly_deep_sync,
         CronTrigger(hour=DEEP_SYNC_HOUR, minute=DEEP_SYNC_MINUTE),
         id="nightly_deep_sync",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+
+    # Täglicher /preis-Katalog-Backfill (04:00, nach dem Deep-Sync): chartlose
+    # Quality-/Alarm-Seiten mit echter Preishistorie aufwerten, gedrosselt aufs
+    # Tagesbudget. Ist der Rückstand abgearbeitet, läuft der Job leer.
+    scheduler.add_job(
+        catalog_backfill_charts,
+        CronTrigger(hour=(DEEP_SYNC_HOUR + 1) % 24, minute=0),
+        id="catalog_backfill_charts",
         replace_existing=True,
         misfire_grace_time=3600,
     )

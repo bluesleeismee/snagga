@@ -18,6 +18,7 @@ from keepa import fetch_keepa_deals, enrich_with_keepa, ELECTRONICS_CAT_IDS
 from scoring import (
     CATEGORY_MAX_RANK,
     passes_hard_filters,
+    is_catalog_quality,
     calculate_deal_score,
     determine_tag,
     best_price_since_months,
@@ -855,6 +856,113 @@ async def _recalculate_top_picks():
             await conn.execute(
                 "UPDATE products SET is_top_pick=true WHERE asin = ANY($1)", picks
             )
+
+
+# ---------------------------------------------------------------------------
+# /preis-Katalog-Backfill: chartlose Quality-Seiten mit echter History aufwerten
+# ---------------------------------------------------------------------------
+
+# Tagesbudget an Keepa-Tokens (= ASINs) für den Katalog-Backfill. Jede ASIN
+# kostet ~1 Token (History im Basis-Token). 1500/Tag ≈ 5% des Tagesbudgets;
+# die ~1500 Quality-chartlosen Seiten sind so in 1–2 Tagen aufgewertet.
+CATALOG_BACKFILL_DAILY = int(os.getenv("CATALOG_BACKFILL_DAILY", "1500"))
+
+
+async def catalog_backfill_charts():
+    """
+    Wertet dauerhafte /preis-Seiten OHNE Chart (has_real_history=false) mit echter
+    Keepa-Preishistorie auf — aber NUR "gutes Zeug": Produkte, die die Katalog-
+    Quality-Gate bestehen (bekannte Marke / solide Reviews) ODER für die ein
+    bestätigter Preisalarm existiert (= echte Nutzer-Nachfrage). No-Name-Ramsch
+    ohne Alarm bekommt bewusst keinen Token und bleibt dünn (→ per noindex/Sitemap
+    aus Google draußen, siehe main.py).
+
+    Läuft täglich, gedrosselt auf CATALOG_BACKFILL_DAILY ASINs. Priorität:
+    Alarm-Produkte zuerst, dann Quality nach Review-Zahl (die meistgesuchten).
+    Ist der Rückstand abgearbeitet, macht der Job nichts mehr (leere Auswahl).
+    """
+    print(f"[{datetime.utcnow().isoformat()}] Katalog-Backfill (chartlose Quality-Seiten) …")
+    db  = await get_pool()
+    now = datetime.utcnow()
+
+    async with db.acquire() as conn:
+        # Kandidaten: chartlos. Quality wird in Python entschieden (is_known_brand
+        # braucht Regex-Logik). Alarm-Produkte über LEFT JOIN markieren und
+        # vorziehen. Grosszügig laden (3× Budget), dann in Python filtern/schneiden.
+        rows = await conn.fetch(
+            """
+            SELECT p.asin, p.name, p.brand, p.category, p.rating, p.reviews,
+                   (a.asin IS NOT NULL) AS has_alarm
+            FROM products p
+            LEFT JOIN (
+                SELECT DISTINCT asin FROM price_alerts
+                WHERE confirmed = true AND notified_at IS NULL
+            ) a ON a.asin = p.asin
+            WHERE p.has_real_history = false
+            ORDER BY (a.asin IS NOT NULL) DESC, p.reviews DESC
+            LIMIT $1
+            """,
+            CATALOG_BACKFILL_DAILY * 3,
+        )
+
+    selected: list[str] = []
+    for r in rows:
+        if len(selected) >= CATALOG_BACKFILL_DAILY:
+            break
+        if r["has_alarm"] or is_catalog_quality(
+            r["rating"] or 0, r["reviews"] or 0, r["brand"] or "", r["name"] or ""
+        ):
+            selected.append(r["asin"])
+
+    if not selected:
+        print("  Kein Rückstand — alle Quality-/Alarm-Seiten haben schon einen Chart.")
+        return
+
+    print(f"  {len(selected)} chartlose Quality-/Alarm-ASINs → History holen …")
+    keepa_data = await enrich_with_keepa(selected, domain=3)
+
+    filled = 0
+    async with db.acquire() as conn:
+        for asin, kd in keepa_data.items():
+            hist = kd.get("history") or []
+            if not hist:
+                continue
+            hist_prices = [pr for pr, _ in hist if pr and pr > 0]
+            atl_candidates = [v for v in (kd["all_time_low"], kd["current_price"],
+                                          (min(hist_prices) if hist_prices else None)) if v and v > 0]
+            atl = min(atl_candidates) if atl_candidates else kd["current_price"]
+
+            # Preis-Eckdaten auffrischen (kostenlos im selben Request) + History setzen.
+            await conn.execute("""
+                UPDATE products SET
+                    current_price = $2,
+                    all_time_low  = $3,
+                    avg_price     = $4,
+                    avg90_price   = $5,
+                    avg180_price  = $6,
+                    rating        = $7,
+                    reviews       = $8,
+                    sales_rank    = $9,
+                    last_checked  = $10,
+                    image_url     = CASE WHEN $11 != '' THEN $11 ELSE image_url END,
+                    brand         = CASE WHEN $12 != '' THEN $12 ELSE brand END
+                WHERE asin = $1
+            """,
+                asin, kd["current_price"], atl, kd["avg_price"],
+                kd["avg90_price"], kd["avg180_price"], kd["rating"], kd["reviews"],
+                kd["sales_rank"], now, kd["image_url"], (kd.get("brand") or ""),
+            )
+            await conn.execute("DELETE FROM price_history WHERE asin=$1", asin)
+            await conn.executemany(
+                "INSERT INTO price_history (asin, price, timestamp) VALUES ($1,$2,$3)",
+                [(asin, pr, ts) for pr, ts in hist[-2000:]],
+            )
+            await conn.execute(
+                "UPDATE products SET has_real_history=true WHERE asin=$1", asin
+            )
+            filled += 1
+
+    print(f"  Katalog-Backfill fertig: {filled} Seiten mit echtem Chart aufgewertet.")
 
 
 # ---------------------------------------------------------------------------

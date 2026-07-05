@@ -294,6 +294,30 @@ def passes_hard_filters(
     return True
 
 
+def is_catalog_quality(
+    rating:  float,
+    reviews: int,
+    brand:   str = "",
+    title:   str = "",
+) -> bool:
+    """
+    "Gutes Zeug"-Gate für den dauerhaften /preis-Katalog — bewusst OHNE
+    Rabatt-Bedingung (anders als passes_hard_filters). Ein Bestseller lohnt
+    eine crawlbare Preisseite, auch wenn er gerade zum Normalpreis steht:
+    Leute suchen den Produktnamen, nicht "Deal". Entscheidend ist Nachfrage +
+    Seriosität, nicht der Tagespreis.
+
+    Kriterien: Neuware (kein Gebraucht/B-Ware), ≥4.0★, ≥100 Reviews UND
+    (bekannte Marke ODER ≥4.3★ mit ≥500 Reviews). No-Name mit dünner
+    Review-Basis fällt raus → kein Keepa-Token, keine Thin-Content-Seite.
+    """
+    if is_excluded_condition(title):
+        return False
+    if rating < 4.0 or reviews < 100:
+        return False
+    return is_known_brand(brand, title) or (rating >= 4.3 and reviews >= 500)
+
+
 # ---------------------------------------------------------------------------
 # Deal-Score
 # ---------------------------------------------------------------------------
