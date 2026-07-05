@@ -24,7 +24,7 @@ load_dotenv()
 import alerts
 from database import get_pool, init_db
 from keepa import enrich_with_keepa
-from scraper import fetch_and_update_deals, AFFILIATE_TAG
+from scraper import fetch_and_update_deals, AFFILIATE_TAG, classify_category, _affiliate_tag_for
 from scheduler import create_scheduler
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
@@ -1395,6 +1395,14 @@ async def preis_check(request: Request, q: str = Query(default="")):
                              "finden — möglicherweise ist es nicht (mehr) auf amazon.de gelistet.</p>",
                              status=404)
 
+        # Kategorie aus rootCat + Titel bestimmen (statt hart "Sonstiges"). Fällt
+        # die Klassifikation aus (Junk-rootCat/kein Keyword-Match), bleibt es
+        # "Sonstiges" — die Seite existiert trotzdem, nur ohne Kategorie-Einordnung.
+        category = classify_category(kd["title"] or "", kd.get("root_cat") or 0) or "Sonstiges"
+        # Affiliate-Tag passend zur Kategorie (getaggte Kategorie → eigener
+        # Tracking-Tag, sonst snagga-Standardtag).
+        aff_tag = _affiliate_tag_for(category)
+
         # Dauerhaft aufnehmen: is_active=false (kein Deal), aber /preis/-Seite
         # existiert ab jetzt für immer und wandert in die Sitemap.
         now  = datetime.utcnow()
@@ -1418,11 +1426,11 @@ async def preis_check(request: Request, q: str = Query(default="")):
                 ON CONFLICT (asin) DO NOTHING
             """,
                 asin, (kd["title"] or "Produkt")[:200], kd.get("brand") or "",
-                kd["image_url"], "Sonstiges",
+                kd["image_url"], category,
                 kd["current_price"], kd["original_price"], atl, kd["avg_price"],
                 kd["avg90_price"] or 0.0, kd["avg180_price"] or 0.0,
                 0, kd["rating"], kd["reviews"], True,
-                now, now, f"https://www.amazon.de/dp/{asin}?tag={AFFILIATE_TAG}",
+                now, now, f"https://www.amazon.de/dp/{asin}?tag={aff_tag}",
                 kd["is_fba"], kd["sales_rank"] or 0,
             )
             if hist:
@@ -2238,6 +2246,12 @@ async def debug_keepa_raw(asin: str, token: str = Query(default="")):
         "csv_history_points_by_index": csv_points,
         "stats_current_by_index": cur_vals,
         "read_by_parse_product": "History+Preis nur aus 18/0/1 — alles andere wird ignoriert",
+        "rootCategory": p.get("rootCategory"),
+        "categoryTree": p.get("categoryTree"),
+        "imagesCSV": p.get("imagesCSV"),
+        "image_field": p.get("image"),
+        "title": (p.get("title") or "")[:80],
+        "brand": p.get("brand"),
     }
 
 

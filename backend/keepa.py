@@ -307,10 +307,16 @@ def _parse_product(p: dict) -> dict | None:
     if original_price < current_price:
         original_price = round(current_price * 1.20, 2)
 
-    # Bild
+    # Bild: bevorzugt aus imagesCSV (Dateiname), sonst generischer P/{asin}-
+    # Fallback aus der ASIN (identisch zu _parse_deal). Ohne Fallback lieferte
+    # der On-the-fly-Preis-Check bei leerem imagesCSV eine leere URL → auf der
+    # /preis-Seite erschien nur das Favicon statt eines echten Produktbilds.
     imgs = p.get("imagesCSV") or ""
     first = imgs.split(",")[0].strip() if imgs else ""
-    image_url = f"https://images-na.ssl-images-amazon.com/images/I/{first}" if first else ""
+    if first:
+        image_url = f"https://images-na.ssl-images-amazon.com/images/I/{first}"
+    else:
+        image_url = f"https://images-na.ssl-images-amazon.com/images/P/{asin}.01.LZZZZZZZ.jpg"
 
     # Rating
     r_raw  = p.get("rating") or 0
@@ -348,6 +354,7 @@ def _parse_product(p: dict) -> dict | None:
         "is_fba":         is_fba,
         "prime":          True,
         "history":        history,
+        "root_cat":       p.get("rootCategory") or 0,
     }
 
 
