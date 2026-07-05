@@ -1189,13 +1189,15 @@ def _compute_detail(row, hist_rows) -> dict:
         atl = current
     verdict, vcolor, vreason = _price_verdict(current, avg90, atl)
     # Chart nur mit verifizierter Keepa-Historie — nie erfundene Kurven zeigen.
-    # Default: letzte 365 Tage (endet beim aktuellen Preis). Zusätzlich die
-    # gesamte History für den "alles anzeigen"-Umschalter.
+    # Drei Zeitfenster für den 90/365/Gesamt-Umschalter auf der Preisseite;
+    # chart_svg (=365 Tage) und chart_svg_full bleiben unverändert, damit das
+    # bestehende Modal-Chart-Umschalten (React) unangetastet weiterläuft.
     if row["has_real_history"]:
+        chart_svg_90   = _price_chart_svg(points, avg90, atl, current=current, days=90)
         chart_svg      = _price_chart_svg(points, avg90, atl, current=current, days=365)
         chart_svg_full = _price_chart_svg(points, avg90, atl, current=current)
     else:
-        chart_svg = chart_svg_full = ""
+        chart_svg_90 = chart_svg = chart_svg_full = ""
     # Umschalter nur zeigen, wenn es History älter als 365 Tage gibt.
     has_more = False
     if row["has_real_history"] and points:
@@ -1211,7 +1213,7 @@ def _compute_detail(row, hist_rows) -> dict:
     return {
         "current": current, "avg90": avg90, "avg180": avg180, "atl": atl,
         "verdict": verdict, "vcolor": vcolor, "vreason": vreason,
-        "chart_svg": chart_svg, "chart_svg_full": chart_svg_full,
+        "chart_svg_90": chart_svg_90, "chart_svg": chart_svg, "chart_svg_full": chart_svg_full,
         "has_more_history": has_more, "suggested": suggested,
         "is_active": bool(row["is_active"]) if "is_active" in row.keys() else True,
     }
@@ -1512,9 +1514,9 @@ async def price_page(asin: str):
     detail = _compute_detail(row, hist)
     current, avg90, avg180, atl = detail["current"], detail["avg90"], detail["avg180"], detail["atl"]
     verdict, vcolor, vreason    = detail["verdict"], detail["vcolor"], detail["vreason"]
+    chart_svg_90                = detail["chart_svg_90"]
     chart_svg                   = detail["chart_svg"]
     chart_svg_full              = detail["chart_svg_full"]
-    has_more_history            = detail["has_more_history"]
 
     def eur(v: float) -> str:
         return (f"{v:.2f}".replace(".", ",") + " €") if v and v > 0 else "—"
@@ -1613,25 +1615,34 @@ async def price_page(asin: str):
     cat_link = (f'<p><a class="back" href="https://www.snagga.de/kategorie/{cat_slug}">{_arrow_icon("left")} Alle {cat_esc}-Deals</a></p>'
                 if cat_slug else "")
 
-    if chart_svg and has_more_history:
-        # Default: 365 Tage. Button blendet ohne Reload die gesamte History ein.
-        _toggle_btn = (
-            '<button type="button" onclick="'
-            "var f=document.getElementById('chart-full'),s=document.getElementById('chart-365');"
-            "if(f.style.display==='none'){f.style.display='';s.style.display='none';this.textContent='Letzte 365 Tage anzeigen';}"
-            "else{f.style.display='none';s.style.display='';this.textContent='Gesamte Preishistorie anzeigen';}"
-            '" style="margin-top:10px;background:none;border:1px solid #EAE6E1;color:#153D68;'
-            'padding:7px 14px;font-size:13px;cursor:pointer">Gesamte Preishistorie anzeigen</button>'
+    # Zeitraum-Umschalter: 90 Tage (Default, passt zum Ø90-Text) / 1 Jahr / Gesamt.
+    # Tabs nur zeigen, wenn sich die Fenster tatsächlich unterscheiden — bei kurzer
+    # History liefert _price_chart_svg für alle drei Fenster dieselbe Kurve.
+    _chart_windows = [("90", "90 Tage", chart_svg_90), ("365", "1 Jahr", chart_svg), ("full", "Gesamt", chart_svg_full)]
+    _distinct = len({svg for _, _, svg in _chart_windows if svg})
+    if chart_svg_90 and _distinct > 1:
+        _tabs = "".join(
+            f'<button type="button" class="chart-tab{" active" if key == "90" else ""}" '
+            f'data-target="chart-{key}" onclick="snaggaChartTab(this)">{label}</button>'
+            for key, label, _ in _chart_windows
+        )
+        _panels = "".join(
+            f'<div id="chart-{key}" style="{"" if key == "90" else "display:none"}">{svg}</div>'
+            for key, _, svg in _chart_windows
         )
         chart_block = (
-            '<div class="chart">'
-            f'<div id="chart-365">{chart_svg}</div>'
-            f'<div id="chart-full" style="display:none">{chart_svg_full}</div>'
-            + _toggle_btn +
-            '</div>'
+            f'<div class="chart"><div class="chart-tabs">{_tabs}</div>{_panels}</div>'
+            "<script>function snaggaChartTab(btn){"
+            "var bar=btn.parentElement;"
+            "Array.prototype.forEach.call(bar.querySelectorAll('.chart-tab'),function(t){t.classList.remove('active')});"
+            "btn.classList.add('active');"
+            "['90','365','full'].forEach(function(k){"
+            "var el=document.getElementById('chart-'+k);"
+            "if(el)el.style.display=(btn.dataset.target==='chart-'+k)?'':'none';"
+            "});}</script>"
         )
-    elif chart_svg:
-        chart_block = f'<div class="chart">{chart_svg}</div>'
+    elif chart_svg_90:
+        chart_block = f'<div class="chart">{chart_svg_90}</div>'
     else:
         chart_block = '<p class="nochart">Der geprüfte Preisverlauf für dieses Produkt wird gerade aufgebaut — schau bald wieder vorbei.</p>'
 
@@ -1656,10 +1667,11 @@ async def price_page(asin: str):
   main {{ max-width:1840px; width:98%; margin:0 auto; padding:32px 0; }}
   h1 {{ font-size:24px; line-height:1.35; margin:0 0 20px; }}
   h2 {{ font-size:19px; margin:36px 0 8px; }}
-  .top {{ display:grid; grid-template-columns:260px 1fr; gap:28px; align-items:start; }}
-  @media (max-width:640px) {{ .top {{ grid-template-columns:1fr; }} }}
-  .prod-img {{ background:#fff; border:1px solid #EAE6E1; padding:20px; display:flex; align-items:center; justify-content:center; }}
-  .prod-img img {{ max-width:100%; max-height:200px; object-fit:contain; }}
+  .layout {{ display:grid; grid-template-columns:1.15fr 1fr; gap:28px; align-items:start; }}
+  @media (max-width:820px) {{ .layout {{ grid-template-columns:1fr; }} }}
+  .col-left h2:first-child, .col-right h2:first-child {{ margin-top:0; }}
+  .prod-img {{ background:#fff; border:1px solid #EAE6E1; padding:14px; display:flex; align-items:center; justify-content:center; margin-bottom:16px; }}
+  .prod-img img {{ max-width:100%; max-height:150px; object-fit:contain; }}
   .verdict {{ border-left:5px solid {vcolor}; background:#fff; padding:16px 20px; margin-bottom:16px; }}
   .verdict .v-head {{ font-size:13px; color:#7E7A75; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px; }}
   .verdict .v-label {{ font-size:24px; font-weight:800; color:{vcolor}; }}
@@ -1670,7 +1682,10 @@ async def price_page(asin: str):
   .cta-note {{ font-size:12px; color:#7E7A75; margin:8px 0 0; }}
   .chart {{ background:#fff; border:1px solid #EAE6E1; padding:20px 18px; margin:8px 0 20px; }}
   .nochart {{ background:#fff; border:1px solid #EAE6E1; padding:20px; color:#7E7A75; font-size:14px; }}
-  table.stats {{ width:100%; border-collapse:collapse; background:#fff; border:1px solid #EAE6E1; }}
+  .chart-tabs {{ display:flex; gap:8px; margin-bottom:14px; }}
+  .chart-tab {{ background:none; border:1px solid #EAE6E1; color:#153D68; padding:7px 16px; font-size:13px; font-family:inherit; cursor:pointer; }}
+  .chart-tab.active {{ background:#153D68; color:#fff; border-color:#153D68; font-weight:600; }}
+  table.stats {{ width:100%; border-collapse:collapse; background:#fff; border:1px solid #EAE6E1; margin-top:20px; }}
   table.stats td {{ padding:11px 16px; border-bottom:1px solid #EFEBE6; font-size:14px; }}
   table.stats tr:last-child td {{ border-bottom:none; }}
   table.stats td:first-child {{ color:#4A4845; }}
@@ -1695,20 +1710,20 @@ async def price_page(asin: str):
 {_SITE_HEADER_HTML}
 <main>
 <h1>{name}</h1>
-<div class="top">
-  <div class="prod-img"><img src="{image}" alt="{name}"></div>
-  <div>
+<div class="layout">
+  <div class="col-left">
+    <h2>Preisverlauf</h2>
+    {chart_block}
+  </div>
+  <div class="col-right">
+    <div class="prod-img"><img src="{image}" alt="{name}"></div>
     {verdict_block}
     {cta}
     <p class="cta-note">* Affiliate-Hinweis: Als Amazon-Partner verdienen wir an qualifizierten Käufen — für dich entstehen keine Mehrkosten. Der angezeigte Preis kann abweichen; massgeblich ist der Preis bei Amazon zum Kaufzeitpunkt.</p>
+    <h2>Preis-Eckdaten</h2>
+    <table class="stats">{stats_rows}</table>
   </div>
 </div>
-
-<h2>Preisverlauf</h2>
-{chart_block}
-
-<h2>Preis-Eckdaten</h2>
-<table class="stats">{stats_rows}</table>
 
 {alert_form}
 
