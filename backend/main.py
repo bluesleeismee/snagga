@@ -1667,9 +1667,9 @@ async def price_page(asin: str):
   main {{ max-width:1840px; width:98%; margin:0 auto; padding:32px 0; }}
   h1 {{ font-size:24px; line-height:1.35; margin:0 0 20px; }}
   h2 {{ font-size:19px; margin:36px 0 8px; }}
-  .layout {{ display:grid; grid-template-columns:1fr 1.15fr; gap:28px; align-items:start; }}
-  @media (max-width:820px) {{ .layout {{ grid-template-columns:1fr; }} }}
-  .col-right h2:first-child {{ margin-top:0; }}
+  .layout {{ display:grid; grid-template-columns:1fr 1.15fr; grid-template-rows:auto auto; grid-auto-flow:column; column-gap:28px; row-gap:36px; align-items:start; }}
+  @media (max-width:820px) {{ .layout {{ grid-template-columns:1fr; grid-auto-flow:row; }} }}
+  .col-right-top h2:first-child, .col-left-bottom h2:first-child, .col-right-bottom h2:first-child {{ margin-top:0; }}
   .prod-img {{ background:#fff; border:1px solid #EAE6E1; padding:14px; display:flex; align-items:center; justify-content:center; margin-bottom:16px; }}
   .prod-img img {{ max-width:100%; max-height:150px; object-fit:contain; }}
   .verdict {{ border-left:5px solid {vcolor}; background:#fff; padding:16px 20px; margin-bottom:16px; }}
@@ -1685,7 +1685,7 @@ async def price_page(asin: str):
   .chart-tabs {{ display:flex; gap:8px; margin-bottom:14px; }}
   .chart-tab {{ background:none; border:1px solid #EAE6E1; color:#153D68; padding:7px 16px; font-size:13px; font-family:inherit; cursor:pointer; }}
   .chart-tab.active {{ background:#153D68; color:#fff; border-color:#153D68; font-weight:600; }}
-  table.stats {{ width:100%; border-collapse:collapse; background:#fff; border:1px solid #EAE6E1; margin-top:20px; }}
+  table.stats {{ width:100%; border-collapse:collapse; background:#fff; border:1px solid #EAE6E1; margin-top:8px; }}
   table.stats td {{ padding:11px 16px; border-bottom:1px solid #EFEBE6; font-size:14px; }}
   table.stats tr:last-child td {{ border-bottom:none; }}
   table.stats td:first-child {{ color:#4A4845; }}
@@ -1710,17 +1710,21 @@ async def price_page(asin: str):
 {_SITE_HEADER_HTML}
 <main>
 <div class="layout">
-  <div class="col-left">
+  <div class="col-left-top">
     <div class="prod-img"><img src="{image}" alt="{name}"></div>
     <h1>{name}</h1>
     {cta}
     <p class="cta-note">* Affiliate-Hinweis: Als Amazon-Partner verdienen wir an qualifizierten Käufen — für dich entstehen keine Mehrkosten. Der angezeigte Preis kann abweichen; massgeblich ist der Preis bei Amazon zum Kaufzeitpunkt.</p>
+  </div>
+  <div class="col-left-bottom">
     {alert_form}
   </div>
-  <div class="col-right">
+  <div class="col-right-top">
     {verdict_block}
     <h2>Preisverlauf</h2>
     {chart_block}
+  </div>
+  <div class="col-right-bottom">
     <h2>Preis-Eckdaten</h2>
     <table class="stats">{stats_rows}</table>
   </div>
