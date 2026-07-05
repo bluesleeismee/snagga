@@ -379,18 +379,40 @@ _CARD_CSS = """
   .card-share.copied .icon-check { display:inline-block; }
 """
 
-# Einheitlicher Header für die Produktseiten (/preis, /deal) — Logo/Breite
-# 1:1 aus dem React-Header (DealsPage.jsx) übernommen, damit sich diese
-# SSR-Seiten wie Teil der App anfühlen statt wie separate Mini-Sites.
+# Einheitlicher Header für ALLE SSR-Seiten — Logo/Breite 1:1 aus dem
+# React-Header (DealsPage.jsx) übernommen, damit sich die SSR-Seiten wie
+# Teil der App anfühlen. Rechts-Slot (space-between) für optionale Aktionen
+# wie "Zur Startseite" auf Utility-Antwortseiten.
 _SITE_HEADER_CSS = """
   header { background:#153D68; height:72px; }
-  .site-header-wrap { max-width:1840px; width:98%; margin:0 auto; height:100%; display:flex; align-items:center; }
+  .site-header-wrap { max-width:1840px; width:98%; margin:0 auto; height:100%; display:flex; align-items:center; justify-content:space-between; }
   .site-header-wrap a.logo { color:#EDE9E3; font-size:28px; font-weight:800; letter-spacing:-0.5px; text-decoration:none; }
   @media (max-width:639px) { .site-header-wrap a.logo { font-size:22px; } }
+  .site-header-right a { color:#EDE9E3; font-size:14px; text-decoration:none; padding:8px 16px; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.08); transition:background 0.15s; }
+  .site-header-right a:hover { background:rgba(255,255,255,0.18); }
   .accent { color:#C85E43; }
 """
 
-_SITE_HEADER_HTML = '<header><div class="site-header-wrap"><a class="logo" href="https://www.snagga.de/">snagga<span class="accent">.de</span></a></div></header>'
+
+def _site_header(right_html: str = "") -> str:
+    return ('<header><div class="site-header-wrap">'
+            '<a class="logo" href="https://www.snagga.de/">snagga<span class="accent">.de</span></a>'
+            f'<div class="site-header-right">{right_html}</div>'
+            '</div></header>')
+
+
+# Rückwärtskompatibler Alias — Aufrufe ohne Rechts-Slot.
+_SITE_HEADER_HTML = _site_header()
+
+# Kleines Balken-Chart-Icon (Punkt C) für den "Preisverlauf"-Cue in Listen.
+_CHART_ICON = ('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" '
+               'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
+               'style="vertical-align:-2px">'
+               '<line x1="4" y1="20" x2="20" y2="20"/>'
+               '<rect x="6" y="12" width="3" height="8"/>'
+               '<rect x="11" y="7" width="3" height="13"/>'
+               '<rect x="16" y="14" width="3" height="6"/>'
+               '</svg>')
 
 # Vanilla JS fürs Teilen auf statischen SSR-Kacheln (Kategorie-Seite, "Ähnliche
 # Deals") — dort gibt es kein React, daher eigenständige Klick-Logik statt
@@ -577,16 +599,14 @@ def _not_found_page(message: str) -> HTMLResponse:
 <meta name="robots" content="noindex, follow">
 <style>
   body {{ font-family: system-ui, sans-serif; background:#F2EFEA; color:#1F1E1D; margin:0; }}
-  header {{ background:#153D68; padding:16px 20px; }}
-  header a {{ color:#EDE9E3; font-size:22px; font-weight:800; text-decoration:none; }}
-  header .accent {{ color:#C85E43; }}
+  {_SITE_HEADER_CSS}
   main {{ max-width:640px; margin:0 auto; padding:60px 20px; text-align:center; }}
   h1 {{ font-size:24px; margin-bottom:8px; }}
   .back {{ display:inline-block; margin-top:20px; background:#C85E43; color:#fff; padding:14px 28px; border-radius:4px; text-decoration:none; font-weight:700; }}
 </style>
 </head>
 <body>
-<header><a href="https://www.snagga.de/">snagga<span class="accent">.de</span></a></header>
+{_SITE_HEADER_HTML}
 <main>
 <h1>404 — {message}</h1>
 <p>Diese Seite gibt es nicht (mehr).</p>
@@ -970,9 +990,7 @@ async def category_page(slug: str):
 {ld_script}
 <style>
   body {{ font-family: system-ui, sans-serif; background:#FAF8F5; color:#1F1E1D; margin:0; }}
-  header {{ background:#153D68; padding:16px 24px; }}
-  header a {{ color:#EDE9E3; font-size:22px; font-weight:800; text-decoration:none; }}
-  header .accent {{ color:#C85E43; }}
+  {_SITE_HEADER_CSS}
   main {{ max-width:1840px; width:98%; margin:0 auto; padding:32px 0; }}
   h1 {{ font-size:26px; margin-bottom:4px; }}
   .cat-intro {{ font-size:15px; line-height:1.6; color:#3a3a3a; margin:12px 0 28px; }}
@@ -984,7 +1002,7 @@ async def category_page(slug: str):
 {_CARD_SHARE_JS}
 </head>
 <body>
-<header><a href="https://www.snagga.de/">snagga<span class="accent">.de</span></a></header>
+{_SITE_HEADER_HTML}
 <main>
 <h1>{cat_esc} Angebote</h1>
 {intro_html}
@@ -1331,29 +1349,26 @@ def _pc_shell(title_txt: str, body_html: str, status: int = 200) -> HTMLResponse
 <style>
   body {{ font-family: system-ui, sans-serif; background:#F2EFEA; color:#1F1E1D; margin:0; }}
   {_SITE_HEADER_CSS}
-  main {{ max-width:820px; width:98%; margin:0 auto; padding:32px 0 48px; }}
-  h1 {{ font-size:24px; margin-bottom:10px; }}
+  main {{ max-width:1840px; width:98%; margin:0 auto; padding:32px 0 48px; }}
+  h1 {{ font-size:24px; margin-bottom:16px; }}
   p  {{ line-height:1.6; color:#3a3a3a; }}
-  .results a {{ display:flex; gap:14px; align-items:center; background:#fff; border:1px solid #EAE6E1;
-               padding:12px 16px; margin-bottom:10px; text-decoration:none; color:#1F1E1D; }}
+  .results a {{ display:flex; gap:16px; align-items:center; background:#fff; border:1px solid #EAE6E1;
+               padding:14px 18px; margin-bottom:10px; text-decoration:none; color:#1F1E1D; }}
   .results a:hover {{ border-color:#153D68; }}
-  .results img {{ width:52px; height:52px; object-fit:contain; flex-shrink:0; }}
-  .results .r-main {{ min-width:0; flex:1; }}
-  .results .r-name {{ font-size:14px; font-weight:600; line-height:1.4; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
-  .results .r-tag {{ display:inline-block; font-size:12px; color:#1E7A3C; margin-top:3px; }}
-  .results .r-side {{ margin-left:auto; text-align:right; flex-shrink:0; }}
-  .results .r-price {{ font-weight:700; white-space:nowrap; }}
-  .results .r-cue {{ font-size:12px; color:#7E7A75; }}
-  .back {{ display:inline-block; margin-top:20px; background:#C85E43; color:#fff; padding:13px 26px;
-          border-radius:4px; text-decoration:none; font-weight:700; }}
-  .hint {{ background:#fff; border:1px solid #EAE6E1; padding:14px 18px; font-size:14px; margin-top:18px; }}
+  .results img {{ width:56px; height:56px; object-fit:contain; flex-shrink:0; }}
+  .results .r-main {{ min-width:0; flex:1 1 auto; overflow:hidden; }}
+  .results .r-name {{ font-size:15px; font-weight:600; line-height:1.4; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
+  .results .r-tag {{ display:inline-block; font-size:12px; color:#1E7A3C; margin-top:4px; }}
+  .results .r-side {{ display:flex; flex-direction:column; align-items:flex-end; gap:2px; margin-left:16px; flex-shrink:0; text-align:right; min-width:120px; }}
+  .results .r-price {{ font-size:15px; font-weight:700; white-space:nowrap; }}
+  .results .r-cue {{ display:inline-flex; align-items:center; gap:5px; font-size:12px; color:#153D68; }}
+  .hint {{ background:#fff; border:1px solid #EAE6E1; padding:14px 18px; font-size:14px; margin-top:18px; max-width:820px; }}
 </style>
 </head>
 <body>
-{_SITE_HEADER_HTML}
+{_site_header('<a href="https://www.snagga.de/">Zur Startseite</a>')}
 <main>
 {body_html}
-<a class="back" href="https://www.snagga.de/">Zur Startseite</a>
 </main>
 </body>
 </html>""")
@@ -1448,16 +1463,23 @@ async def preis_check(request: Request, q: str = Query(default="")):
                 )
         return RedirectResponse(f"https://www.snagga.de/preis/{asin}", status_code=302)
 
-    # Kein Link/keine ASIN → Namenssuche im eigenen (bereinigten) Bestand. Immer
-    # als Liste anzeigen — auch bei einem Treffer, damit der Nutzer Urteil/Preis
-    # sieht, bevor er klickt (der Klick auf /preis trägt den Affiliate-Link).
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            "SELECT asin, name, brand, image_url, current_price, tag FROM products "
-            "WHERE name ILIKE '%' || $1 || '%' OR brand ILIKE '%' || $1 || '%' "
-            "ORDER BY is_active DESC, has_real_history DESC, deal_score DESC LIMIT 12",
-            q[:80],
+    # Kein Link/keine ASIN → Namenssuche im eigenen (bereinigten) Bestand.
+    # Tokenized: jedes Wort muss im Namen ODER in der Marke vorkommen — "Sandisk USB"
+    # findet auch "SANDISK Phone Drive mit USB Type-C" (die alte %ganzer-string%-
+    # Suche fand nichts, weil die Wörter im Titel nicht direkt aufeinander folgen).
+    tokens = [t for t in re.split(r"\s+", q[:80].strip()) if t][:6]
+    if tokens:
+        conds = " AND ".join(
+            f"(name ILIKE '%' || ${i+1} || '%' OR brand ILIKE '%' || ${i+1} || '%')"
+            for i in range(len(tokens))
         )
+        sql = (f"SELECT asin, name, brand, image_url, current_price, tag FROM products "
+               f"WHERE {conds} "
+               f"ORDER BY is_active DESC, has_real_history DESC, deal_score DESC LIMIT 12")
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(sql, *tokens)
+    else:
+        rows = []
 
     def _result_item(r) -> str:
         img = f'<img src="{html.escape(r["image_url"])}" alt="" loading="lazy">' if r["image_url"] else ""
@@ -1469,7 +1491,7 @@ async def preis_check(request: Request, q: str = Query(default="")):
             price = f'<span class="r-price">{price_txt} €</span>'
         return (f'<a href="https://www.snagga.de/preis/{r["asin"]}">{img}'
                 f'<span class="r-main"><span class="r-name">{name}</span>{tag}</span>'
-                f'<span class="r-side">{price}<span class="r-cue">Preisverlauf ansehen ›</span></span></a>')
+                f'<span class="r-side">{price}<span class="r-cue">{_CHART_ICON} Preisverlauf</span></span></a>')
 
     q_esc = html.escape(q[:60])
     if rows:
@@ -1583,14 +1605,15 @@ async def price_page(asin: str):
     else:
         verdict_block = ''
 
-    # CTA je nach Deal-Status
+    # CTA je nach Deal-Status. Kein Pfeil-Icon im Button (David-Wunsch: sauber
+    # ohne Zusätze). "Aktiver Deal"-Nachsatz entfernt — der Kontext ergibt sich
+    # aus dem Urteil-Badge darüber.
     if is_active and current > 0:
         cta = (f'<a class="cta cta-buy" href="{affiliate}" target="_blank" rel="nofollow noopener sponsored">'
-               f'Zum Angebot bei Amazon {_arrow_icon("right")}</a>'
-               f'<p class="cta-note">Aktiver Deal — Preis zuletzt bestätigt.</p>')
+               f'Zum Angebot bei Amazon</a>')
     elif fresh_check and current > 0:
         cta = (f'<a class="cta cta-buy" href="{affiliate}" target="_blank" rel="nofollow noopener sponsored">'
-               f'Bei Amazon ansehen {_arrow_icon("right")}</a>'
+               f'Bei Amazon ansehen</a>'
                f'<p class="cta-note">Preis frisch geprüft — kein kuratierter Deal, aber die Zahlen oben sind aktuell.</p>')
     else:
         cta = ('<p class="cta-note" style="margin-top:0">Dieses Produkt ist gerade kein aktiver Deal. '
@@ -1689,11 +1712,13 @@ async def price_page(asin: str):
   main {{ max-width:1840px; width:98%; margin:0 auto; padding:32px 0; }}
   h1 {{ font-size:24px; line-height:1.35; margin:0 0 20px; }}
   h2 {{ font-size:19px; margin:36px 0 8px; }}
-  .layout {{ display:grid; grid-template-columns:1fr 1.15fr; grid-template-rows:auto auto; grid-auto-flow:column; column-gap:28px; row-gap:36px; align-items:start; }}
+  .layout {{ display:grid; grid-template-columns:1fr 1.15fr; grid-template-rows:auto auto; grid-auto-flow:column; column-gap:28px; row-gap:36px; align-items:stretch; }}
   @media (max-width:820px) {{ .layout {{ grid-template-columns:1fr; grid-auto-flow:row; }} }}
+  .col-left-top {{ display:flex; flex-direction:column; }}
   .col-right-top h2:first-child, .col-left-bottom h2:first-child, .col-right-bottom h2:first-child {{ margin-top:0; }}
-  .prod-img {{ background:#fff; border:1px solid #EAE6E1; padding:14px; display:flex; align-items:center; justify-content:center; margin-bottom:16px; }}
-  .prod-img img {{ max-width:100%; max-height:150px; object-fit:contain; }}
+  .prod-img {{ background:#fff; border:1px solid #EAE6E1; padding:18px; display:flex; align-items:center; justify-content:center; margin-bottom:16px; }}
+  .prod-img img {{ max-width:100%; max-height:280px; object-fit:contain; }}
+  .cta-note-bottom {{ margin-top:auto; }}
   .verdict {{ border-left:5px solid {vcolor}; background:#fff; padding:16px 20px; margin-bottom:16px; }}
   .verdict .v-head {{ font-size:13px; color:#7E7A75; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px; }}
   .verdict .v-label {{ font-size:24px; font-weight:800; color:{vcolor}; }}
@@ -1736,7 +1761,7 @@ async def price_page(asin: str):
     <div class="prod-img"><img src="{image}" alt="{name}"></div>
     <h1>{name}</h1>
     {cta}
-    <p class="cta-note">* Affiliate-Hinweis: Als Amazon-Partner verdienen wir an qualifizierten Käufen — für dich entstehen keine Mehrkosten. Der angezeigte Preis kann abweichen; massgeblich ist der Preis bei Amazon zum Kaufzeitpunkt.</p>
+    <p class="cta-note cta-note-bottom">* Affiliate-Hinweis: Als Amazon-Partner verdienen wir an qualifizierten Käufen — für dich entstehen keine Mehrkosten. Der angezeigte Preis kann abweichen; massgeblich ist der Preis bei Amazon zum Kaufzeitpunkt.</p>
   </div>
   <div class="col-left-bottom">
     {alert_form}
@@ -1775,9 +1800,7 @@ def _simple_page(heading: str, body_html: str, status: int = 200) -> HTMLRespons
 <meta name="robots" content="noindex, follow">
 <style>
   body {{ font-family: system-ui, sans-serif; background:#FAF8F5; color:#1F1E1D; margin:0; }}
-  header {{ background:#153D68; padding:16px 24px; }}
-  header a {{ color:#EDE9E3; font-size:22px; font-weight:800; text-decoration:none; }}
-  header .accent {{ color:#C85E43; }}
+  {_SITE_HEADER_CSS}
   main {{ max-width:620px; margin:0 auto; padding:48px 20px; }}
   h1 {{ font-size:24px; }}
   p {{ font-size:15px; line-height:1.6; color:#4A4845; }}
@@ -1785,7 +1808,7 @@ def _simple_page(heading: str, body_html: str, status: int = 200) -> HTMLRespons
 </style>
 </head>
 <body>
-<header><a href="https://www.snagga.de/">snagga<span class="accent">.de</span></a></header>
+{_SITE_HEADER_HTML}
 <main>
 <h1>{heading}</h1>
 {body_html}
@@ -1981,9 +2004,7 @@ async def prime_day_page():
 {ld_script}
 <style>
   body {{ font-family: system-ui, sans-serif; background:#FAF8F5; color:#1F1E1D; margin:0; }}
-  header {{ background:#153D68; padding:16px 24px; }}
-  header a {{ color:#EDE9E3; font-size:22px; font-weight:800; text-decoration:none; }}
-  header .accent {{ color:#C85E43; }}
+  {_SITE_HEADER_CSS}
   main {{ max-width:1840px; width:98%; margin:0 auto; padding:32px 0; }}
   h1 {{ font-size:28px; margin-bottom:4px; }}
   h2 {{ font-size:21px; margin-top:40px; }}
@@ -2000,7 +2021,7 @@ async def prime_day_page():
 {_CARD_SHARE_JS}
 </head>
 <body>
-<header><a href="https://www.snagga.de/">snagga<span class="accent">.de</span></a></header>
+{_SITE_HEADER_HTML}
 <main>
 <h1>Prime Day 2026: Nur echte Deals</h1>
 <p class="lead">Am Prime Day glänzen viele Rabatte nur auf dem Papier: Der „−40%"-Streichpreis
