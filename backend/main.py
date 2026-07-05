@@ -952,7 +952,7 @@ async def category_page(slug: str):
   header .accent {{ color:#C85E43; }}
   main {{ max-width:1840px; width:98%; margin:0 auto; padding:32px 0; }}
   h1 {{ font-size:26px; margin-bottom:4px; }}
-  .cat-intro {{ font-size:15px; line-height:1.6; color:#3a3a3a; max-width:720px; margin:12px 0 28px; }}
+  .cat-intro {{ font-size:15px; line-height:1.6; color:#3a3a3a; margin:12px 0 28px; }}
   {_CARD_CSS}
   .catnav {{ display:flex; flex-wrap:wrap; gap:8px; margin-top:40px; }}
   .catnav a {{ font-size:13px; background:#fff; border-radius:20px; padding:6px 14px; text-decoration:none; color:#153D68; }}
