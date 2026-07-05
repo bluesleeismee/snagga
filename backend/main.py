@@ -1330,24 +1330,27 @@ def _pc_shell(title_txt: str, body_html: str, status: int = 200) -> HTMLResponse
 <meta name="robots" content="noindex, follow">
 <style>
   body {{ font-family: system-ui, sans-serif; background:#F2EFEA; color:#1F1E1D; margin:0; }}
-  header {{ background:#153D68; padding:16px 20px; }}
-  header a {{ color:#EDE9E3; font-size:22px; font-weight:800; text-decoration:none; }}
-  header .accent {{ color:#C85E43; }}
-  main {{ max-width:680px; margin:0 auto; padding:48px 20px; }}
+  {_SITE_HEADER_CSS}
+  main {{ max-width:820px; width:98%; margin:0 auto; padding:32px 0 48px; }}
   h1 {{ font-size:24px; margin-bottom:10px; }}
   p  {{ line-height:1.6; color:#3a3a3a; }}
   .results a {{ display:flex; gap:14px; align-items:center; background:#fff; border:1px solid #EAE6E1;
                padding:12px 16px; margin-bottom:10px; text-decoration:none; color:#1F1E1D; }}
+  .results a:hover {{ border-color:#153D68; }}
   .results img {{ width:52px; height:52px; object-fit:contain; flex-shrink:0; }}
-  .results .r-name {{ font-size:14px; font-weight:600; line-height:1.4; }}
-  .results .r-price {{ margin-left:auto; font-weight:700; white-space:nowrap; }}
+  .results .r-main {{ min-width:0; flex:1; }}
+  .results .r-name {{ font-size:14px; font-weight:600; line-height:1.4; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
+  .results .r-tag {{ display:inline-block; font-size:12px; color:#1E7A3C; margin-top:3px; }}
+  .results .r-side {{ margin-left:auto; text-align:right; flex-shrink:0; }}
+  .results .r-price {{ font-weight:700; white-space:nowrap; }}
+  .results .r-cue {{ font-size:12px; color:#7E7A75; }}
   .back {{ display:inline-block; margin-top:20px; background:#C85E43; color:#fff; padding:13px 26px;
           border-radius:4px; text-decoration:none; font-weight:700; }}
   .hint {{ background:#fff; border:1px solid #EAE6E1; padding:14px 18px; font-size:14px; margin-top:18px; }}
 </style>
 </head>
 <body>
-<header><a href="https://www.snagga.de/">snagga<span class="accent">.de</span></a></header>
+{_SITE_HEADER_HTML}
 <main>
 {body_html}
 <a class="back" href="https://www.snagga.de/">Zur Startseite</a>
@@ -1445,41 +1448,43 @@ async def preis_check(request: Request, q: str = Query(default="")):
                 )
         return RedirectResponse(f"https://www.snagga.de/preis/{asin}", status_code=302)
 
-    # Kein Link/keine ASIN → Namenssuche im eigenen Bestand (kostenlos)
+    # Kein Link/keine ASIN → Namenssuche im eigenen (bereinigten) Bestand. Immer
+    # als Liste anzeigen — auch bei einem Treffer, damit der Nutzer Urteil/Preis
+    # sieht, bevor er klickt (der Klick auf /preis trägt den Affiliate-Link).
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT asin, name, brand, image_url, current_price FROM products "
+            "SELECT asin, name, brand, image_url, current_price, tag FROM products "
             "WHERE name ILIKE '%' || $1 || '%' OR brand ILIKE '%' || $1 || '%' "
-            "ORDER BY is_active DESC, has_real_history DESC, deal_score DESC LIMIT 10",
+            "ORDER BY is_active DESC, has_real_history DESC, deal_score DESC LIMIT 12",
             q[:80],
         )
-    if len(rows) == 1:
-        only_asin = rows[0]["asin"]
-        return RedirectResponse(f"https://www.snagga.de/preis/{only_asin}", status_code=302)
 
     def _result_item(r) -> str:
         img = f'<img src="{html.escape(r["image_url"])}" alt="" loading="lazy">' if r["image_url"] else ""
+        name = html.escape((r["name"] or "Produkt")[:90])
+        tag = f'<span class="r-tag">{html.escape(r["tag"])}</span>' if r["tag"] else ""
         price = ""
         if r["current_price"]:
             price_txt = f"{r['current_price']:.2f}".replace(".", ",")
             price = f'<span class="r-price">{price_txt} €</span>'
-        name = html.escape((r["name"] or "Produkt")[:90])
         return (f'<a href="https://www.snagga.de/preis/{r["asin"]}">{img}'
-                f'<span class="r-name">{name}</span>{price}</a>')
+                f'<span class="r-main"><span class="r-name">{name}</span>{tag}</span>'
+                f'<span class="r-side">{price}<span class="r-cue">Preisverlauf ansehen ›</span></span></a>')
 
     q_esc = html.escape(q[:60])
     if rows:
         items = "".join(_result_item(r) for r in rows)
         return _pc_shell(f"Preis-Check: {q[:60]}",
-                         f"<h1>Treffer f&uuml;r &bdquo;{q_esc}&ldquo;</h1>"
+                         f"<h1>{len(rows)} Treffer f&uuml;r &bdquo;{q_esc}&ldquo;</h1>"
                          f'<div class="results">{items}</div>'
-                         '<div class="hint">Nicht dabei? Füge den <strong>Amazon-Link</strong> des '
-                         'Produkts ein — dann prüfen wir es live.</div>')
-    return _pc_shell("Noch nicht in der Datenbank",
-                     f"<h1>&bdquo;{q_esc}&ldquo; kennen wir noch nicht</h1>"
-                     "<p>Kopiere den <strong>Amazon-Link</strong> des Produkts in die Suchbox "
-                     "(z.B. <code>amazon.de/dp/…</code> oder ein geteilter <code>amzn.eu</code>-Link) — "
-                     "dann prüfen wir den Preis live gegen die Preishistorie.</p>")
+                         '<div class="hint">Genau dein Produkt nicht dabei? Füge oben den '
+                         '<strong>Amazon-Link</strong> ein — dann prüfen wir es live und nehmen es auf.</div>')
+    return _pc_shell("Noch nicht im Katalog",
+                     f"<h1>&bdquo;{q_esc}&ldquo; haben wir noch nicht</h1>"
+                     "<p>Wir bauen den Katalog laufend aus. Bis dein Produkt dabei ist: kopiere den "
+                     "<strong>Amazon-Link</strong> in die Suchbox (z.B. <code>amazon.de/dp/…</code> oder "
+                     "ein geteilter <code>amzn.eu</code>-Link) — dann prüfen wir den Preis sofort live "
+                     "gegen die echte Preishistorie.</p>")
 
 
 @app.api_route("/preis/{asin}", methods=["GET", "HEAD"], response_class=HTMLResponse)

@@ -92,18 +92,18 @@ function PriceCheckHero({ isMobile }) {
       marginBottom: isMobile ? 18 : 28,
     }}>
       <h1 style={{ fontSize: isMobile ? 19 : 24, fontWeight: 800, color: 'var(--text)', marginBottom: 6, letterSpacing: '-0.3px' }}>
-        Ist dein Amazon-Preis wirklich gut?
+        Ist der Amazon-Preis gerade wirklich gut?
       </h1>
       <p style={{ fontSize: isMobile ? 13 : 14.5, color: 'var(--muted)', marginBottom: 16, lineHeight: 1.55, whiteSpace: isMobile ? 'normal' : 'nowrap' }}>
-        Amazon-Link einfügen — wir prüfen den Preis sofort gegen die echte Preishistorie:
-        Allzeittief, 90-Tage-Schnitt und ob der Streichpreis ehrlich ist.
+        Such nach dem Produkt — wir zeigen dir Preisverlauf, Allzeittief und ob der Preis
+        heute günstig ist. Oder füg direkt einen Amazon-Link ein.
       </p>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 10, maxWidth: 720 }}>
         <input
           value={q}
           onChange={e => setQ(e.target.value)}
-          placeholder="https://www.amazon.de/dp/… oder Produktname"
-          aria-label="Amazon-Link oder Produktname"
+          placeholder="z. B. Samsung Galaxy A26 oder Amazon-Link"
+          aria-label="Produktname oder Amazon-Link"
           style={{
             flex: 1, padding: '13px 16px', fontSize: 14.5, outline: 'none',
             border: '1px solid var(--border)', borderRadius: 2,
@@ -121,7 +121,7 @@ function PriceCheckHero({ isMobile }) {
             cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.7 : 1, transition: 'opacity 0.15s',
           }}
         >
-          {busy ? 'Prüfe…' : 'Preis prüfen'}
+          {busy ? 'Suche…' : 'Suchen'}
         </button>
       </form>
     </section>
