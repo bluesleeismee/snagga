@@ -94,7 +94,7 @@ function PriceCheckHero({ isMobile }) {
       <h1 style={{ fontSize: isMobile ? 19 : 24, fontWeight: 800, color: 'var(--text)', marginBottom: 6, letterSpacing: '-0.3px' }}>
         Ist dein Amazon-Preis wirklich gut?
       </h1>
-      <p style={{ fontSize: isMobile ? 13 : 14.5, color: 'var(--muted)', marginBottom: 16, lineHeight: 1.55, maxWidth: 720 }}>
+      <p style={{ fontSize: isMobile ? 13 : 14.5, color: 'var(--muted)', marginBottom: 16, lineHeight: 1.55, whiteSpace: isMobile ? 'normal' : 'nowrap' }}>
         Amazon-Link einfügen — wir prüfen den Preis sofort gegen die echte Preishistorie:
         Allzeittief, 90-Tage-Schnitt und ob der Streichpreis ehrlich ist.
       </p>
