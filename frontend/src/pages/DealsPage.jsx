@@ -72,6 +72,63 @@ function lsSet(key, data) {
   try { localStorage.setItem(key, JSON.stringify({ data, ts: Date.now() })) } catch {}
 }
 
+/* ── Preis-Check Hero ───────────────────────────────────────────── */
+// Kern der Utility-Positionierung: beliebigen Amazon-Link/Produktnamen prüfen.
+// Navigiert zum Backend (/preis-check via Vercel-Rewrite) → /preis/{asin}.
+function PriceCheckHero({ isMobile }) {
+  const [q, setQ] = useState('')
+  const [busy, setBusy] = useState(false)
+  const submit = (e) => {
+    e.preventDefault()
+    const v = q.trim()
+    if (!v || busy) return
+    setBusy(true)
+    window.location.href = '/preis-check?q=' + encodeURIComponent(v)
+  }
+  return (
+    <section style={{
+      background: 'var(--bg-card)', border: '1px solid var(--border)',
+      padding: isMobile ? '20px 16px' : '28px 32px',
+      marginBottom: isMobile ? 18 : 28,
+    }}>
+      <h1 style={{ fontSize: isMobile ? 19 : 24, fontWeight: 800, color: 'var(--text)', marginBottom: 6, letterSpacing: '-0.3px' }}>
+        Ist dein Amazon-Preis wirklich gut?
+      </h1>
+      <p style={{ fontSize: isMobile ? 13 : 14.5, color: 'var(--muted)', marginBottom: 16, lineHeight: 1.55, maxWidth: 720 }}>
+        Amazon-Link einfügen — wir prüfen den Preis sofort gegen die echte Preishistorie:
+        Allzeittief, 90-Tage-Schnitt und ob der Streichpreis ehrlich ist.
+      </p>
+      <form onSubmit={submit} style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 10, maxWidth: 720 }}>
+        <input
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          placeholder="https://www.amazon.de/dp/… oder Produktname"
+          aria-label="Amazon-Link oder Produktname"
+          style={{
+            flex: 1, padding: '13px 16px', fontSize: 14.5, outline: 'none',
+            border: '1px solid var(--border)', borderRadius: 2,
+            background: 'var(--bg)', color: 'var(--text)',
+          }}
+          onFocus={e => { e.target.style.borderColor = 'var(--accent)' }}
+          onBlur={e  => { e.target.style.borderColor = 'var(--border)' }}
+        />
+        <button
+          type="submit"
+          disabled={busy}
+          style={{
+            padding: '13px 28px', fontSize: 14.5, fontWeight: 700, whiteSpace: 'nowrap',
+            background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 2,
+            cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.7 : 1, transition: 'opacity 0.15s',
+          }}
+        >
+          {busy ? 'Prüfe…' : 'Preis prüfen'}
+        </button>
+      </form>
+    </section>
+  )
+}
+
+
 /* ── Best Picks Slider ──────────────────────────────────────────── */
 function BestPicksSlider({ deals, onOpen }) {
   const { isDesktop, width } = useBreakpoint()
@@ -594,6 +651,9 @@ export default function DealsPage() {
 
       {/* ── MAIN ── */}
       <main style={{ maxWidth: 1840, width: '98%', margin: '0 auto', padding: isMobile ? '12px 0 24px' : '20px 0 32px', minHeight: 'calc(100vh - var(--header-h))', display: 'flex', flexDirection: 'column' }}>
+
+        {/* Preis-Check — Kern-Utility, auf allen Geräten sichtbar */}
+        <PriceCheckHero isMobile={isMobile} />
 
         {/* Best Picks — immer sichtbar, unabhängig vom Filter */}
         {!isMobile && bestPicks.length >= 3 && (

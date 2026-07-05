@@ -12,17 +12,19 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import Optional
 
+import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Form, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel
 
 load_dotenv()
 
 import alerts
 from database import get_pool, init_db
-from scraper import fetch_and_update_deals
+from keepa import enrich_with_keepa
+from scraper import fetch_and_update_deals, AFFILIATE_TAG
 from scheduler import create_scheduler
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
@@ -1246,6 +1248,220 @@ async def api_product_detail(asin: str):
     }
 
 
+# ---------------------------------------------------------------------------
+# Preis-Check — Suchbox-Backend (Kern der Utility-Positionierung):
+# Amazon-Link/ASIN/Produktname rein → Urteil auf der /preis/{asin}-Seite.
+# Unbekannte ASINs werden live via Keepa geholt (1 Token) und dauerhaft in
+# die products-Tabelle aufgenommen → jede Nutzer-Anfrage vergrößert den
+# indexierbaren /preis/-Seitenbestand.
+# ---------------------------------------------------------------------------
+
+_ASIN_URL_RE  = re.compile(r"/(?:dp|gp/product|gp/aw/d|product)/([A-Z0-9]{10})", re.IGNORECASE)
+_ASIN_BARE_RE = re.compile(r"^\s*(B[0-9A-Z]{9})\s*$", re.IGNORECASE)
+_SHORTLINK_RE = re.compile(r"^(?:https?://)?(?:www\.)?(?:amzn\.to|amzn\.eu|a\.co)/", re.IGNORECASE)
+
+# Schutz des Keepa-Budgets: Live-Lookups (= unbekannte ASINs) pro IP und global
+# gedeckelt. DB-Treffer und Namenssuchen kosten nichts und sind nicht limitiert.
+_pc_ip_hits: dict[str, list[float]] = {}
+_pc_daily = {"day": "", "count": 0}
+PC_IP_LOOKUPS_PER_HOUR    = 8
+PC_GLOBAL_LOOKUPS_PER_DAY = 400   # ~1.4% des Keepa-Tagesbudgets (28'800)
+
+
+def _pc_rate_ok(ip: str) -> bool:
+    now = time.time()
+    hits = [t for t in _pc_ip_hits.get(ip, []) if now - t < 3600]
+    if len(hits) >= PC_IP_LOOKUPS_PER_HOUR:
+        _pc_ip_hits[ip] = hits
+        return False
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    if _pc_daily["day"] != today:
+        _pc_daily["day"], _pc_daily["count"] = today, 0
+    if _pc_daily["count"] >= PC_GLOBAL_LOOKUPS_PER_DAY:
+        return False
+    if len(_pc_ip_hits) > 5000:  # Speicher-Hygiene (Render Free, 1 Instanz)
+        _pc_ip_hits.clear()
+    hits.append(now)
+    _pc_ip_hits[ip] = hits
+    _pc_daily["count"] += 1
+    return True
+
+
+def _extract_asin(q: str) -> str:
+    m = _ASIN_BARE_RE.match(q)
+    if m:
+        return m.group(1).upper()
+    m = _ASIN_URL_RE.search(q)
+    if m:
+        return m.group(1).upper()
+    return ""
+
+
+async def _resolve_shortlink(url: str) -> str:
+    """Löst amzn.to/amzn.eu/a.co-Kurzlinks per Redirect-Verfolgung auf (kein Keepa-Token)."""
+    try:
+        async with httpx.AsyncClient(timeout=6, follow_redirects=True) as c:
+            resp = await c.head(url if url.startswith("http") else f"https://{url}")
+            return str(resp.url)
+    except Exception:
+        return ""
+
+
+def _pc_shell(title_txt: str, body_html: str, status: int = 200) -> HTMLResponse:
+    """Gebrandete Hülle für Preis-Check-Antwortseiten (noindex — reine Utility-Antworten)."""
+    return HTMLResponse(status_code=status, content=f"""<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{html.escape(title_txt)} | snagga.de</title>
+<meta name="robots" content="noindex, follow">
+<style>
+  body {{ font-family: system-ui, sans-serif; background:#F2EFEA; color:#1F1E1D; margin:0; }}
+  header {{ background:#153D68; padding:16px 20px; }}
+  header a {{ color:#EDE9E3; font-size:22px; font-weight:800; text-decoration:none; }}
+  header .accent {{ color:#C85E43; }}
+  main {{ max-width:680px; margin:0 auto; padding:48px 20px; }}
+  h1 {{ font-size:24px; margin-bottom:10px; }}
+  p  {{ line-height:1.6; color:#3a3a3a; }}
+  .results a {{ display:flex; gap:14px; align-items:center; background:#fff; border:1px solid #EAE6E1;
+               padding:12px 16px; margin-bottom:10px; text-decoration:none; color:#1F1E1D; }}
+  .results img {{ width:52px; height:52px; object-fit:contain; flex-shrink:0; }}
+  .results .r-name {{ font-size:14px; font-weight:600; line-height:1.4; }}
+  .results .r-price {{ margin-left:auto; font-weight:700; white-space:nowrap; }}
+  .back {{ display:inline-block; margin-top:20px; background:#C85E43; color:#fff; padding:13px 26px;
+          border-radius:4px; text-decoration:none; font-weight:700; }}
+  .hint {{ background:#fff; border:1px solid #EAE6E1; padding:14px 18px; font-size:14px; margin-top:18px; }}
+</style>
+</head>
+<body>
+<header><a href="https://www.snagga.de/">snagga<span class="accent">.de</span></a></header>
+<main>
+{body_html}
+<a class="back" href="https://www.snagga.de/">Zur Startseite</a>
+</main>
+</body>
+</html>""")
+
+
+@app.get("/preis-check")
+async def preis_check(request: Request, q: str = Query(default="")):
+    q = (q or "").strip()
+    if not q:
+        return RedirectResponse("https://www.snagga.de/", status_code=302)
+
+    asin = _extract_asin(q)
+
+    # amzn.to/amzn.eu-Kurzlink → Redirect auflösen (kostenlos), dann erneut suchen
+    if not asin and _SHORTLINK_RE.match(q):
+        resolved = await _resolve_shortlink(q)
+        asin = _extract_asin(resolved)
+
+    pool = await get_pool()
+
+    if asin:
+        async with pool.acquire() as conn:
+            known = await conn.fetchval("SELECT 1 FROM products WHERE asin=$1", asin)
+        if known:
+            return RedirectResponse(f"https://www.snagga.de/preis/{asin}", status_code=302)
+
+        # Unbekanntes Produkt → Live-Lookup (1 Keepa-Token), Budget-geschützt
+        ip = (request.headers.get("x-forwarded-for")
+              or (request.client.host if request.client else "?")).split(",")[0].strip()
+        if not _pc_rate_ok(ip):
+            return _pc_shell("Zu viele Anfragen",
+                             "<h1>Kurz durchatmen 😅</h1>"
+                             "<p>Du hast gerade viele neue Produkte geprüft. Jede Prüfung fragt "
+                             "live die Preisdatenbank ab — bitte versuch es in einer Stunde noch einmal.</p>",
+                             status=429)
+
+        data = await enrich_with_keepa([asin], domain=3)
+        kd = data.get(asin)
+        if not kd or not kd.get("current_price"):
+            return _pc_shell("Produkt nicht gefunden",
+                             "<h1>Kein Preis gefunden</h1>"
+                             "<p>Unter diesem Amazon-Link konnten wir kein Produkt mit Preisdaten "
+                             "finden — möglicherweise ist es nicht (mehr) auf amazon.de gelistet.</p>",
+                             status=404)
+
+        # Dauerhaft aufnehmen: is_active=false (kein Deal), aber /preis/-Seite
+        # existiert ab jetzt für immer und wandert in die Sitemap.
+        now  = datetime.utcnow()
+        hist = kd.get("history") or []
+        hist_prices    = [pr for pr, _ in hist if pr and pr > 0]
+        atl_candidates = [v for v in (kd["all_time_low"], kd["current_price"],
+                                      min(hist_prices) if hist_prices else None) if v and v > 0]
+        atl = min(atl_candidates) if atl_candidates else kd["current_price"]
+
+        async with pool.acquire() as conn:
+            await conn.execute("""
+                INSERT INTO products
+                  (asin, name, brand, image_url, category,
+                   current_price, original_price, all_time_low, avg_price,
+                   avg90_price, avg180_price, deal_score, rating, reviews, prime,
+                   last_updated, last_checked, affiliate_url,
+                   is_active, is_backup, is_top_pick, is_fba,
+                   sales_rank, tag, score_breakdown, first_seen)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
+                        $16,$17,$18,false,false,false,$19,$20,'','',$16)
+                ON CONFLICT (asin) DO NOTHING
+            """,
+                asin, (kd["title"] or "Produkt")[:200], kd.get("brand") or "",
+                kd["image_url"], "Sonstiges",
+                kd["current_price"], kd["original_price"], atl, kd["avg_price"],
+                kd["avg90_price"] or 0.0, kd["avg180_price"] or 0.0,
+                0, kd["rating"], kd["reviews"], True,
+                now, now, f"https://www.amazon.de/dp/{asin}?tag={AFFILIATE_TAG}",
+                kd["is_fba"], kd["sales_rank"] or 0,
+            )
+            if hist:
+                await conn.execute("DELETE FROM price_history WHERE asin=$1", asin)
+                await conn.executemany(
+                    "INSERT INTO price_history (asin, price, timestamp) VALUES ($1,$2,$3)",
+                    [(asin, pr, ts) for pr, ts in hist[-2000:]],
+                )
+                await conn.execute(
+                    "UPDATE products SET has_real_history=true WHERE asin=$1", asin
+                )
+        return RedirectResponse(f"https://www.snagga.de/preis/{asin}", status_code=302)
+
+    # Kein Link/keine ASIN → Namenssuche im eigenen Bestand (kostenlos)
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT asin, name, brand, image_url, current_price FROM products "
+            "WHERE name ILIKE '%' || $1 || '%' OR brand ILIKE '%' || $1 || '%' "
+            "ORDER BY is_active DESC, has_real_history DESC, deal_score DESC LIMIT 10",
+            q[:80],
+        )
+    if len(rows) == 1:
+        only_asin = rows[0]["asin"]
+        return RedirectResponse(f"https://www.snagga.de/preis/{only_asin}", status_code=302)
+
+    def _result_item(r) -> str:
+        img = f'<img src="{html.escape(r["image_url"])}" alt="" loading="lazy">' if r["image_url"] else ""
+        price = ""
+        if r["current_price"]:
+            price_txt = f"{r['current_price']:.2f}".replace(".", ",")
+            price = f'<span class="r-price">{price_txt} €</span>'
+        name = html.escape((r["name"] or "Produkt")[:90])
+        return (f'<a href="https://www.snagga.de/preis/{r["asin"]}">{img}'
+                f'<span class="r-name">{name}</span>{price}</a>')
+
+    q_esc = html.escape(q[:60])
+    if rows:
+        items = "".join(_result_item(r) for r in rows)
+        return _pc_shell(f"Preis-Check: {q[:60]}",
+                         f"<h1>Treffer f&uuml;r &bdquo;{q_esc}&ldquo;</h1>"
+                         f'<div class="results">{items}</div>'
+                         '<div class="hint">Nicht dabei? Füge den <strong>Amazon-Link</strong> des '
+                         'Produkts ein — dann prüfen wir es live.</div>')
+    return _pc_shell("Noch nicht in der Datenbank",
+                     f"<h1>&bdquo;{q_esc}&ldquo; kennen wir noch nicht</h1>"
+                     "<p>Kopiere den <strong>Amazon-Link</strong> des Produkts in die Suchbox "
+                     "(z.B. <code>amazon.de/dp/…</code> oder ein geteilter <code>amzn.eu</code>-Link) — "
+                     "dann prüfen wir den Preis live gegen die Preishistorie.</p>")
+
+
 @app.api_route("/preis/{asin}", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def price_page(asin: str):
     """
@@ -1263,7 +1479,8 @@ async def price_page(asin: str):
         row = await conn.fetchrow(
             "SELECT asin, name, brand, image_url, current_price, original_price, "
             "all_time_low, avg_price, avg90_price, avg180_price, category, "
-            "affiliate_url, is_active, rating, reviews, tag, has_real_history "
+            "affiliate_url, is_active, rating, reviews, tag, has_real_history, "
+            "last_checked "
             "FROM products WHERE asin=$1",
             asin,
         )
@@ -1320,10 +1537,13 @@ async def price_page(asin: str):
             "@type": "AggregateRating", "ratingValue": f"{row['rating']:.1f}", "reviewCount": int(row["reviews"]),
         }
 
-    # Urteil "Guter Preis?" NUR bei aktiven Deals — bei inaktiven Produkten ist
-    # der gespeicherte Preis veraltet, ein "günstigster Preis"-Urteil wäre
-    # irreführend (der aktuelle Amazon-Preis wird gar nicht mehr live geprüft).
-    if is_active and current > 0:
+    # Urteil "Guter Preis?" bei aktiven Deals ODER kürzlich live geprüften
+    # Produkten (z.B. gerade über den Preis-Check nachgeschlagen). Bei länger
+    # ungeprüften Produkten ist der gespeicherte Preis veraltet — ein Urteil
+    # wäre irreführend (der aktuelle Amazon-Preis wird nicht mehr live geprüft).
+    fresh_check = (row["last_checked"] is not None
+                   and datetime.utcnow() - row["last_checked"] < timedelta(hours=48))
+    if (is_active or fresh_check) and current > 0:
         verdict_block = (f'<div class="verdict"><div class="v-head">Guter Preis gerade?</div>'
                          f'<div class="v-label">{verdict}</div>'
                          f'<div class="v-reason">{vreason}</div></div>')
@@ -1335,6 +1555,10 @@ async def price_page(asin: str):
         cta = (f'<a class="cta cta-buy" href="{affiliate}" target="_blank" rel="nofollow noopener sponsored">'
                f'Zum Angebot bei Amazon {_arrow_icon("right")}</a>'
                f'<p class="cta-note">Aktiver Deal — Preis zuletzt bestätigt.</p>')
+    elif fresh_check and current > 0:
+        cta = (f'<a class="cta cta-buy" href="{affiliate}" target="_blank" rel="nofollow noopener sponsored">'
+               f'Bei Amazon ansehen {_arrow_icon("right")}</a>'
+               f'<p class="cta-note">Preis frisch geprüft — kein kuratierter Deal, aber die Zahlen oben sind aktuell.</p>')
     else:
         cta = ('<p class="cta-note" style="margin-top:0">Dieses Produkt ist gerade kein aktiver Deal. '
                'Sieh dir den Preisverlauf an und setz dir unten einen Preisalarm — wir schicken dir eine E-Mail, sobald der Preis fällt.</p>')
