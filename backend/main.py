@@ -1667,9 +1667,9 @@ async def price_page(asin: str):
   main {{ max-width:1840px; width:98%; margin:0 auto; padding:32px 0; }}
   h1 {{ font-size:24px; line-height:1.35; margin:0 0 20px; }}
   h2 {{ font-size:19px; margin:36px 0 8px; }}
-  .layout {{ display:grid; grid-template-columns:1.15fr 1fr; gap:28px; align-items:start; }}
+  .layout {{ display:grid; grid-template-columns:1fr 1.15fr; gap:28px; align-items:start; }}
   @media (max-width:820px) {{ .layout {{ grid-template-columns:1fr; }} }}
-  .col-left h2:first-child, .col-right h2:first-child {{ margin-top:0; }}
+  .col-right h2:first-child {{ margin-top:0; }}
   .prod-img {{ background:#fff; border:1px solid #EAE6E1; padding:14px; display:flex; align-items:center; justify-content:center; margin-bottom:16px; }}
   .prod-img img {{ max-width:100%; max-height:150px; object-fit:contain; }}
   .verdict {{ border-left:5px solid {vcolor}; background:#fff; padding:16px 20px; margin-bottom:16px; }}
@@ -1709,23 +1709,22 @@ async def price_page(asin: str):
 <body>
 {_SITE_HEADER_HTML}
 <main>
-<h1>{name}</h1>
 <div class="layout">
   <div class="col-left">
-    <h2>Preisverlauf</h2>
-    {chart_block}
-  </div>
-  <div class="col-right">
     <div class="prod-img"><img src="{image}" alt="{name}"></div>
-    {verdict_block}
+    <h1>{name}</h1>
     {cta}
     <p class="cta-note">* Affiliate-Hinweis: Als Amazon-Partner verdienen wir an qualifizierten Käufen — für dich entstehen keine Mehrkosten. Der angezeigte Preis kann abweichen; massgeblich ist der Preis bei Amazon zum Kaufzeitpunkt.</p>
+    {alert_form}
+  </div>
+  <div class="col-right">
+    {verdict_block}
+    <h2>Preisverlauf</h2>
+    {chart_block}
     <h2>Preis-Eckdaten</h2>
     <table class="stats">{stats_rows}</table>
   </div>
 </div>
-
-{alert_form}
 
 {similar_block}
 {cat_link}
