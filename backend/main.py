@@ -378,6 +378,19 @@ _CARD_CSS = """
   .card-share.copied .icon-check { display:inline-block; }
 """
 
+# Einheitlicher Header für die Produktseiten (/preis, /deal) — Logo/Breite
+# 1:1 aus dem React-Header (DealsPage.jsx) übernommen, damit sich diese
+# SSR-Seiten wie Teil der App anfühlen statt wie separate Mini-Sites.
+_SITE_HEADER_CSS = """
+  header { background:#153D68; height:72px; }
+  .site-header-wrap { max-width:1840px; width:98%; margin:0 auto; height:100%; display:flex; align-items:center; }
+  .site-header-wrap a.logo { color:#EDE9E3; font-size:28px; font-weight:800; letter-spacing:-0.5px; text-decoration:none; }
+  @media (max-width:639px) { .site-header-wrap a.logo { font-size:22px; } }
+  .accent { color:#C85E43; }
+"""
+
+_SITE_HEADER_HTML = '<header><div class="site-header-wrap"><a class="logo" href="https://www.snagga.de/">snagga<span class="accent">.de</span></a></div></header>'
+
 # Vanilla JS fürs Teilen auf statischen SSR-Kacheln (Kategorie-Seite, "Ähnliche
 # Deals") — dort gibt es kein React, daher eigenständige Klick-Logik statt
 # der shareOrCopy()-Funktion aus dem Frontend.
@@ -644,10 +657,8 @@ async def deal_page(asin: str):
 <link rel="canonical" href="{canonical}">
 <style>
   body {{ font-family: system-ui, sans-serif; background:#F2EFEA; color:#1F1E1D; margin:0; }}
-  header {{ background:#153D68; padding:16px 20px; }}
-  header a {{ color:#EDE9E3; font-size:22px; font-weight:800; text-decoration:none; }}
-  header .accent {{ color:#C85E43; }}
-  main {{ max-width:900px; margin:0 auto; padding:32px 20px; }}
+  {_SITE_HEADER_CSS}
+  main {{ max-width:1840px; width:98%; margin:0 auto; padding:32px 0; }}
   h1 {{ font-size:22px; }}
   .back {{ display:inline-block; margin-top:8px; color:#153D68; }}
   {_CARD_CSS}
@@ -655,7 +666,7 @@ async def deal_page(asin: str):
 {_CARD_SHARE_JS}
 </head>
 <body>
-<header><a href="https://www.snagga.de/">snagga<span class="accent">.de</span></a></header>
+{_SITE_HEADER_HTML}
 <main>
 <h1>Huch! 👀 Dieser Deal ist schon weg</h1>
 <p>„{name}" war ein Snagga-Deal — Deals sind aber flüchtig und laufen ab.</p>
@@ -761,10 +772,8 @@ async def deal_page(asin: str):
 <script type="application/ld+json">{json.dumps(ld_json, ensure_ascii=False)}</script>
 <style>
   body {{ font-family: system-ui, sans-serif; background:#FAF8F5; color:#1F1E1D; margin:0; }}
-  header {{ background:#153D68; padding:16px 24px; }}
-  header a {{ color:#EDE9E3; font-size:22px; font-weight:800; text-decoration:none; }}
-  header .accent {{ color:#C85E43; }}
-  .wrap {{ max-width:1360px; margin:32px auto; background:#fff; display:grid; grid-template-columns:1fr 1.15fr; box-shadow:0 4px 24px rgba(0,0,0,0.06); position:relative; }}
+  {_SITE_HEADER_CSS}
+  .wrap {{ max-width:1840px; width:98%; margin:32px auto; background:#fff; display:grid; grid-template-columns:1fr 1.15fr; box-shadow:0 4px 24px rgba(0,0,0,0.06); position:relative; }}
   @media (max-width:760px) {{ .wrap {{ grid-template-columns:1fr; margin:0; }} }}
   .page-share {{ position:absolute; top:20px; right:20px; z-index:5; display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:50%; background:#fff; border:none; cursor:pointer; color:#7E7A75; box-shadow:0 1px 4px rgba(0,0,0,0.1); transition:background 0.15s, color 0.15s; }}
   .page-share:hover {{ background:#FAF9F7; color:#1F1E1D; }}
@@ -792,7 +801,7 @@ async def deal_page(asin: str):
 {_CARD_SHARE_JS}
 </head>
 <body>
-<header><a href="https://www.snagga.de/">snagga<span class="accent">.de</span></a></header>
+{_SITE_HEADER_HTML}
 <div class="wrap">
   <button class="page-share" title="Deal teilen" onclick="snaggaShare(event,this)" data-asin="{asin}" data-name="{name}" data-price="{price_txt}">
     <svg class="icon-share" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1643,10 +1652,8 @@ async def price_page(asin: str):
 <script type="application/ld+json">{json.dumps(ld_json, ensure_ascii=False)}</script>
 <style>
   body {{ font-family: system-ui, sans-serif; background:#FAF8F5; color:#1F1E1D; margin:0; }}
-  header {{ background:#153D68; padding:16px 24px; }}
-  header a {{ color:#EDE9E3; font-size:22px; font-weight:800; text-decoration:none; }}
-  header .accent {{ color:#C85E43; }}
-  main {{ max-width:1360px; margin:0 auto; padding:32px 20px; }}
+  {_SITE_HEADER_CSS}
+  main {{ max-width:1840px; width:98%; margin:0 auto; padding:32px 0; }}
   h1 {{ font-size:24px; line-height:1.35; margin:0 0 20px; }}
   h2 {{ font-size:19px; margin:36px 0 8px; }}
   .top {{ display:grid; grid-template-columns:260px 1fr; gap:28px; align-items:start; }}
@@ -1685,7 +1692,7 @@ async def price_page(asin: str):
 {_CARD_SHARE_JS}
 </head>
 <body>
-<header><a href="https://www.snagga.de/">snagga<span class="accent">.de</span></a></header>
+{_SITE_HEADER_HTML}
 <main>
 <h1>{name}</h1>
 <div class="top">
