@@ -305,6 +305,16 @@ _TAG_COLORS = {
     "Preis gefallen":      ("#C85E43", "#fff"),
 }
 
+
+def _tag_colors_for(tag: str) -> tuple[str, str] | None:
+    """Spiegelt tagStyleFor() aus DealCard.jsx — inkl. Präfix-Match für das
+    variable Preishistorie-Urteil "Bester Preis seit X Monaten"."""
+    if not tag:
+        return None
+    if tag.startswith("Bester Preis seit"):
+        return ("#1E7A3C", "#fff")
+    return _TAG_COLORS.get(tag)
+
 # Kurznamen für die Anzeige — muss mit CAT_LABELS in frontend/src/utils.js
 # übereinstimmen, damit SSR-Kacheln/-Seiten dieselbe Bezeichnung zeigen wie die SPA.
 _CATEGORY_LABELS = {
@@ -430,8 +440,9 @@ def _deal_card_html(row) -> str:
     disc_html     = f'<div class="card-disc">–{disc}%</div>' if disc > 0 else ""
 
     tag = row["tag"] if "tag" in row.keys() else ""
-    if tag and tag in _TAG_COLORS:
-        bg, fg = _TAG_COLORS[tag]
+    tag_colors = _tag_colors_for(tag)
+    if tag_colors:
+        bg, fg = tag_colors
         tag_html = f'<div class="card-tag" style="background:{bg};color:{fg}">{html.escape(tag)}</div>'
     else:
         tag_html = '<div class="card-tag card-tag-empty">&nbsp;</div>'

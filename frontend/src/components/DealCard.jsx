@@ -8,6 +8,14 @@ const TAG_COLORS = {
   'Preis gefallen':    { bg: 'var(--accent)', text: '#fff' },
 }
 
+// "Bester Preis seit X Monaten / über 1 Jahr" kommt mit variablem Text aus dem
+// Backend (echtes Preishistorie-Urteil) → Präfix-Match statt exaktem Key.
+export function tagStyleFor(tag) {
+  if (!tag) return null
+  if (tag.startsWith('Bester Preis seit')) return { bg: '#1E7A3C', text: '#fff' }
+  return TAG_COLORS[tag] || null
+}
+
 export default function DealCard({ deal, onClick }) {
   const [imgError, setImgError] = useState(false)
   const [hovered,  setHovered]  = useState(false)
@@ -17,7 +25,7 @@ export default function DealCard({ deal, onClick }) {
   const disc = discount(deal.current_price, deal.original_price)
   const age  = fmtAge(deal.first_seen)
   const tag  = deal.tag || ''
-  const tagStyle = TAG_COLORS[tag] || null
+  const tagStyle = tagStyleFor(tag)
 
   // Eyebrow-Label: Marke bevorzugt, sonst Bewertung. NIE die Kategorie — die
   // steht schon in der Fusszeile, sonst stuende sie zweimal auf der Kachel.

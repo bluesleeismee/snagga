@@ -20,6 +20,7 @@ from scoring import (
     passes_hard_filters,
     calculate_deal_score,
     determine_tag,
+    best_price_since_months,
 )
 
 AFFILIATE_TAG   = "snagga-21"  # Fallback-Tag für Kategorien ohne eigenen Tracking-Tag
@@ -342,7 +343,7 @@ async def hourly_keepa_price_check():
     async with db.acquire() as conn:
         # Tier-Staffelung: Top 100 (deal_score) stündlich, Rest alle 4h → ~60% Token-Einsparung
         active = await conn.fetch(
-            "SELECT asin, name, current_price, avg90_price, avg180_price, all_time_low, "
+            "SELECT asin, name, brand, current_price, avg90_price, avg180_price, all_time_low, "
             "category, rating, reviews, sales_rank FROM products "
             "WHERE is_active=true AND ("
             "  last_checked IS NULL "
@@ -394,6 +395,7 @@ async def hourly_keepa_price_check():
                 row["rating"], row["reviews"], row["sales_rank"] or 0,
                 row["category"], live_price, avg90, atl, avg180,
                 title=row["name"] or "",
+                brand=(row["brand"] or "") if "brand" in row.keys() else "",
             ):
                 await conn.execute(
                     "UPDATE products SET is_active=false, is_top_pick=false, "
@@ -409,7 +411,13 @@ async def hourly_keepa_price_check():
                     price_updated=now,
                     title=row["name"] or "",
                 )
-                tag = determine_tag(live_price, atl, avg90, avg180, atl_confirmed=False)
+                # Echte History (gratis im Basis-Token) → konkretes Kachel-Urteil
+                # "Bester Preis seit X Monaten" statt nur Rabatt-Prozent.
+                kd   = enriched.get(asin) or {}
+                hist = kd.get("history") or []
+                months = best_price_since_months(hist, live_price)
+                tag = determine_tag(live_price, atl, avg90, avg180,
+                                    atl_confirmed=False, months_since_lower=months)
                 # last_updated wird mit-refresht: bestätigt-gute Deals laufen nicht aus,
                 # auch wenn Keepa sie nicht mehr als "frischen" Deal im /deal-Stream meldet.
                 # (Volatilität steuert oben nur die weak_volatile-Deaktivierung; die
@@ -427,8 +435,7 @@ async def hourly_keepa_price_check():
                 )
 
                 # Kostenlose Keepa-History einspielen → Chart aktuell, Marke mitnehmen.
-                kd   = enriched.get(asin) or {}
-                hist = kd.get("history") or []
+                # (kd/hist wurden oben schon für das Kachel-Urteil geholt.)
                 if hist:
                     recent = hist[-2000:]  # volle History speichern (Chart-Default zeigt 365 Tage)
                     await conn.execute("DELETE FROM price_history WHERE asin=$1", asin)
@@ -544,6 +551,7 @@ async def fetch_and_update_deals():
                     d["rating"], d["reviews"], d["sales_rank"], cat,
                     d["current_price"], d["avg90"], d["atl"], d["avg180"],
                     title=d["title"] or "",
+                    brand=d.get("brand") or "",
                 ):
                     skipped_filter += 1
                     continue
@@ -904,9 +912,12 @@ async def nightly_deep_sync():
                 price_updated=now,
                 title=title_db,
             )
-            # Deep-Sync hat echten ATL aus /product → atl_confirmed=True
+            # Deep-Sync hat echten ATL aus /product → atl_confirmed=True.
+            # Echte History → konkretes Urteil "Bester Preis seit X Monaten".
+            months = best_price_since_months(kd.get("history") or [], kd["current_price"])
             tag = determine_tag(kd["current_price"], kd["all_time_low"],
-                                kd["avg90_price"], kd["avg180_price"], atl_confirmed=True)
+                                kd["avg90_price"], kd["avg180_price"],
+                                atl_confirmed=True, months_since_lower=months)
 
             await conn.execute("""
                 UPDATE products SET

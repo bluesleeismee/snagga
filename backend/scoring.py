@@ -7,6 +7,117 @@ import re
 from datetime import datetime
 
 # ---------------------------------------------------------------------------
+# Bekannte Marken (Quality Gate)
+# ---------------------------------------------------------------------------
+
+# Kuratierte, im D-A-CH-Raum bekannte Marken. Alles kleingeschrieben.
+# Zweck: Deals bekannter Marken brauchen weniger Review-Beweislast als
+# No-Name-Marketplace-Ware (siehe Quality Gate in passes_hard_filters).
+KNOWN_BRANDS: frozenset[str] = frozenset({
+    # Elektronik / Computer
+    "apple", "samsung", "sony", "lg", "panasonic", "philips", "sharp", "toshiba",
+    "hisense", "medion", "grundig", "jbl", "bose", "sennheiser", "teufel", "sonos",
+    "beats", "jabra", "soundcore", "anker", "ugreen", "belkin", "baseus",
+    "logitech", "razer", "corsair", "steelseries", "hyperx", "roccat", "cherry",
+    "keychron", "trust", "elgato", "rode", "shure", "blue",
+    "asus", "msi", "acer", "lenovo", "hp", "dell", "gigabyte", "asrock",
+    "intel", "amd", "nvidia", "crucial", "kingston", "sandisk", "samsung evo",
+    "western digital", "wd", "seagate", "verbatim", "transcend", "pny", "lexar",
+    "tp-link", "avm", "fritz!", "netgear", "devolo", "d-link", "zyxel",
+    "amazon", "kindle", "echo", "ring", "blink", "eufy", "google", "nest",
+    "xiaomi", "huawei", "honor", "oneplus", "nothing", "fairphone", "motorola",
+    "nokia", "gigaset", "doro", "emporia",
+    "garmin", "fitbit", "polar", "suunto", "amazfit", "withings",
+    "gopro", "dji", "insta360", "canon", "nikon", "fujifilm", "olympus",
+    "om system", "pentax", "sigma", "tamron", "manfrotto", "neewer", "godox",
+    "epson", "brother", "kodak", "polaroid", "instax",
+    "hama", "varta", "duracell", "energizer", "osram", "ledvance", "paulmann",
+    "brennenstuhl", "tfa dostmann", "bresser",
+    # Games
+    "nintendo", "playstation", "xbox", "sega", "ubisoft", "ea", "activision",
+    "rockstar games", "capcom", "bandai namco", "thrustmaster", "8bitdo",
+    "turtle beach", "nacon", "hori", "logitech g",
+    # Haushalt / Küche
+    "bosch", "siemens", "miele", "aeg", "bauknecht", "beko", "gorenje",
+    "liebherr", "samsung", "grundig", "braun", "krups", "tefal", "rowenta",
+    "moulinex", "wmf", "zwilling", "fissler", "silit", "le creuset", "tchibo",
+    "melitta", "severin", "russell hobbs", "delonghi", "de'longhi", "philips",
+    "kitchenaid", "kenwood", "smeg", "graef", "ritter", "cloer", "unold",
+    "gastroback", "sage", "nespresso", "sodastream", "brita", "emsa", "leifheit",
+    "vileda", "kärcher", "karcher", "dyson", "shark", "bissell", "vorwerk",
+    "irobot", "roborock", "dreame", "ecovacs", "tineco", "levoit", "ninja",
+    "instant pot", "cosori", "duronic", "clatronic", "bomann", "koenic", "trisa",
+    # Baumarkt / Garten
+    "makita", "dewalt", "einhell", "metabo", "milwaukee", "ryobi", "worx",
+    "black+decker", "black + decker", "stanley", "wera", "wiha", "knipex",
+    "gedore", "hazet", "proxxon", "dremel", "fein", "festool", "hilti",
+    "gardena", "fiskars", "wolf-garten", "husqvarna", "stihl", "al-ko",
+    "abus", "burg-wächter", "yale", "nuki", "tesa", "fischer", "3m",
+    # Drogerie / Körperpflege
+    "oral-b", "philips sonicare", "braun", "gillette", "wilkinson", "remington",
+    "babyliss", "ghd", "dyson", "beurer", "medisana", "omron", "nivea",
+    "l'oréal", "loreal", "garnier", "schwarzkopf", "wella", "kerastase",
+    "kérastase", "olaplex", "cerave", "la roche-posay", "eucerin", "vichy",
+    "neutrogena", "bioderma", "weleda", "dove", "axe", "old spice", "colgate",
+    "elmex", "meridol", "sensodyne", "listerine", "always", "pampers",
+    # Sport / Freizeit / Outdoor
+    "adidas", "nike", "puma", "reebok", "asics", "new balance", "under armour",
+    "salomon", "merrell", "columbia", "the north face", "jack wolfskin",
+    "vaude", "deuter", "tatonka", "mammut", "osprey", "thule", "uvex",
+    "alpina", "giro", "shimano", "sram", "topeak", "sks", "busch+müller",
+    "sigma sport", "wahoo", "tacx", "elite", "zwift", "decathlon", "kettler",
+    "hammer", "schildkröt", "hudora", "intex", "bestway", "coleman", "campingaz",
+    "stanley", "esbit", "petzl", "black diamond", "leki", "komperdell",
+    "berkley", "shimano fishing", "daiwa", "rapala",
+    # Auto / Motorrad
+    "bosch automotive", "castrol", "liqui moly", "sonax", "nigrin", "armor all",
+    "meguiar's", "osram automotive", "ctek", "noco", "michelin", "continental",
+    "goodyear", "hella", "thule", "menabo", "alca",
+    # Musikinstrumente
+    "yamaha", "casio", "roland", "korg", "fender", "gibson", "epiphone",
+    "ibanez", "harley benton", "thomann", "behringer", "focusrite", "presonus",
+    "akg", "audio-technica", "beyerdynamic", "numark", "pioneer dj", "denon dj",
+    "native instruments", "arturia", "novation",
+    # Spielzeug / Sonstiges mit Markenkraft
+    "lego", "playmobil", "ravensburger", "kosmos", "schmidt spiele", "haba",
+    "mattel", "hasbro", "barbie", "hot wheels", "fisher-price", "vtech",
+    "bruder", "siku", "märklin", "carrera", "tamiya", "revell",
+    "leuchtturm1917", "moleskine", "lamy", "faber-castell", "staedtler",
+    "stabilo", "edding", "samsonite", "eastpak", "fjällräven", "herschel",
+    "carhartt", "levi's", "wenger", "victorinox", "zippo", "maglite",
+})
+
+# Geräte-Marken, die sehr oft in Zubehör-Titeln von No-Names auftauchen
+# ("Hülle für iPhone", "Armband für Apple Watch"). Für diese zählt der
+# Titel-Fallback NICHT — nur ein explizites Marken-Feld.
+_ACCESSORY_TRAP_BRANDS = frozenset({
+    "apple", "samsung", "sony", "xiaomi", "huawei", "google", "amazon",
+    "nintendo", "playstation", "xbox", "echo", "kindle", "ring",
+})
+
+
+def is_known_brand(brand: str, title: str = "") -> bool:
+    """
+    True, wenn das Produkt erkennbar von einer bekannten Marke stammt.
+
+    Primär zählt das Keepa-Marken-Feld. Ist es leer (bei /deal-Daten häufig),
+    greift ein vorsichtiger Fallback über den Titel-Anfang (Amazon-Konvention:
+    Marke steht vorn) — ausgenommen Geräte-Marken, die typischerweise in
+    No-Name-Zubehör-Titeln vorkommen (_ACCESSORY_TRAP_BRANDS).
+    """
+    b = (brand or "").strip().lower()
+    if b in KNOWN_BRANDS:
+        return True
+    if not b and title:
+        words = title.strip().lower().split()
+        for n in (2, 1):  # zweiwortige Marken zuerst ("russell hobbs", "jack wolfskin")
+            if len(words) >= n:
+                cand = " ".join(words[:n])
+                if cand in KNOWN_BRANDS and cand not in _ACCESSORY_TRAP_BRANDS:
+                    return True
+    return False
+
+# ---------------------------------------------------------------------------
 # Kategorie-Konfiguration
 # ---------------------------------------------------------------------------
 
@@ -71,7 +182,7 @@ def specificity_penalty(title: str) -> int:
     # nicht ins Sortiment passt (Perücke, Weihnachts-Ornament, Ersatzfilter …).
     # Gezielte Substantive statt breiter Wörter ("filter"/"stück"), damit Marken-
     # produkte (Oral-B-Bürstenköpfe, Webcams, LEVOIT-Geräte) NICHT mitfliegen.
-    if re.search(r'\b(perücke|haarteil|ornament|girlande|kerze|aufkleber|serviette|kissenbezug|bilderhaken|ersatzfilter|hepa[-\s]?filter)\b', t):
+    if re.search(r'\b(perücke|haarteil|ornament|girlande|kerze|aufkleber|serviette|kissenbezug|bilderhaken|ersatzfilter|hepa[-\s]?filter|folie|spiegel|sichtschutz(?:folie)?)\b', t):
         p += 30
 
     return min(p, 60)
@@ -123,6 +234,7 @@ def passes_hard_filters(
     atl:        float,
     avg180:     float = 0,
     title:      str = "",
+    brand:      str = "",
 ) -> bool:
     """Gibt True zurück wenn das Produkt alle Mindestanforderungen erfüllt."""
     # Nur Neuware: gebrauchte / generalüberholte / B-Ware sofort aussortieren.
@@ -161,6 +273,23 @@ def passes_hard_filters(
     if atl > 0 and avg180 > 0 and atl < avg180 * 0.80:
         if current > atl * 0.95:
             return False
+
+    # ── Quality Gate (2026-07-05): Glaubwürdigkeit vor Menge ────────────────
+    # snagga wirbt mit "keine Fake-Rabatte" — das Regal muss den Claim beweisen.
+    # (a) Der Rabatt muss substanziell sein: ≥20% unter Ø90 (Fallback Ø180)
+    #     ODER nahe am Allzeittief (aus /deal ist atl der avg365-Proxy —
+    #     auch das ist ein starkes "historisch günstig"-Signal).
+    ref = avg90 if avg90 > 0 else avg180
+    real_discount = ref > 0 and current <= ref * 0.80
+    near_atl      = atl > 0 and current <= atl * 1.05
+    if not (real_discount or near_atl):
+        return False
+
+    # (b) Vertrauens-Signal: bekannte Marke ODER sehr solide Review-Basis.
+    #     Das Marken-Feld ist bei /deal-Daten oft leer (Backfill läuft) —
+    #     Rating + Review-Anzahl ist daher das primäre Signal, Marke der Bonus.
+    if not is_known_brand(brand, title) and not (rating >= 4.3 and reviews >= 500):
+        return False
 
     return True
 
@@ -257,12 +386,48 @@ def calculate_deal_score(
 # Tags
 # ---------------------------------------------------------------------------
 
+def best_price_since_months(history: list, current: float) -> int | None:
+    """
+    Wie viele Monate liegt der letzte Zeitpunkt zurück, an dem das Produkt
+    genauso günstig oder günstiger war als jetzt (2% Toleranz)?
+
+    history: chronologische Liste [(preis_eur, datetime), …] ECHTER Keepa-Punkte.
+    Die aktuelle Niedrigpreis-Phase am Ende der History zählt nicht mit —
+    sie IST der Deal. War der Preis davor nie so tief, zählt die volle
+    History-Spanne ("Bester Preis seit Aufzeichnungsbeginn").
+
+    None, wenn keine belastbare Aussage möglich ist (zu wenig History, oder
+    der Preis war praktisch durchgehend so günstig → kein echtes Urteil).
+    """
+    if not history or len(history) < 3 or not current or current <= 0:
+        return None
+    tol = current * 1.02
+    now = datetime.utcnow()
+
+    # Trailing-Tief überspringen (die laufende Deal-Phase)
+    i = len(history) - 1
+    while i >= 0 and history[i][0] <= tol:
+        i -= 1
+    if i < 0:
+        return None  # war im gesamten Fenster nie teurer → kein Urteil
+
+    # Von dort rückwärts: letzter Punkt, der schon einmal ≤ tol war
+    j = i
+    while j >= 0 and history[j][0] > tol:
+        j -= 1
+    anchor = history[j][1] if j >= 0 else history[0][1]
+
+    months = (now - anchor).days // 30
+    return int(months) if months >= 1 else None
+
+
 def determine_tag(
     current: float,
     atl: float,        # Echter ATL (nur aus /product Deep-Sync, sonst 0)
     avg90:  float,
     avg180: float,
-    atl_confirmed: bool = False,  # True nur wenn ATL aus /product stammt
+    atl_confirmed: bool = False,   # True nur wenn ATL aus /product stammt
+    months_since_lower: int | None = None,  # aus best_price_since_months()
 ) -> str:
     """
     Gibt den höchstpriorisierten Tag zurück (maximal einer pro Deal).
@@ -270,6 +435,10 @@ def determine_tag(
     "Allzeittiefpreis" wird NUR vergeben wenn der echte ATL bekannt ist
     (atl_confirmed=True, kommt aus /product Deep-Sync).
     Aus /deal-Daten steht nur avg365 als Proxy — das reicht NICHT für den Tag.
+
+    Seit dem Quality Gate (2026-07-05) kommt praktisch jeder aktive Deal
+    ≥20% unter Ø90 ODER nahe ans (Proxy-)Tief — der Fallback am Ende stellt
+    sicher, dass JEDE Kachel ein Preishistorie-Urteil trägt.
     """
     # avg90 || avg180 als bester verfügbarer Referenzpreis
     ref = avg90 or avg180
@@ -278,8 +447,18 @@ def determine_tag(
     if atl_confirmed and atl > 0 and current <= atl * 1.03:
         return "Allzeittiefpreis"
 
+    # Konkretes Urteil aus echter Preishistorie — stärkstes Kaufargument
+    if months_since_lower is not None and months_since_lower >= 12:
+        return "Bester Preis seit über 1 Jahr"
+    if months_since_lower is not None and months_since_lower >= 3:
+        return f"Bester Preis seit {months_since_lower} Monaten"
+
     # Deutlich unter 6-Monats-Durchschnitt
     if avg180 > 0 and current <= avg180 * 0.80:
+        return "Historisch günstig"
+
+    # Nahe am Tief (unbestätigt = avg365-Proxy aus /deal)
+    if atl > 0 and current <= atl * 1.05:
         return "Historisch günstig"
 
     # Deutlich unter Referenzpreis
@@ -288,6 +467,11 @@ def determine_tag(
 
     # Moderat unter Referenzpreis (inkl. Fallback avg180 wenn avg90 fehlt)
     if ref > 0 and current <= ref * 0.85:
+        return "Preis gefallen"
+
+    # Fallback: Quality Gate garantiert einen echten Preisrückgang —
+    # keine Kachel ohne Urteil.
+    if ref > 0 and current < ref:
         return "Preis gefallen"
 
     return ""
