@@ -389,8 +389,13 @@ _CARD_CSS = """
 _SITE_HEADER_CSS = """
   @font-face { font-family:'Plus Jakarta Sans'; src:url('https://www.snagga.de/fonts/pjs-700.woff2') format('woff2'); font-weight:700; font-display:swap; }
   header { background:#153D68; height:72px; }
-  .site-header-wrap { max-width:1840px; width:98%; margin:0 auto; height:100%; display:flex; align-items:center; justify-content:space-between; }
+  .site-header-wrap { box-sizing:border-box; max-width:1840px; width:98%; margin:0 auto; height:100%; display:flex; align-items:center; justify-content:space-between; }
   .site-header-wrap a.logo { font-family:'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif; color:#EDE9E3; font-size:28px; font-weight:800; letter-spacing:-0.5px; text-decoration:none; }
+  /* Unter 1024px (Mobile/Tablet) 14px Innenabstand — exakt wie der React-Header
+     (paddingLeft/Right:14 bei !isDesktop), sonst steht das Logo auf SSR-Seiten
+     14px weiter links als auf der Hauptseite. Ab 1024px kein Padding (deckungs-
+     gleich mit dem width:98%-Wrapper der Hauptseite). */
+  @media (max-width:1023px) { .site-header-wrap { padding-left:14px; padding-right:14px; } }
   @media (max-width:639px) { .site-header-wrap a.logo { font-size:22px; } }
   .site-header-right a { color:#EDE9E3; font-size:14px; text-decoration:none; padding:8px 16px; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.08); transition:background 0.15s; }
   .site-header-right a:hover { background:rgba(255,255,255,0.18); }
