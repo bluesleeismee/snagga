@@ -1293,6 +1293,16 @@ _ASIN_URL_RE  = re.compile(r"/(?:dp|gp/product|gp/aw/d|product)/([A-Z0-9]{10})",
 _ASIN_BARE_RE = re.compile(r"^\s*(B[0-9A-Z]{9})\s*$", re.IGNORECASE)
 _SHORTLINK_RE = re.compile(r"^(?:https?://)?(?:www\.)?(?:amzn\.to|amzn\.eu|a\.co)/", re.IGNORECASE)
 
+# Zubehör-Wörter für die Suchtreffer-Sortierung: Kernprodukte (z.B. das Handy
+# selbst) sollen vor Zubehör (Hülle, Ladekabel, ...) stehen — sonst gewinnt oft
+# die Hülle, weil sie eher ein Deal-Signal (aktiv/Score) hat als das Gerät.
+_ACCESSORY_RE = re.compile(
+    r"h[üu]lle|case|cover|schutzfolie|panzerglas|folie|tasche|st[äa]nder|"
+    r"halterung|ladekabel|ladeger[äa]t|netzteil|adapter|armband|ersatzteil|"
+    r"schutzh[üu]lle|geh[äa]use",
+    re.IGNORECASE,
+)
+
 # Schutz des Keepa-Budgets: Live-Lookups (= unbekannte ASINs) pro IP und global
 # gedeckelt. DB-Treffer und Namenssuchen kosten nichts und sind nicht limitiert.
 _pc_ip_hits: dict[str, list[float]] = {}
@@ -1476,11 +1486,23 @@ async def preis_check(request: Request, q: str = Query(default="")):
             f"(name ILIKE '%' || ${i+1} || '%' OR brand ILIKE '%' || ${i+1} || '%')"
             for i in range(len(tokens))
         )
+        # Grosszügiger Kandidaten-Pool (60), damit nach dem Zubehör-Nachrücken
+        # (unten) noch genug "echte" Produkte für die Top-20 übrig sind — sonst
+        # würde z.B. bei "Samsung Galaxy S25" die Hülle vors Handy rutschen, weil
+        # sie eher ein Deal-Signal hat als das Gerät selbst.
         sql = (f"SELECT asin, name, brand, image_url, current_price, tag FROM products "
                f"WHERE {conds} "
-               f"ORDER BY is_active DESC, has_real_history DESC, deal_score DESC LIMIT 20")
+               f"ORDER BY is_active DESC, has_real_history DESC, deal_score DESC LIMIT 60")
         async with pool.acquire() as conn:
             rows = await conn.fetch(sql, *tokens)
+
+        # Zubehör (Hülle, Ladekabel, ...) hinter Kernprodukte einsortieren — außer
+        # der Nutzer sucht selbst danach (z.B. "hülle" im Suchbegriff enthalten).
+        # Stabile Sortierung erhält die bestehende Reihenfolge innerhalb der
+        # beiden Gruppen (is_active/has_real_history/deal_score aus der Query).
+        if not any(_ACCESSORY_RE.search(t) for t in tokens):
+            rows = sorted(rows, key=lambda r: bool(_ACCESSORY_RE.search(r["name"] or "")))
+        rows = rows[:20]
     else:
         rows = []
 
