@@ -296,7 +296,13 @@ export default function DealsPage() {
   const [visibleCount, setVisibleCount] = useState(60)
   const [bestPicks,    setBestPicks]    = useState(() => lsGet(LS_PICKS) || [])
   const [loading,      setLoading]      = useState(deals.length === 0)
-  const [theme,        setTheme]        = useState(() => localStorage.getItem('sng_theme') || 'light')
+  const [theme,        setTheme]        = useState(() => {
+    const saved = localStorage.getItem('sng_theme')
+    if (saved) return saved
+    // Erstbesuch (kein gespeicherter Wert) → Betriebssystem-Einstellung
+    // übernehmen, statt immer hell zu starten.
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  })
   const navRef    = useRef(null)
   const spacerRef = useRef(null)
   const lastScrollY = useRef(0)

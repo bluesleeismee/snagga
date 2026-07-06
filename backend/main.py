@@ -361,32 +361,49 @@ _CARD_CSS = """
   @media (min-width:768px)  { .grid { grid-template-columns:repeat(3,minmax(0,1fr)); gap:24px; } }
   @media (min-width:1100px) { .grid { grid-template-columns:repeat(4,minmax(0,1fr)); } }
   @media (min-width:1500px) { .grid { grid-template-columns:repeat(5,minmax(0,1fr)); } }
-  .card { background:#fff; border:1px solid #EAE6E1; display:flex; flex-direction:column; text-decoration:none; color:#1F1E1D; }
+  .card { background:var(--bg-card); border:1px solid var(--border); display:flex; flex-direction:column; text-decoration:none; color:var(--text); }
   .card-img { background:#fff; height:240px; display:flex; align-items:center; justify-content:center; padding:24px; position:relative; }
   .card-disc { position:absolute; top:14px; left:14px; background:#C85E43; color:#fff; padding:3px 8px; font-size:11px; font-weight:600; letter-spacing:0.5px; }
   .card-img img { max-width:100%; max-height:190px; object-fit:contain; }
   .card-tag { font-size:10px; font-weight:600; letter-spacing:0.6px; padding:4px 10px; text-transform:uppercase; }
   .card-tag-empty { background:transparent !important; color:transparent !important; }
   .card-body { padding:16px 18px; display:flex; flex-direction:column; flex:1; }
-  .card-brand { font-size:10.5px; text-transform:uppercase; letter-spacing:1px; color:#7E7A75; font-weight:500; margin-bottom:7px; }
-  .card-name { font-size:14px; font-weight:500; line-height:1.45; color:#1F1E1D; margin-bottom:14px; height:40px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .card-brand { font-size:10.5px; text-transform:uppercase; letter-spacing:1px; color:var(--muted); font-weight:500; margin-bottom:7px; }
+  .card-name { font-size:14px; font-weight:500; line-height:1.45; color:var(--text); margin-bottom:14px; height:40px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .card-price-row { display:flex; align-items:baseline; gap:8px; margin-bottom:14px; }
   .card-price { font-size:17px; font-weight:700; }
-  .card-original { font-size:13px; text-decoration:line-through; color:#7E7A75; }
-  .card-footer { border-top:1px solid #EAE6E1; padding-top:11px; font-size:11px; color:#7E7A75; margin-top:auto; display:flex; align-items:center; justify-content:space-between; gap:8px; }
-  .card-share { background:none; border:none; cursor:pointer; padding:2px; display:inline-flex; align-items:center; color:#7E7A75; transition:color 0.15s; flex-shrink:0; }
-  .card-share:hover { color:#1F1E1D; }
+  .card-original { font-size:13px; text-decoration:line-through; color:var(--muted); }
+  .card-footer { border-top:1px solid var(--border); padding-top:11px; font-size:11px; color:var(--muted); margin-top:auto; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .card-share { background:none; border:none; cursor:pointer; padding:2px; display:inline-flex; align-items:center; color:var(--muted); transition:color 0.15s; flex-shrink:0; }
+  .card-share:hover { color:var(--text); }
   .card-share.copied { color:#C85E43; }
   .card-share .icon-check { display:none; }
   .card-share.copied .icon-share { display:none; }
   .card-share.copied .icon-check { display:inline-block; }
 """
 
+# Dark/Light-Theme ohne Cookie: derselbe localStorage-Key ('sng_theme') und
+# dieselben Farbwerte wie die Hauptseite (index.css). Das Script läuft als
+# erstes im <head> (vor jedem Paint), damit kein Hell→Dunkel-Flackern (FOUC)
+# entsteht — genau wie React es via useEffect+data-theme-Attribut macht, nur
+# synchron statt erst nach dem Mount. Ohne gespeicherten Wert (Erstbesuch)
+# greift die Betriebssystem-Einstellung (prefers-color-scheme).
+_THEME_INIT_SCRIPT = """<script>(function(){try{
+var t=localStorage.getItem('sng_theme');
+if(!t){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}
+document.documentElement.setAttribute('data-theme',t);
+}catch(e){}})();</script>"""
+
+_THEME_VARS_CSS = """
+  :root { --bg:#FAF8F5; --bg-card:#FFFFFF; --bg-img:#FAF9F7; --border:#EAE6E1; --text:#1F1E1D; --muted:#7E7A75; --accent:#C85E43; }
+  [data-theme="dark"] { --bg:#0e0d0d; --bg-card:#221F1C; --bg-img:#2A2724; --border:#38342F; --text:#EDE9E3; --muted:#9A938A; --accent:#D4694A; }
+"""
+
 # Einheitlicher Header für ALLE SSR-Seiten — Logo/Breite 1:1 aus dem
 # React-Header (DealsPage.jsx) übernommen, damit sich die SSR-Seiten wie
 # Teil der App anfühlen. Rechts-Slot (space-between) für optionale Aktionen
 # wie "Zur Startseite" auf Utility-Antwortseiten.
-_SITE_HEADER_CSS = """
+_SITE_HEADER_CSS = _THEME_VARS_CSS + """
   @font-face { font-family:'Plus Jakarta Sans'; src:url('https://www.snagga.de/fonts/pjs-700.woff2') format('woff2'); font-weight:700; font-display:swap; }
   header { background:#153D68; height:72px; }
   .site-header-wrap { box-sizing:border-box; max-width:1840px; width:98%; margin:0 auto; height:100%; display:flex; align-items:center; justify-content:space-between; }
@@ -428,14 +445,14 @@ _CHART_ICON = ('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" '
 #    jeder Stelle neu erfunden wird. CSS + HTML-Generator als Paar. ──────────
 _PRICE_STATS_CSS = """
   .pp-price-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:4px 0 16px; }
-  .pp-price { font-size:28px; font-weight:700; color:#1F1E1D; }
-  .pp-orig { font-size:15px; text-decoration:line-through; color:#7E7A75; }
-  .pp-disc { background:#C85E43; color:#fff; padding:3px 9px; font-size:12px; font-weight:600; letter-spacing:0.5px; }
+  .pp-price { font-size:28px; font-weight:700; color:var(--text); }
+  .pp-orig { font-size:15px; text-decoration:line-through; color:var(--muted); }
+  .pp-disc { background:var(--accent); color:#fff; padding:3px 9px; font-size:12px; font-weight:600; letter-spacing:0.5px; }
   .pp-stats-row { display:flex; gap:22px; flex-wrap:wrap; align-items:flex-start; margin-bottom:20px; }
   .pp-stat { display:flex; flex-direction:column; gap:3px; }
   .pp-stat-right { margin-left:auto; }
-  .pp-stat-label { font-size:10px; text-transform:uppercase; letter-spacing:0.6px; color:#7E7A75; font-weight:600; }
-  .pp-stat-val { font-size:14px; font-weight:600; color:#1F1E1D; }
+  .pp-stat-label { font-size:10px; text-transform:uppercase; letter-spacing:0.6px; color:var(--muted); font-weight:600; }
+  .pp-stat-val { font-size:14px; font-weight:600; color:var(--text); }
   .pp-star { color:#F5A623; }
 """
 
@@ -679,14 +696,15 @@ def _not_found_page(message: str) -> HTMLResponse:
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+{_THEME_INIT_SCRIPT}
 <title>Seite nicht gefunden | snagga.de</title>
 <meta name="robots" content="noindex, follow">
 <style>
-  body {{ font-family: system-ui, sans-serif; background:#F2EFEA; color:#1F1E1D; margin:0; }}
+  body {{ font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); margin:0; }}
   {_SITE_HEADER_CSS}
   main {{ max-width:640px; margin:0 auto; padding:60px 20px; text-align:center; }}
   h1 {{ font-size:24px; margin-bottom:8px; }}
-  .back {{ display:inline-block; margin-top:20px; background:#C85E43; color:#fff; padding:14px 28px; border-radius:4px; text-decoration:none; font-weight:700; }}
+  .back {{ display:inline-block; margin-top:20px; background:var(--accent); color:#fff; padding:14px 28px; border-radius:4px; text-decoration:none; font-weight:700; }}
 </style>
 </head>
 <body>
@@ -758,15 +776,16 @@ async def deal_page(asin: str):
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+{_THEME_INIT_SCRIPT}
 <title>{name} — Deal nicht mehr verfügbar | snagga.de</title>
 <meta name="robots" content="noindex, follow">
 <link rel="canonical" href="{canonical}">
 <style>
-  body {{ font-family: system-ui, sans-serif; background:#F2EFEA; color:#1F1E1D; margin:0; }}
+  body {{ font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); margin:0; }}
   {_SITE_HEADER_CSS}
   main {{ max-width:1840px; width:98%; margin:0 auto; padding:32px 0; }}
   h1 {{ font-size:22px; }}
-  .back {{ display:inline-block; margin-top:8px; color:#153D68; }}
+  .back {{ display:inline-block; margin-top:8px; color:var(--accent); }}
   {_CARD_CSS}
 </style>
 {_CARD_SHARE_JS}
@@ -871,6 +890,7 @@ async def deal_page(asin: str):
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+{_THEME_INIT_SCRIPT}
 <title>{title}</title>
 <meta name="description" content="{desc}">
 <meta name="robots" content="index, follow">
@@ -883,9 +903,9 @@ async def deal_page(asin: str):
 <meta name="twitter:card" content="summary_large_image">
 <script type="application/ld+json">{json.dumps(ld_json, ensure_ascii=False)}</script>
 <style>
-  body {{ font-family: system-ui, sans-serif; background:#FAF8F5; color:#1F1E1D; margin:0; }}
+  body {{ font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); margin:0; }}
   {_SITE_HEADER_CSS}
-  .wrap {{ max-width:1840px; width:98%; margin:32px auto; background:#fff; display:grid; grid-template-columns:1fr 1.15fr; box-shadow:0 4px 24px rgba(0,0,0,0.06); position:relative; }}
+  .wrap {{ max-width:1840px; width:98%; margin:32px auto; background:var(--bg-card); display:grid; grid-template-columns:1fr 1.15fr; box-shadow:0 4px 24px rgba(0,0,0,0.06); position:relative; }}
   @media (max-width:760px) {{ .wrap {{ grid-template-columns:1fr; margin:0; }} }}
   .page-share {{ position:absolute; top:20px; right:20px; z-index:5; display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:50%; background:#fff; border:none; cursor:pointer; color:#7E7A75; box-shadow:0 1px 4px rgba(0,0,0,0.1); transition:background 0.15s, color 0.15s; }}
   .page-share:hover {{ background:#FAF9F7; color:#1F1E1D; }}
@@ -898,13 +918,13 @@ async def deal_page(asin: str):
   .gallery img {{ max-width:100%; max-height:460px; object-fit:contain; }}
   .details {{ padding:56px 52px; }}
   @media (max-width:760px) {{ .details {{ padding:32px 24px; }} }}
-  .brand {{ font-size:11px; text-transform:uppercase; letter-spacing:1.5px; color:#7E7A75; font-weight:600; margin-bottom:10px; }}
-  .tag {{ display:inline-block; background:#C85E43; color:#fff; font-size:13px; font-weight:700; padding:4px 10px; margin-bottom:12px; }}
+  .brand {{ font-size:11px; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); font-weight:600; margin-bottom:10px; }}
+  .tag {{ display:inline-block; background:var(--accent); color:#fff; font-size:13px; font-weight:700; padding:4px 10px; margin-bottom:12px; }}
   h1 {{ font-size:31px; font-weight:700; line-height:1.35; margin:0 0 24px; }}
   {_PRICE_STATS_CSS}
-  .cta {{ display:flex; align-items:center; justify-content:center; gap:10px; background:#C85E43; color:#fff; padding:16px 28px; font-size:16px; font-weight:600; text-decoration:none; margin-top:20px; }}
-  .back {{ display:block; margin-top:16px; color:#153D68; font-size:14px; text-decoration:none; }}
-  .affiliate-note {{ font-size:12px; color:#7E7A75; line-height:1.5; margin:18px 0 0; }}
+  .cta {{ display:flex; align-items:center; justify-content:center; gap:10px; background:var(--accent); color:#fff; padding:16px 28px; font-size:16px; font-weight:600; text-decoration:none; margin-top:20px; }}
+  .back {{ display:block; margin-top:16px; color:var(--accent); font-size:14px; text-decoration:none; }}
+  .affiliate-note {{ font-size:12px; color:var(--muted); line-height:1.5; margin:18px 0 0; }}
 </style>
 {_CARD_SHARE_JS}
 </head>
@@ -1060,6 +1080,7 @@ async def category_page(slug: str):
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+{_THEME_INIT_SCRIPT}
 <title>{title}</title>
 <meta name="description" content="{desc}">
 <meta name="robots" content="{robots}">
@@ -1070,15 +1091,15 @@ async def category_page(slug: str):
 <meta property="og:url" content="{canonical}">
 {ld_script}
 <style>
-  body {{ font-family: system-ui, sans-serif; background:#FAF8F5; color:#1F1E1D; margin:0; }}
+  body {{ font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); margin:0; }}
   {_SITE_HEADER_CSS}
   main {{ max-width:1840px; width:98%; margin:0 auto; padding:32px 0; }}
   h1 {{ font-size:26px; margin-bottom:4px; }}
-  .cat-intro {{ font-size:15px; line-height:1.6; color:#3a3a3a; margin:12px 0 28px; }}
+  .cat-intro {{ font-size:15px; line-height:1.6; color:var(--text); margin:12px 0 28px; }}
   {_CARD_CSS}
   .catnav {{ display:flex; flex-wrap:wrap; gap:8px; margin-top:40px; }}
-  .catnav a {{ font-size:13px; background:#fff; border-radius:20px; padding:6px 14px; text-decoration:none; color:#153D68; }}
-  .back {{ display:inline-block; margin-top:20px; color:#153D68; }}
+  .catnav a {{ font-size:13px; background:var(--bg-card); border:1px solid var(--border); border-radius:20px; padding:6px 14px; text-decoration:none; color:var(--accent); }}
+  .back {{ display:inline-block; margin-top:20px; color:var(--accent); }}
 </style>
 {_CARD_SHARE_JS}
 </head>
@@ -1445,25 +1466,26 @@ def _pc_shell(title_txt: str, body_html: str, status: int = 200) -> HTMLResponse
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+{_THEME_INIT_SCRIPT}
 <title>{html.escape(title_txt)} | snagga.de</title>
 <meta name="robots" content="noindex, follow">
 <style>
-  body {{ font-family: system-ui, sans-serif; background:#F2EFEA; color:#1F1E1D; margin:0; }}
+  body {{ font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); margin:0; }}
   {_SITE_HEADER_CSS}
   main {{ max-width:1840px; width:98%; margin:0 auto; padding:32px 0 48px; }}
   h1 {{ font-size:24px; margin-bottom:16px; }}
-  p  {{ line-height:1.6; color:#3a3a3a; }}
-  .results a {{ display:flex; gap:16px; align-items:center; background:#fff; border:1px solid #EAE6E1;
-               padding:14px 18px; margin-bottom:10px; text-decoration:none; color:#1F1E1D; }}
-  .results a:hover {{ border-color:#153D68; }}
-  .results img {{ width:56px; height:56px; object-fit:contain; flex-shrink:0; }}
+  p  {{ line-height:1.6; color:var(--text); }}
+  .results a {{ display:flex; gap:16px; align-items:center; background:var(--bg-card); border:1px solid var(--border);
+               padding:14px 18px; margin-bottom:10px; text-decoration:none; color:var(--text); }}
+  .results a:hover {{ border-color:var(--accent); }}
+  .results img {{ width:56px; height:56px; object-fit:contain; flex-shrink:0; background:#fff; }}
   .results .r-main {{ min-width:0; flex:1 1 auto; overflow:hidden; }}
   .results .r-name {{ font-size:15px; font-weight:600; line-height:1.4; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
   .results .r-tag {{ display:inline-block; font-size:12px; color:#1E7A3C; margin-top:4px; }}
   .results .r-side {{ display:flex; flex-direction:column; align-items:flex-end; gap:2px; margin-left:16px; flex-shrink:0; text-align:right; min-width:120px; }}
   .results .r-price {{ font-size:15px; font-weight:700; white-space:nowrap; }}
-  .results .r-cue {{ display:inline-flex; align-items:center; gap:5px; font-size:12px; color:#153D68; }}
-  .hint {{ background:#fff; border:1px solid #EAE6E1; padding:14px 18px; font-size:14px; margin-top:18px; max-width:820px; }}
+  .results .r-cue {{ display:inline-flex; align-items:center; gap:5px; font-size:12px; color:var(--accent); }}
+  .hint {{ background:var(--bg-card); border:1px solid var(--border); padding:14px 18px; font-size:14px; margin-top:18px; max-width:820px; }}
 </style>
 </head>
 <body>
@@ -1850,6 +1872,7 @@ async def price_page(request: Request, asin: str):
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+{_THEME_INIT_SCRIPT}
 <title>{title}</title>
 <meta name="description" content="{desc}">
 <meta name="robots" content="{robots}">
@@ -1861,7 +1884,7 @@ async def price_page(request: Request, asin: str):
 <meta property="og:url" content="{canonical}">
 <script type="application/ld+json">{json.dumps(ld_json, ensure_ascii=False)}</script>
 <style>
-  body {{ font-family: system-ui, sans-serif; background:#FAF8F5; color:#1F1E1D; margin:0; }}
+  body {{ font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); margin:0; }}
   {_SITE_HEADER_CSS}
   main {{ max-width:1840px; width:98%; margin:0 auto; padding:32px 0; }}
   h1 {{ font-size:24px; line-height:1.35; margin:0 0 20px; }}
@@ -1881,37 +1904,37 @@ async def price_page(request: Request, asin: str):
      höher ist (langer Titel vs. hoher Chart). */
   .chart-push {{ margin-top:auto; }}
   .cta-note-bottom {{ margin-top:auto; }}
-  .verdict {{ border-left:5px solid {vcolor}; background:#fff; padding:16px 20px; margin-bottom:16px; }}
-  .verdict .v-head {{ font-size:13px; color:#7E7A75; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px; }}
+  .verdict {{ border-left:5px solid {vcolor}; background:var(--bg-card); padding:16px 20px; margin-bottom:16px; }}
+  .verdict .v-head {{ font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:4px; }}
   .verdict .v-label {{ font-size:24px; font-weight:800; color:{vcolor}; }}
-  .verdict .v-reason {{ font-size:14px; color:#4A4845; margin-top:4px; }}
+  .verdict .v-reason {{ font-size:14px; color:var(--text); margin-top:4px; }}
   .cta {{ display:block; text-align:center; padding:14px; font-weight:600; font-size:16px; text-decoration:none; }}
-  .cta-buy {{ background:#C85E43; color:#fff; }}
-  .cta-wait {{ background:#F2EFEA; color:#4A4845; }}
-  .cta-note {{ font-size:12px; color:#7E7A75; margin:8px 0 0; }}
+  .cta-buy {{ background:var(--accent); color:#fff; }}
+  .cta-wait {{ background:var(--bg-img); color:var(--muted); }}
+  .cta-note {{ font-size:12px; color:var(--muted); margin:8px 0 0; }}
   .chart {{ background:#fff; border:1px solid #EAE6E1; padding:20px 18px; margin:8px 0 20px; }}
   .nochart {{ background:#fff; border:1px solid #EAE6E1; padding:20px; color:#7E7A75; font-size:14px; }}
   .chart-tabs {{ display:flex; gap:8px; margin-bottom:14px; }}
-  .chart-tab {{ background:none; border:1px solid #EAE6E1; color:#153D68; padding:7px 16px; font-size:13px; font-family:inherit; cursor:pointer; }}
-  .chart-tab.active {{ background:#153D68; color:#fff; border-color:#153D68; font-weight:600; }}
-  table.stats {{ width:100%; border-collapse:collapse; background:#fff; border:1px solid #EAE6E1; margin-top:8px; }}
-  table.stats td {{ padding:11px 16px; border-bottom:1px solid #EFEBE6; font-size:14px; }}
+  .chart-tab {{ background:none; border:1px solid var(--border); color:var(--accent); padding:7px 16px; font-size:13px; font-family:inherit; cursor:pointer; }}
+  .chart-tab.active {{ background:var(--accent); color:#fff; border-color:var(--accent); font-weight:600; }}
+  table.stats {{ width:100%; border-collapse:collapse; background:var(--bg-card); border:1px solid var(--border); margin-top:8px; }}
+  table.stats td {{ padding:11px 16px; border-bottom:1px solid var(--border); font-size:14px; }}
   table.stats tr:last-child td {{ border-bottom:none; }}
-  table.stats td:first-child {{ color:#4A4845; }}
+  table.stats td:first-child {{ color:var(--muted); }}
   table.stats td:last-child {{ text-align:right; font-weight:700; }}
-  .alert-form {{ background:#fff; border:1px solid #D8D3CC; border-left:4px solid #C85E43; padding:22px 24px; margin:8px 0 8px; box-shadow:0 2px 10px rgba(0,0,0,0.05); }}
-  .alert-intro {{ font-size:14px; color:#3A3835; margin:0 0 14px; }}
+  .alert-form {{ background:var(--bg-card); border:1px solid var(--border); border-left:4px solid var(--accent); padding:22px 24px; margin:8px 0 8px; box-shadow:0 2px 10px rgba(0,0,0,0.05); }}
+  .alert-intro {{ font-size:14px; color:var(--text); margin:0 0 14px; }}
   .alert-row {{ display:flex; gap:10px; flex-wrap:wrap; }}
-  .alert-row input {{ flex:1; min-width:140px; padding:12px 14px; border:1.5px solid #B0A99D; color:#1F1E1D; font-size:15px; font-family:inherit; }}
-  .alert-row input::placeholder {{ color:#8A8478; }}
-  .alert-row input:focus {{ outline:none; border-color:#153D68; box-shadow:0 0 0 3px rgba(21,61,104,0.14); }}
+  .alert-row input {{ flex:1; min-width:140px; padding:12px 14px; border:1.5px solid var(--border); background:var(--bg-card); color:var(--text); font-size:15px; font-family:inherit; }}
+  .alert-row input::placeholder {{ color:var(--muted); }}
+  .alert-row input:focus {{ outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(200,94,67,0.18); }}
   .alert-row input[type=number] {{ flex:0 0 150px; }}
-  .alert-row button {{ background:#153D68; color:#fff; border:none; padding:12px 24px; font-size:15px; font-weight:700; cursor:pointer; }}
-  .alert-row button:hover {{ background:#1b4d84; }}
-  .alert-legal {{ font-size:11.5px; color:#6B6560; margin:12px 0 0; line-height:1.5; }}
-  .alert-legal a {{ color:#6B6560; }}
+  .alert-row button {{ background:var(--accent); color:#fff; border:none; padding:12px 24px; font-size:15px; font-weight:700; cursor:pointer; }}
+  .alert-row button:hover {{ filter:brightness(0.9); }}
+  .alert-legal {{ font-size:11.5px; color:var(--muted); margin:12px 0 0; line-height:1.5; }}
+  .alert-legal a {{ color:var(--muted); }}
   {_CARD_CSS}
-  .back {{ display:inline-block; margin-top:20px; color:#153D68; }}
+  .back {{ display:inline-block; margin-top:20px; color:var(--accent); }}
 </style>
 {_CARD_SHARE_JS}
 </head>
@@ -1960,15 +1983,16 @@ def _simple_page(heading: str, body_html: str, status: int = 200) -> HTMLRespons
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+{_THEME_INIT_SCRIPT}
 <title>{heading} | snagga.de</title>
 <meta name="robots" content="noindex, follow">
 <style>
-  body {{ font-family: system-ui, sans-serif; background:#FAF8F5; color:#1F1E1D; margin:0; }}
+  body {{ font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); margin:0; }}
   {_SITE_HEADER_CSS}
   main {{ max-width:620px; margin:0 auto; padding:48px 20px; }}
   h1 {{ font-size:24px; }}
-  p {{ font-size:15px; line-height:1.6; color:#4A4845; }}
-  .back {{ display:inline-block; margin-top:20px; color:#153D68; }}
+  p {{ font-size:15px; line-height:1.6; color:var(--text); }}
+  .back {{ display:inline-block; margin-top:20px; color:var(--accent); }}
 </style>
 </head>
 <body>
@@ -2043,7 +2067,7 @@ async def alarm_setzen(
         return _resp("Fast geschafft! 📬",
                      f"<p>Wir haben dir eine Bestätigungs-Mail an <strong>{html.escape(email)}</strong> "
                      f"geschickt. Bitte klick den Link darin, dann ist dein Preisalarm aktiv.</p>"
-                     f"<p style='font-size:13px;color:#7E7A75'>Keine Mail bekommen? Schau im Spam-Ordner nach.</p>",
+                     f"<p style='font-size:13px;color:var(--muted)'>Keine Mail bekommen? Schau im Spam-Ordner nach.</p>",
                      f"Bestätigungs-Mail an {email} verschickt. Bitte klick den Link darin, dann ist dein Preisalarm aktiv. "
                      f"(Keine Mail? Schau im Spam-Ordner nach.)")
     return _resp("Preisalarm vorgemerkt",
@@ -2157,6 +2181,7 @@ async def prime_day_page():
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+{_THEME_INIT_SCRIPT}
 <title>{title}</title>
 <meta name="description" content="{desc}">
 <meta name="robots" content="index, follow">
@@ -2167,20 +2192,20 @@ async def prime_day_page():
 <meta property="og:url" content="{canonical}">
 {ld_script}
 <style>
-  body {{ font-family: system-ui, sans-serif; background:#FAF8F5; color:#1F1E1D; margin:0; }}
+  body {{ font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); margin:0; }}
   {_SITE_HEADER_CSS}
   main {{ max-width:1840px; width:98%; margin:0 auto; padding:32px 0; }}
   h1 {{ font-size:28px; margin-bottom:4px; }}
   h2 {{ font-size:21px; margin-top:40px; }}
   .lead {{ font-size:16px; max-width:820px; }}
   .tips {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:16px; margin:20px 0; }}
-  .tip {{ background:#fff; padding:20px 22px; box-shadow:0 2px 10px rgba(0,0,0,0.04); }}
+  .tip {{ background:var(--bg-card); padding:20px 22px; box-shadow:0 2px 10px rgba(0,0,0,0.04); }}
   .tip h3 {{ font-size:15px; margin:0 0 8px; }}
-  .tip p {{ font-size:14px; margin:0; color:#4A4845; }}
+  .tip p {{ font-size:14px; margin:0; color:var(--text); }}
   {_CARD_CSS}
   .catnav {{ display:flex; flex-wrap:wrap; gap:8px; margin-top:40px; }}
-  .catnav a {{ font-size:13px; background:#fff; border-radius:20px; padding:6px 14px; text-decoration:none; color:#153D68; }}
-  .back {{ display:inline-block; margin-top:20px; color:#153D68; }}
+  .catnav a {{ font-size:13px; background:var(--bg-card); border:1px solid var(--border); border-radius:20px; padding:6px 14px; text-decoration:none; color:var(--accent); }}
+  .back {{ display:inline-block; margin-top:20px; color:var(--accent); }}
 </style>
 {_CARD_SHARE_JS}
 </head>
