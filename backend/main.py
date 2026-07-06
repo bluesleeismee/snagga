@@ -1459,8 +1459,15 @@ async def _resolve_shortlink(url: str) -> str:
         return ""
 
 
-def _pc_shell(title_txt: str, body_html: str, status: int = 200) -> HTMLResponse:
-    """Gebrandete Hülle für Preis-Check-Antwortseiten (noindex — reine Utility-Antworten)."""
+def _pc_shell(title_txt: str, body_html: str, status: int = 200, q: str = "") -> HTMLResponse:
+    """Gebrandete Hülle für Preis-Check-Antwortseiten (noindex — reine Utility-Antworten).
+    Zeigt oben immer die Suchbox (vorbelegt mit `q`), damit der Kunde nach einem
+    Treffer/Fehler direkt weitersuchen kann, ohne zurück zur Startseite zu müssen."""
+    q_val = html.escape(q[:80])
+    search_box = f"""<form class="pc-search" method="get" action="https://www.snagga.de/preis-check">
+  <input type="text" name="q" value="{q_val}" placeholder="z. B. Samsung Galaxy A26 oder Amazon-Link" aria-label="Produktname oder Amazon-Link">
+  <button type="submit">Suchen</button>
+</form>"""
     return HTMLResponse(status_code=status, content=f"""<!DOCTYPE html>
 <html lang="de">
 <head>
@@ -1475,6 +1482,10 @@ def _pc_shell(title_txt: str, body_html: str, status: int = 200) -> HTMLResponse
   main {{ max-width:1840px; width:98%; margin:0 auto; padding:32px 0 48px; }}
   h1 {{ font-size:24px; margin-bottom:16px; }}
   p  {{ line-height:1.6; color:var(--text); }}
+  .pc-search {{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:28px; max-width:720px; }}
+  .pc-search input {{ flex:1; min-width:220px; padding:13px 16px; font-size:14.5px; border:1px solid var(--border); border-radius:2px; background:var(--bg-card); color:var(--text); outline:none; }}
+  .pc-search input:focus {{ border-color:var(--accent); }}
+  .pc-search button {{ padding:13px 28px; font-size:14.5px; font-weight:700; background:var(--accent); color:#fff; border:none; border-radius:2px; cursor:pointer; white-space:nowrap; }}
   .results a {{ display:flex; gap:16px; align-items:center; background:var(--bg-card); border:1px solid var(--border);
                padding:14px 18px; margin-bottom:10px; text-decoration:none; color:var(--text); }}
   .results a:hover {{ border-color:var(--accent); }}
@@ -1491,6 +1502,7 @@ def _pc_shell(title_txt: str, body_html: str, status: int = 200) -> HTMLResponse
 <body>
 {_site_header('<a href="https://www.snagga.de/">Zur Startseite</a>')}
 <main>
+{search_box}
 {body_html}
 </main>
 </body>
@@ -1526,7 +1538,7 @@ async def preis_check(request: Request, q: str = Query(default="")):
                              "<h1>Kurz durchatmen 😅</h1>"
                              "<p>Du hast gerade viele neue Produkte geprüft. Jede Prüfung fragt "
                              "live die Preisdatenbank ab — bitte versuch es in einer Stunde noch einmal.</p>",
-                             status=429)
+                             status=429, q=q)
 
         data = await enrich_with_keepa([asin], domain=3)
         kd = data.get(asin)
@@ -1535,7 +1547,7 @@ async def preis_check(request: Request, q: str = Query(default="")):
                              "<h1>Kein Preis gefunden</h1>"
                              "<p>Unter diesem Amazon-Link konnten wir kein Produkt mit Preisdaten "
                              "finden — möglicherweise ist es nicht (mehr) auf amazon.de gelistet.</p>",
-                             status=404)
+                             status=404, q=q)
 
         # Kategorie aus rootCat + Titel bestimmen (statt hart "Sonstiges"). Fällt
         # die Klassifikation aus (Junk-rootCat/kein Keyword-Match), bleibt es
@@ -1600,8 +1612,8 @@ async def preis_check(request: Request, q: str = Query(default="")):
         # (unten) noch genug "echte" Produkte für die Top-20 übrig sind — sonst
         # würde z.B. bei "Samsung Galaxy S25" die Hülle vors Handy rutschen, weil
         # sie eher ein Deal-Signal hat als das Gerät selbst.
-        sql = (f"SELECT asin, name, brand, image_url, current_price, tag FROM products "
-               f"WHERE {conds} "
+        sql = (f"SELECT asin, name, brand, image_url, current_price, tag, is_active, last_checked "
+               f"FROM products WHERE {conds} "
                f"ORDER BY is_active DESC, has_real_history DESC, deal_score DESC LIMIT 60")
         async with pool.acquire() as conn:
             rows = await conn.fetch(sql, *tokens)
@@ -1620,8 +1632,16 @@ async def preis_check(request: Request, q: str = Query(default="")):
         img = f'<img src="{html.escape(r["image_url"])}" alt="" loading="lazy">' if r["image_url"] else ""
         name = html.escape((r["name"] or "Produkt")[:90])
         tag = f'<span class="r-tag">{html.escape(r["tag"])}</span>' if r["tag"] else ""
+        # Preis ist eine Aktuellpreis-Aussage → nur bei is_active ODER
+        # last_checked<24h zeigen (Amazon-Compliance, kein live geprüfter Wert
+        # hier — dieselbe Regel wie auf /preis und /deal). Sonst nur Bild+Name+
+        # Preisverlauf-Cue; der frische Preis kommt beim Klick auf /preis.
         price = ""
-        if r["current_price"]:
+        fresh = r["is_active"] or (
+            r["last_checked"] is not None
+            and datetime.utcnow() - r["last_checked"] < timedelta(hours=PRICE_FRESH_HOURS)
+        )
+        if fresh and r["current_price"]:
             price_txt = f"{r['current_price']:.2f}".replace(".", ",")
             price = f'<span class="r-price">{price_txt} €</span>'
         return (f'<a href="https://www.snagga.de/preis/{r["asin"]}">{img}'
@@ -1635,13 +1655,15 @@ async def preis_check(request: Request, q: str = Query(default="")):
                          f"<h1>{len(rows)} Treffer f&uuml;r &bdquo;{q_esc}&ldquo;</h1>"
                          f'<div class="results">{items}</div>'
                          '<div class="hint">Genau dein Produkt nicht dabei? Füge oben den '
-                         '<strong>Amazon-Link</strong> ein — dann prüfen wir es live und nehmen es auf.</div>')
+                         '<strong>Amazon-Link</strong> ein — dann prüfen wir es live und nehmen es auf.</div>',
+                         q=q)
     return _pc_shell("Noch nicht im Katalog",
                      f"<h1>&bdquo;{q_esc}&ldquo; haben wir noch nicht</h1>"
                      "<p>Wir bauen den Katalog laufend aus. Bis dein Produkt dabei ist: kopiere den "
-                     "<strong>Amazon-Link</strong> in die Suchbox (z.B. <code>amazon.de/dp/…</code> oder "
+                     "<strong>Amazon-Link</strong> oben in die Suchbox (z.B. <code>amazon.de/dp/…</code> oder "
                      "ein geteilter <code>amzn.eu</code>-Link) — dann prüfen wir den Preis sofort live "
-                     "gegen die echte Preishistorie.</p>")
+                     "gegen die echte Preishistorie.</p>",
+                     q=q)
 
 
 @app.api_route("/preis/{asin}", methods=["GET", "HEAD"], response_class=HTMLResponse)
