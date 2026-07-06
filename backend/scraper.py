@@ -62,6 +62,13 @@ CATEGORY_MIN_PRICE: dict[str, float] = {
     "Küche, Haushalt & Wohnen":          28.0,
 }
 
+# Katalog-Qualität (David, 2026-07-06): Preisschwelle NUR für den Katalog-Aufbau
+# (seed_bestsellers) 30% über der Deal-Schwelle oben — filtert Billig-/Kleinteil-
+# Bestseller raus und schiebt den durchsuchbaren Katalog Richtung hochwertigere,
+# teurere Produkte. Rührt NICHT an CATEGORY_MIN_PRICE/MIN_PRICE selbst, die
+# bleiben unverändert für die Deal-Discovery.
+CATALOG_MIN_PRICE_MULTIPLIER = 1.3
+
 # ---------------------------------------------------------------------------
 # Amazon-DE rootCat-ID → Snagga-Kategorie
 # Aus Debug-Endpoint /debug/keepa-cats ermittelt (150 Deals, 2026-06-28)
@@ -1059,6 +1066,7 @@ async def seed_bestsellers(max_tokens: int = 6000, max_per_cat: int = 400,
             added = 0
             skipped_junk = 0
             skipped_quality = 0
+            skipped_cheap = 0
             async with db.acquire() as conn:
                 for asin, kd in keepa_data.items():
                     title = kd.get("title") or ""
@@ -1071,6 +1079,10 @@ async def seed_bestsellers(max_tokens: int = 6000, max_per_cat: int = 400,
                         kd.get("brand") or "", title
                     ):
                         skipped_quality += 1
+                        continue
+                    cat_min_catalog = CATEGORY_MIN_PRICE.get(cls_cat, MIN_PRICE) * CATALOG_MIN_PRICE_MULTIPLIER
+                    if (kd["current_price"] or 0) < cat_min_catalog:
+                        skipped_cheap += 1
                         continue
 
                     aff_tag = _affiliate_tag_for(cls_cat)
@@ -1113,9 +1125,10 @@ async def seed_bestsellers(max_tokens: int = 6000, max_per_cat: int = 400,
                 "added": added,
                 "skipped_junk": skipped_junk,
                 "skipped_quality": skipped_quality,
+                "skipped_cheap": skipped_cheap,
             }
-            print(f"  [ok] {label}: +{added} neu (junk:{skipped_junk} low-quality:{skipped_quality}) - "
-                  f"Tokens: {tokens_used}/{max_tokens}")
+            print(f"  [ok] {label}: +{added} neu (junk:{skipped_junk} low-quality:{skipped_quality} "
+                  f"cheap:{skipped_cheap}) - Tokens: {tokens_used}/{max_tokens}")
 
     print(f"[{datetime.utcnow().isoformat()}] Bestseller-Seeding fertig. "
           f"Tokens gesamt: {tokens_used}")

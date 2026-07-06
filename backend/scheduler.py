@@ -15,9 +15,11 @@ from scraper import (
 )
 
 # Brache Keepa-Tokens nutzen, um den Such-Katalog aufzubauen (Stubs, keine
-# Historie). ~600/Std = ~50% der 1200/Std-Rate, lässt den existierenden Jobs
-# (~258/Std) Luft. Env-konfigurierbar.
-CATALOG_GROW_HOURLY_TOKENS = int(os.getenv("CATALOG_GROW_HOURLY_TOKENS", "600"))
+# Historie). Halbiert 2026-07-06 (David: Budget war "regelmässig sehr dünn",
+# 600/Std = 50% des 1200/Std-Budgets war zu aggressiv und konkurrierte mit
+# Preis-Check/Deep-Sync/Ad-hoc-Klicks). Jetzt ~300/Std = ~25%, lässt den
+# existierenden Jobs (~258/Std) + Ad-hoc genug Luft. Env-konfigurierbar.
+CATALOG_GROW_HOURLY_TOKENS = int(os.getenv("CATALOG_GROW_HOURLY_TOKENS", "300"))
 
 
 async def _hourly_catalog_grow():
