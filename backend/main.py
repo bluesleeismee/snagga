@@ -1226,10 +1226,12 @@ def _compute_detail(row, hist_rows) -> dict:
         oldest = _parse_ts(points[0][1])
         has_more = bool(oldest and oldest < datetime.utcnow() - timedelta(days=365)
                         and chart_svg_full and chart_svg_full != chart_svg)
+    # Wunschpreis-Vorschlag auf ganze Euro gerundet (kein "179,99" vorbelegen) —
+    # der Kunde kann selbst Cents eintippen, die Vorbelegung soll aber glatt sein.
     if current and current > 0:
-        suggested = round(current * 0.9, 2)
+        suggested = round(current * 0.9)
     elif atl and atl > 0:
-        suggested = round(atl, 2)
+        suggested = round(atl)
     else:
         suggested = ""
     return {
