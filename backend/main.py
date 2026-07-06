@@ -1478,7 +1478,7 @@ async def preis_check(request: Request, q: str = Query(default="")):
         )
         sql = (f"SELECT asin, name, brand, image_url, current_price, tag FROM products "
                f"WHERE {conds} "
-               f"ORDER BY is_active DESC, has_real_history DESC, deal_score DESC LIMIT 12")
+               f"ORDER BY is_active DESC, has_real_history DESC, deal_score DESC LIMIT 20")
         async with pool.acquire() as conn:
             rows = await conn.fetch(sql, *tokens)
     else:
