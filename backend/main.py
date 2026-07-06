@@ -24,7 +24,10 @@ load_dotenv()
 import alerts
 from database import get_pool, init_db
 from keepa import enrich_with_keepa
-from scraper import fetch_and_update_deals, AFFILIATE_TAG, classify_category, _affiliate_tag_for
+from scraper import (
+    fetch_and_update_deals, AFFILIATE_TAG, classify_category, _affiliate_tag_for,
+    fetch_and_store_history, PRICE_FRESH_HOURS,
+)
 from scoring import is_catalog_quality
 from scheduler import create_scheduler
 
@@ -1510,13 +1513,19 @@ async def preis_check(request: Request, q: str = Query(default="")):
 
 
 @app.api_route("/preis/{asin}", methods=["GET", "HEAD"], response_class=HTMLResponse)
-async def price_page(asin: str):
+async def price_page(request: Request, asin: str):
     """
     Dauerhafte Produkt-/Preisseite. Anders als /deal/{asin} läuft sie NIE ab und
     ist IMMER indexierbar — auch wenn gerade kein Deal aktiv ist. Sie rankt auf
     kaufnahe Suchanfragen ("{Produkt} Preisverlauf / günstigster Preis") und macht
     die bereits bezahlte Keepa-Preishistorie zum zweiten Mal nutzbar. Wachsender
     Seitenbestand statt ablaufender Deal-Seiten — dreht die SEO-Ökonomie um.
+
+    On-Demand-Chart (Katalog-Architektur, siehe Memory): Der Großteil des
+    Katalogs sind reine Stubs (Name+Eckdaten, keine Historie). Beim ersten Klick
+    auf eine solche/veraltete Seite wird die Historie live geholt (1 Token) und
+    gespeichert — rate-limitiert wie /preis-check, damit kein Missbrauch das
+    Tagesbudget leert. Aktive Deals sind ausgenommen (schon stündlich geprüft).
     """
     if not re.match(r"^[A-Z0-9]{10}$", asin):
         return _not_found_page("Produkt nicht gefunden")
@@ -1533,6 +1542,28 @@ async def price_page(asin: str):
         )
         if not row:
             return _not_found_page("Produkt nicht gefunden")
+
+    stale = (row["last_checked"] is None
+             or datetime.utcnow() - row["last_checked"] > timedelta(hours=PRICE_FRESH_HOURS))
+    if not row["is_active"] and stale:
+        ip = (request.headers.get("x-forwarded-for")
+              or (request.client.host if request.client else "?")).split(",")[0].strip()
+        if _pc_rate_ok(ip):
+            await fetch_and_store_history(asin)
+            async with pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    "SELECT asin, name, brand, image_url, current_price, original_price, "
+                    "all_time_low, avg_price, avg90_price, avg180_price, category, "
+                    "affiliate_url, is_active, rating, reviews, tag, has_real_history, "
+                    "last_checked "
+                    "FROM products WHERE asin=$1",
+                    asin,
+                )
+        # Bei Rate-Limit: einfach mit dem (evtl. veralteten) Stand weiterrendern —
+        # fresh_check unten sorgt dafür, dass kein veralteter Preis gezeigt wird.
+
+    async with pool.acquire() as conn:
+        await conn.execute("UPDATE products SET last_viewed=$1 WHERE asin=$2", datetime.utcnow(), asin)
         hist = await conn.fetch(
             "SELECT price, timestamp FROM price_history WHERE asin=$1 ORDER BY id DESC LIMIT 2000",
             asin,
@@ -1597,7 +1628,7 @@ async def price_page(asin: str):
     # ungeprüften Produkten ist der gespeicherte Preis veraltet — ein Urteil
     # wäre irreführend (der aktuelle Amazon-Preis wird nicht mehr live geprüft).
     fresh_check = (row["last_checked"] is not None
-                   and datetime.utcnow() - row["last_checked"] < timedelta(hours=48))
+                   and datetime.utcnow() - row["last_checked"] < timedelta(hours=PRICE_FRESH_HOURS))
     if (is_active or fresh_check) and current > 0:
         verdict_block = (f'<div class="verdict"><div class="v-head">Guter Preis gerade?</div>'
                          f'<div class="v-label">{verdict}</div>'
@@ -1634,10 +1665,13 @@ async def price_page(asin: str):
   <p class="alert-legal">Du bekommst zuerst eine Bestätigungs-Mail (Double-Opt-in). Deine Adresse nutzen wir ausschließlich für diesen Preisalarm — siehe <a href="https://www.snagga.de/legal">Datenschutz</a>.</p>
 </form>"""
 
+    # "Aktueller Preis" ist eine Aktuellpreis-Aussage → nur bei last_checked<24h
+    # zeigen (Amazon-Compliance, siehe Memory). Historische Werte (Tief, Ø) sind
+    # keine Aktuellpreis-Aussage und bleiben unabhängig von der Frische erlaubt.
+    _price_rows = [("Aktueller Preis", current)] if (is_active or fresh_check) else []
     stats_rows = "".join(
         f'<tr><td>{label}</td><td>{eur(val)}</td></tr>'
-        for label, val in [
-            ("Aktueller Preis", current),
+        for label, val in _price_rows + [
             ("Allzeittief", atl),
             ("Ø 90 Tage", avg90),
             ("Ø 180 Tage", avg180),
@@ -2125,6 +2159,24 @@ async def get_categories():
     cats = ["Alle"] + [r["category"] for r in rows if r["category"]]
     cache_set("categories", cats)
     return cats
+
+
+@app.post("/admin/seed-bestsellers")
+async def admin_seed_bestsellers(
+    token: str = Query(default=""),
+    max_tokens: int = Query(default=6000, ge=1, le=20000),
+    max_per_cat: int = Query(default=400, ge=1, le=1000),
+):
+    """
+    Loest einmalig den Bestseller-Seeding-Lauf aus (alle ~62 Kategorie-Knoten aus
+    ROOTCAT_MAP). Admin-only. Standard-Budget 6000 Tokens (~20% Tagesbudget), Cap
+    pro Kategorie 400 ASINs. Loggt Ergebnisse pro Kategorie ins JSON-Response.
+    """
+    _check_admin(token)
+    from scraper import seed_bestsellers
+    result = await seed_bestsellers(max_tokens=max_tokens, max_per_cat=max_per_cat)
+    cache_clear()
+    return result
 
 
 @app.post("/refresh")

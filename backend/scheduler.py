@@ -3,6 +3,7 @@ APScheduler — stündliche Deal-Updates + nächtlicher Deep-Sync
 """
 import os
 import httpx
+from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
@@ -10,8 +11,25 @@ from apscheduler.triggers.interval import IntervalTrigger
 from scraper import (
     fetch_and_update_deals, nightly_deep_sync, hourly_keepa_price_check,
     post_next_mastodon_deal, post_next_bluesky_deal, check_and_send_price_alerts,
-    catalog_backfill_charts,
+    seed_bestsellers, evict_stale_charts,
 )
+
+# Brache Keepa-Tokens nutzen, um den Such-Katalog aufzubauen (Stubs, keine
+# Historie). ~600/Std = ~50% der 1200/Std-Rate, lässt den existierenden Jobs
+# (~258/Std) Luft. Env-konfigurierbar.
+CATALOG_GROW_HOURLY_TOKENS = int(os.getenv("CATALOG_GROW_HOURLY_TOKENS", "600"))
+
+
+async def _hourly_catalog_grow():
+    """
+    Stündlich brache Tokens in Katalog-Stubs investieren (Bestseller je Kategorie).
+    category_offset = fortlaufender Stundenzähler seit Epoch — rotiert die
+    Startposition in ROOTCAT_MAP jede Stunde weiter, sodass über ~62 Stunden
+    (~2,6 Tage) jede Kategorie mal zuerst drankommt statt immer dieselben ersten.
+    """
+    hour_counter = int(datetime.utcnow().timestamp() // 3600)
+    await seed_bestsellers(max_tokens=CATALOG_GROW_HOURLY_TOKENS, max_per_cat=300,
+                            category_offset=hour_counter)
 
 SERVICE_URL = os.getenv("RENDER_EXTERNAL_URL", "https://snagga.onrender.com")
 
@@ -77,13 +95,23 @@ def create_scheduler() -> AsyncIOScheduler:
         misfire_grace_time=3600,
     )
 
-    # Täglicher /preis-Katalog-Backfill (04:00, nach dem Deep-Sync): chartlose
-    # Quality-/Alarm-Seiten mit echter Preishistorie aufwerten, gedrosselt aufs
-    # Tagesbudget. Ist der Rückstand abgearbeitet, läuft der Job leer.
+    # Stündlicher Katalog-Aufbau (:50): brache Tokens → neue Such-Stubs. Findet
+    # ein Bestseller-Knoten keine neuen ASINs mehr, kostet er nur den Discovery-
+    # Token (~1) → der Job ist selbst-limitierend, wenn der Katalog gesättigt ist.
     scheduler.add_job(
-        catalog_backfill_charts,
+        _hourly_catalog_grow,
+        IntervalTrigger(hours=1, start_date="2024-01-01 00:50:00"),
+        id="hourly_catalog_grow",
+        replace_existing=True,
+        misfire_grace_time=600,
+    )
+
+    # Tägliche Chart-Eviction (04:00): Historie nicht-aktiver, länger nicht
+    # angesehener Produkte löschen → Schicht C bleibt klein (Deals + on-demand).
+    scheduler.add_job(
+        evict_stale_charts,
         CronTrigger(hour=(DEEP_SYNC_HOUR + 1) % 24, minute=0),
-        id="catalog_backfill_charts",
+        id="evict_stale_charts",
         replace_existing=True,
         misfire_grace_time=3600,
     )

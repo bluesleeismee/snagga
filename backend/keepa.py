@@ -252,6 +252,49 @@ async def fetch_keepa_deals(
 
 
 # ---------------------------------------------------------------------------
+# /bestsellers — Katalog-Aufbau: Top-ASINs je Kategorie (1 Token/Request)
+# ---------------------------------------------------------------------------
+
+async def fetch_keepa_bestsellers(
+    category_id: int,
+    domain: int = 3,
+    client: httpx.AsyncClient | None = None,
+) -> tuple[list[str], int]:
+    """
+    Ruft die aktuelle Bestseller-Liste einer Amazon-Kategorie ab.
+    Kostet 1 Token/Request. Gibt (asin_list, tokens_consumed) zurück.
+    """
+    if not KEEPA_KEY:
+        return [], 0
+
+    own_client = client is None
+    if own_client:
+        client = httpx.AsyncClient(timeout=30)
+
+    try:
+        resp = await client.get(
+            f"{KEEPA_BASE}/bestsellers",
+            params={"key": KEEPA_KEY, "domain": domain, "category": category_id, "range": 0},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        print(f"  Keepa /bestsellers Fehler cat {category_id}: {e}")
+        return [], 0
+    finally:
+        if own_client:
+            await client.aclose()
+
+    bl = data.get("bestSellersList") or {}
+    asins = bl.get("asinList") or []
+    tokens_left = data.get("tokensLeft")
+    tokens_consumed = data.get("tokensConsumed") or 1
+    print(f"  Keepa /bestsellers cat {category_id}: {len(asins)} ASINs · "
+          f"{tokens_consumed} Tokens verbraucht · {tokens_left} übrig")
+    return asins, tokens_consumed
+
+
+# ---------------------------------------------------------------------------
 # /product — Deep-Sync (vollständige Anreicherung)
 # ---------------------------------------------------------------------------
 

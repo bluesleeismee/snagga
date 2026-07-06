@@ -11,10 +11,11 @@ import json
 import random
 import asyncio
 import httpx
+from typing import Optional
 from datetime import datetime, timedelta
 
 from database import get_pool
-from keepa import fetch_keepa_deals, enrich_with_keepa, ELECTRONICS_CAT_IDS
+from keepa import fetch_keepa_deals, enrich_with_keepa, fetch_keepa_bestsellers, ELECTRONICS_CAT_IDS
 from scoring import (
     CATEGORY_MAX_RANK,
     passes_hard_filters,
@@ -859,110 +860,254 @@ async def _recalculate_top_picks():
 
 
 # ---------------------------------------------------------------------------
-# /preis-Katalog-Backfill: chartlose Quality-Seiten mit echter History aufwerten
+# On-Demand-Chart: Historie beim /preis-Klick live holen + Chart-Eviction
 # ---------------------------------------------------------------------------
 
-# Tagesbudget an Keepa-Tokens (= ASINs) für den Katalog-Backfill. Jede ASIN
-# kostet ~1 Token (History im Basis-Token). 1500/Tag ≈ 5% des Tagesbudgets;
-# die ~1500 Quality-chartlosen Seiten sind so in 1–2 Tagen aufgewertet.
-CATALOG_BACKFILL_DAILY = int(os.getenv("CATALOG_BACKFILL_DAILY", "1500"))
+# Wie viele Tage ein Chart nach dem letzten Aufruf gespeichert bleibt, bevor er
+# evictet wird (Stub bleibt, Chart wird bei erneutem Klick neu geholt). Aktive
+# Deals sind ausgenommen — die behalten ihren Chart dauerhaft.
+CHART_CACHE_DAYS = int(os.getenv("CHART_CACHE_DAYS", "2"))
+# Preis gilt als "frisch" (Amazon-Compliance) wenn jünger als so viele Stunden.
+PRICE_FRESH_HOURS = int(os.getenv("PRICE_FRESH_HOURS", "24"))
 
 
-async def catalog_backfill_charts():
+async def fetch_and_store_history(asin: str) -> bool:
     """
-    Wertet dauerhafte /preis-Seiten OHNE Chart (has_real_history=false) mit echter
-    Keepa-Preishistorie auf — aber NUR "gutes Zeug": Produkte, die die Katalog-
-    Quality-Gate bestehen (bekannte Marke / solide Reviews) ODER für die ein
-    bestätigter Preisalarm existiert (= echte Nutzer-Nachfrage). No-Name-Ramsch
-    ohne Alarm bekommt bewusst keinen Token und bleibt dünn (→ per noindex/Sitemap
-    aus Google draußen, siehe main.py).
-
-    Läuft täglich, gedrosselt auf CATALOG_BACKFILL_DAILY ASINs. Priorität:
-    Alarm-Produkte zuerst, dann Quality nach Review-Zahl (die meistgesuchten).
-    Ist der Rückstand abgearbeitet, macht der Job nichts mehr (leere Auswahl).
+    Holt die Preishistorie EINES Produkts live von Keepa (1 Token), speichert sie
+    und frischt zugleich die Preis-Eckdaten auf (Amazon-Compliance: Preis < 24h).
+    Aufgerufen on-demand beim /preis-Klick, wenn (noch) kein frischer Chart da ist.
+    Gibt True zurück, wenn eine echte Historie gespeichert wurde.
     """
-    print(f"[{datetime.utcnow().isoformat()}] Katalog-Backfill (chartlose Quality-Seiten) …")
-    db  = await get_pool()
+    db = await get_pool()
     now = datetime.utcnow()
+    keepa_data = await enrich_with_keepa([asin], domain=3)
+    kd = keepa_data.get(asin)
+    if not kd:
+        return False
+
+    hist = kd.get("history") or []
+    hist_prices = [pr for pr, _ in hist if pr and pr > 0]
+    atl_candidates = [v for v in (kd["all_time_low"], kd["current_price"],
+                                  (min(hist_prices) if hist_prices else None)) if v and v > 0]
+    atl = min(atl_candidates) if atl_candidates else kd["current_price"]
 
     async with db.acquire() as conn:
-        # Kandidaten: chartlos. Quality wird in Python entschieden (is_known_brand
-        # braucht Regex-Logik). Alarm-Produkte über LEFT JOIN markieren und
-        # vorziehen. Grosszügig laden (3× Budget), dann in Python filtern/schneiden.
-        rows = await conn.fetch(
-            """
-            SELECT p.asin, p.name, p.brand, p.category, p.rating, p.reviews,
-                   (a.asin IS NOT NULL) AS has_alarm
-            FROM products p
-            LEFT JOIN (
-                SELECT DISTINCT asin FROM price_alerts
-                WHERE confirmed = true AND notified_at IS NULL
-            ) a ON a.asin = p.asin
-            WHERE p.has_real_history = false
-            ORDER BY (a.asin IS NOT NULL) DESC, p.reviews DESC
-            LIMIT $1
-            """,
-            CATALOG_BACKFILL_DAILY * 3,
+        await conn.execute("""
+            UPDATE products SET
+                current_price = $2, all_time_low = $3, avg_price = $4,
+                avg90_price = $5, avg180_price = $6, rating = $7, reviews = $8,
+                sales_rank = $9, last_checked = $10, last_viewed = $10,
+                image_url = CASE WHEN $11 != '' THEN $11 ELSE image_url END,
+                brand     = CASE WHEN $12 != '' THEN $12 ELSE brand END
+            WHERE asin = $1
+        """,
+            asin, kd["current_price"], atl, kd["avg_price"],
+            kd["avg90_price"], kd["avg180_price"], kd["rating"], kd["reviews"],
+            kd["sales_rank"], now, kd["image_url"], (kd.get("brand") or ""),
         )
-
-    selected: list[str] = []
-    for r in rows:
-        if len(selected) >= CATALOG_BACKFILL_DAILY:
-            break
-        if r["has_alarm"] or is_catalog_quality(
-            r["rating"] or 0, r["reviews"] or 0, r["brand"] or "", r["name"] or ""
-        ):
-            selected.append(r["asin"])
-
-    if not selected:
-        print("  Kein Rückstand — alle Quality-/Alarm-Seiten haben schon einen Chart.")
-        return
-
-    print(f"  {len(selected)} chartlose Quality-/Alarm-ASINs → History holen …")
-    keepa_data = await enrich_with_keepa(selected, domain=3)
-
-    filled = 0
-    async with db.acquire() as conn:
-        for asin, kd in keepa_data.items():
-            hist = kd.get("history") or []
-            if not hist:
-                continue
-            hist_prices = [pr for pr, _ in hist if pr and pr > 0]
-            atl_candidates = [v for v in (kd["all_time_low"], kd["current_price"],
-                                          (min(hist_prices) if hist_prices else None)) if v and v > 0]
-            atl = min(atl_candidates) if atl_candidates else kd["current_price"]
-
-            # Preis-Eckdaten auffrischen (kostenlos im selben Request) + History setzen.
-            await conn.execute("""
-                UPDATE products SET
-                    current_price = $2,
-                    all_time_low  = $3,
-                    avg_price     = $4,
-                    avg90_price   = $5,
-                    avg180_price  = $6,
-                    rating        = $7,
-                    reviews       = $8,
-                    sales_rank    = $9,
-                    last_checked  = $10,
-                    image_url     = CASE WHEN $11 != '' THEN $11 ELSE image_url END,
-                    brand         = CASE WHEN $12 != '' THEN $12 ELSE brand END
-                WHERE asin = $1
-            """,
-                asin, kd["current_price"], atl, kd["avg_price"],
-                kd["avg90_price"], kd["avg180_price"], kd["rating"], kd["reviews"],
-                kd["sales_rank"], now, kd["image_url"], (kd.get("brand") or ""),
-            )
+        if hist:
             await conn.execute("DELETE FROM price_history WHERE asin=$1", asin)
             await conn.executemany(
                 "INSERT INTO price_history (asin, price, timestamp) VALUES ($1,$2,$3)",
-                [(asin, pr, ts) for pr, ts in hist[-2000:]],
+                _downsample_daily([(asin, pr, ts) for pr, ts in hist]),
             )
-            await conn.execute(
-                "UPDATE products SET has_real_history=true WHERE asin=$1", asin
-            )
-            filled += 1
+            await conn.execute("UPDATE products SET has_real_history=true WHERE asin=$1", asin)
+    return bool(hist)
 
-    print(f"  Katalog-Backfill fertig: {filled} Seiten mit echtem Chart aufgewertet.")
+
+def _downsample_daily(rows: list) -> list:
+    """
+    Dünnt (asin, price, timestamp)-Punkte auf max. 1 pro Kalendertag aus (letzter
+    Preis des Tages) und kappt auf ~2 Jahre. Visuell identisch zum vollen Chart,
+    aber ~3× weniger Speicher — hält Schicht C klein.
+    """
+    cutoff = datetime.utcnow() - timedelta(days=730)
+    by_day: dict = {}
+    for asin, price, ts in rows:
+        dt = _parse_hist_ts(ts)
+        if dt is None or dt < cutoff:
+            continue
+        by_day[(asin, dt.date())] = (asin, price, ts)  # letzter je Tag gewinnt
+    return list(by_day.values())
+
+
+def _parse_hist_ts(ts) -> Optional[datetime]:
+    if isinstance(ts, datetime):
+        return ts
+    try:
+        return datetime.fromisoformat(str(ts).replace("Z", "").split("+")[0])
+    except Exception:
+        return None
+
+
+async def evict_stale_charts() -> int:
+    """
+    Löscht die Preishistorie (Schicht C) von Produkten, die NICHT aktiv sind und
+    seit > CHART_CACHE_DAYS nicht mehr angesehen wurden. Der Stub (Name/Eckdaten)
+    bleibt — nur der Chart geht, wird bei erneutem Klick neu geholt. So bleibt der
+    Chart-Speicher dauerhaft klein (nur Deals + kürzlich Angesehene).
+    """
+    db = await get_pool()
+    cutoff = datetime.utcnow() - timedelta(days=CHART_CACHE_DAYS)
+    async with db.acquire() as conn:
+        victims = await conn.fetch("""
+            SELECT asin FROM products
+            WHERE has_real_history = true AND is_active = false
+              AND (last_viewed IS NULL OR last_viewed < $1)
+        """, cutoff)
+        asins = [r["asin"] for r in victims]
+        if asins:
+            await conn.execute("DELETE FROM price_history WHERE asin = ANY($1::text[])", asins)
+            await conn.execute(
+                "UPDATE products SET has_real_history = false WHERE asin = ANY($1::text[])", asins)
+    print(f"[{datetime.utcnow().isoformat()}] Chart-Eviction: {len(asins)} Charts gelöscht "
+          f"(nicht aktiv, > {CHART_CACHE_DAYS} Tage nicht angesehen).")
+    return len(asins)
+
+
+# ---------------------------------------------------------------------------
+# Bestseller-Seeding: Katalog mit Top-Produkten je Kategorie füllen
+# ---------------------------------------------------------------------------
+
+
+async def seed_bestsellers(max_tokens: int = 6000, max_per_cat: int = 400,
+                            category_offset: int = 0) -> dict:
+    """
+    Füllt den Katalog mit STUBS (Name+Eckdaten, KEINE Historie — Schicht C kommt
+    erst on-demand beim /preis-Klick, siehe fetch_and_store_history) aus den
+    Bestsellern aller Kategorie-Knoten in ROOTCAT_MAP.
+
+    Für jede Kategorie:
+    1. Bestseller-ASIN-Liste holen (1 Token/Kategorie via /bestsellers)
+    2. Bereits im Katalog vorhandene ASINs herausfiltern (keine Doppel-Kosten)
+    3. Verbleibende neue ASINs anreichern (1 Token/ASIN via /product)
+    4. classify_category + is_catalog_quality durchlaufen — Ramsch fliegt vorher raus
+    5. Neue Einträge als Stub anlegen (is_active=false, has_real_history=false)
+       mit kategoriebezogenem Affiliate-Tag.
+
+    Hartes `max_tokens`-Limit: bricht Kategorienzuweisung sauber ab, sobald das
+    Tagesbudget erreicht ist. Keine schleichenden Überziehungen.
+
+    `category_offset` rotiert die Startposition in ROOTCAT_MAP (~62 Knoten) —
+    ohne Rotation würden bei knappem Stunden-Budget immer dieselben ersten
+    Kategorien bedient und spätere (z.B. Sport & Freizeit) nie erreicht. Der
+    stündliche Job dreht den Offset weiter, der manuelle Admin-Push (großes
+    Budget, deckt meist alles ab) startet bei 0.
+    """
+    from scoring import is_catalog_quality  # lokal um Zirkularität zu vermeiden
+    print(f"[{datetime.utcnow().isoformat()}] Bestseller-Seeding startet "
+          f"(max_tokens={max_tokens}, max_per_cat={max_per_cat}) …")
+    db = await get_pool()
+    now = datetime.utcnow()
+    tokens_used = 0
+    stats: dict[str, dict] = {}
+
+    # Quelle: ALLE Kategorie-Knoten aus ROOTCAT_MAP (~62 inkl. Unterkategorien) für
+    # breite Abdeckung. Die endgültige Kategorie je Produkt entscheidet ohnehin
+    # classify_category(title, root_cat) — der Knoten hier ist nur die Bezugsquelle.
+    # Rotiert um category_offset (siehe Docstring), damit bei knappem Budget nicht
+    # immer dieselben ersten Kategorien bedient werden.
+    cat_items = list(ROOTCAT_MAP.items())
+    if cat_items:
+        off = category_offset % len(cat_items)
+        cat_items = cat_items[off:] + cat_items[:off]
+    for cat_id, cat_name in cat_items:
+        label = f"{cat_name}#{cat_id}"
+        async with httpx.AsyncClient(timeout=45) as client:
+            if tokens_used >= max_tokens:
+                stats[label] = {"skipped": "budget"}
+                continue
+
+            asins, cost = await fetch_keepa_bestsellers(cat_id, domain=3, client=client)
+            tokens_used += cost
+            if not asins:
+                stats[label] = {"tokens": cost, "fetched": 0}
+                continue
+            asins = asins[:max_per_cat]
+
+            async with db.acquire() as conn:
+                existing = {r["asin"] for r in await conn.fetch(
+                    "SELECT asin FROM products WHERE asin = ANY($1::text[])", asins
+                )}
+            new_asins = [a for a in asins if a not in existing]
+
+            if not new_asins:
+                stats[label] = {"tokens": cost, "fetched": len(asins), "new": 0}
+                continue
+
+            # Enrichment-Budget prüfen, nötigenfalls kürzen
+            remaining = max_tokens - tokens_used
+            if len(new_asins) > remaining:
+                new_asins = new_asins[:remaining]
+
+            keepa_data = await enrich_with_keepa(new_asins, domain=3, client=client)
+            # Grobe Kostenschätzung (1 Token/ASIN inkl. History)
+            tokens_used += len(new_asins)
+
+            added = 0
+            skipped_junk = 0
+            skipped_quality = 0
+            async with db.acquire() as conn:
+                for asin, kd in keepa_data.items():
+                    title = kd.get("title") or ""
+                    cls_cat = classify_category(title, kd.get("root_cat") or 0)
+                    if not cls_cat:
+                        skipped_junk += 1
+                        continue
+                    if not is_catalog_quality(
+                        kd["rating"] or 0, kd["reviews"] or 0,
+                        kd.get("brand") or "", title
+                    ):
+                        skipped_quality += 1
+                        continue
+
+                    aff_tag = _affiliate_tag_for(cls_cat)
+                    hist = kd.get("history") or []
+                    hist_prices = [pr for pr, _ in hist if pr and pr > 0]
+                    atl_candidates = [v for v in (kd["all_time_low"], kd["current_price"],
+                                                  (min(hist_prices) if hist_prices else None)) if v and v > 0]
+                    atl = min(atl_candidates) if atl_candidates else kd["current_price"]
+
+                    # STUB-only: Name + Eckdaten speichern, KEINE Preishistorie
+                    # (Schicht C). Der Chart wird erst on-demand beim ersten /preis-
+                    # Klick live geholt (has_real_history=false). Spart Speicher →
+                    # Katalog kann auf ~100k wachsen ohne Supabase-Free zu sprengen.
+                    await conn.execute("""
+                        INSERT INTO products
+                          (asin, name, brand, image_url, category,
+                           current_price, original_price, all_time_low, avg_price,
+                           avg90_price, avg180_price, deal_score, rating, reviews, prime,
+                           last_updated, last_checked, affiliate_url,
+                           is_active, is_backup, is_top_pick, is_fba,
+                           sales_rank, tag, score_breakdown, first_seen, has_real_history)
+                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
+                                $16,$17,$18,false,false,false,$19,$20,'','',$16,false)
+                        ON CONFLICT (asin) DO NOTHING
+                    """,
+                        asin, (title or "Produkt")[:200], kd.get("brand") or "",
+                        kd["image_url"], cls_cat,
+                        kd["current_price"], kd["original_price"], atl, kd["avg_price"],
+                        kd["avg90_price"] or 0.0, kd["avg180_price"] or 0.0,
+                        0, kd["rating"], kd["reviews"], True,
+                        now, now, f"https://www.amazon.de/dp/{asin}?tag={aff_tag}",
+                        kd.get("is_fba") or False, kd["sales_rank"] or 0,
+                    )
+                    added += 1
+
+            stats[label] = {
+                "tokens": cost + len(new_asins),
+                "fetched": len(asins),
+                "new_candidates": len(new_asins),
+                "added": added,
+                "skipped_junk": skipped_junk,
+                "skipped_quality": skipped_quality,
+            }
+            print(f"  [ok] {label}: +{added} neu (junk:{skipped_junk} low-quality:{skipped_quality}) - "
+                  f"Tokens: {tokens_used}/{max_tokens}")
+
+    print(f"[{datetime.utcnow().isoformat()}] Bestseller-Seeding fertig. "
+          f"Tokens gesamt: {tokens_used}")
+    return {"tokens_used": tokens_used, "categories": stats}
 
 
 # ---------------------------------------------------------------------------

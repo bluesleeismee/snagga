@@ -66,6 +66,10 @@ MIGRATE_PRODUCTS = [
     # Nur true, wenn echte Keepa-Preishistorie importiert wurde. Der Preisverlauf-
     # Chart wird ausschließlich für solche Produkte gezeigt (nie erfundene Daten).
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS has_real_history BOOLEAN DEFAULT false",
+    # Letzter Aufruf der /preis-Detailseite. Steuert die Chart-Eviction: Historie
+    # (Schicht C) wird nur für aktive Deals + kürzlich angesehene Produkte gehalten,
+    # der Rest wird evictet (Stub bleibt, Chart bei erneutem Klick neu geholt).
+    "ALTER TABLE products ADD COLUMN IF NOT EXISTS last_viewed TIMESTAMP",
 ]
 
 CREATE_PRICE_HISTORY = """
