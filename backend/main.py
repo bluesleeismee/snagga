@@ -387,9 +387,10 @@ _CARD_CSS = """
 # Teil der App anfühlen. Rechts-Slot (space-between) für optionale Aktionen
 # wie "Zur Startseite" auf Utility-Antwortseiten.
 _SITE_HEADER_CSS = """
+  @font-face { font-family:'Plus Jakarta Sans'; src:url('https://www.snagga.de/fonts/pjs-700.woff2') format('woff2'); font-weight:700; font-display:swap; }
   header { background:#153D68; height:72px; }
   .site-header-wrap { max-width:1840px; width:98%; margin:0 auto; height:100%; display:flex; align-items:center; justify-content:space-between; }
-  .site-header-wrap a.logo { color:#EDE9E3; font-size:28px; font-weight:800; letter-spacing:-0.5px; text-decoration:none; }
+  .site-header-wrap a.logo { font-family:'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif; color:#EDE9E3; font-size:28px; font-weight:800; letter-spacing:-0.5px; text-decoration:none; }
   @media (max-width:639px) { .site-header-wrap a.logo { font-size:22px; } }
   .site-header-right a { color:#EDE9E3; font-size:14px; text-decoration:none; padding:8px 16px; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.08); transition:background 0.15s; }
   .site-header-right a:hover { background:rgba(255,255,255,0.18); }
