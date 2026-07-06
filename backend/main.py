@@ -1608,22 +1608,45 @@ async def preis_check(request: Request, q: str = Query(default="")):
             f"(name ILIKE '%' || ${i+1} || '%' OR brand ILIKE '%' || ${i+1} || '%')"
             for i in range(len(tokens))
         )
-        # Grosszügiger Kandidaten-Pool (60), damit nach dem Zubehör-Nachrücken
-        # (unten) noch genug "echte" Produkte für die Top-20 übrig sind — sonst
-        # würde z.B. bei "Samsung Galaxy S25" die Hülle vors Handy rutschen, weil
-        # sie eher ein Deal-Signal hat als das Gerät selbst.
-        sql = (f"SELECT asin, name, brand, image_url, tag FROM products "
+        # Grosszügiger Kandidaten-Pool (60), damit nach Relevanz-/Zubehör-
+        # Nachrücken (unten) noch genug "echte" Produkte für die Top-20 übrig
+        # sind — sonst würde z.B. bei "Samsung Galaxy S25" die Hülle vors Handy
+        # rutschen, weil sie eher ein Deal-Signal hat als das Gerät selbst.
+        sql = (f"SELECT asin, name, brand, image_url FROM products "
                f"WHERE {conds} "
                f"ORDER BY is_active DESC, has_real_history DESC, deal_score DESC LIMIT 60")
         async with pool.acquire() as conn:
             rows = await conn.fetch(sql, *tokens)
 
+        # Relevanz vor reinem Deal-Score: "Apple" fand bisher auch Philips-Hue-
+        # Lampen, weil "...funktioniert mit Apple HomeKit" irgendwo tief im
+        # Titel steht — technisch ein Treffer, inhaltlich falsch. Bucket je
+        # Token: 0 = in der Marke, 1 = früh im Namen (eigenes Produkt, z.B.
+        # "Apple iPad ..."), 2 = nur weiter hinten (beiläufige Erwähnung wie ein
+        # Kompatibilitätshinweis). Schlechtester Token-Bucket zählt fürs Produkt.
+        def _relevance(r) -> int:
+            hay_brand = (r["brand"] or "").lower()
+            hay_name  = (r["name"] or "").lower()
+            worst = 0
+            for t in tokens:
+                tl = t.lower()
+                if tl in hay_brand:
+                    bucket = 0
+                else:
+                    idx = hay_name.find(tl)
+                    bucket = 1 if 0 <= idx < 40 else 2
+                worst = max(worst, bucket)
+            return worst
+
         # Zubehör (Hülle, Ladekabel, ...) hinter Kernprodukte einsortieren — außer
         # der Nutzer sucht selbst danach (z.B. "hülle" im Suchbegriff enthalten).
-        # Stabile Sortierung erhält die bestehende Reihenfolge innerhalb der
-        # beiden Gruppen (is_active/has_real_history/deal_score aus der Query).
-        if not any(_ACCESSORY_RE.search(t) for t in tokens):
-            rows = sorted(rows, key=lambda r: bool(_ACCESSORY_RE.search(r["name"] or "")))
+        # Stabile Sortierung erhält die bestehende DB-Reihenfolge (is_active/
+        # has_real_history/deal_score) innerhalb gleicher Relevanz/Zubehör-Gruppe.
+        want_accessory = any(_ACCESSORY_RE.search(t) for t in tokens)
+        rows = sorted(rows, key=lambda r: (
+            _relevance(r),
+            False if want_accessory else bool(_ACCESSORY_RE.search(r["name"] or "")),
+        ))
         rows = rows[:20]
     else:
         rows = []
@@ -1631,15 +1654,12 @@ async def preis_check(request: Request, q: str = Query(default="")):
     def _result_item(r) -> str:
         img = f'<img src="{html.escape(r["image_url"])}" alt="" loading="lazy">' if r["image_url"] else ""
         name = html.escape((r["name"] or "Produkt")[:90])
-        tag = f'<span class="r-tag">{html.escape(r["tag"])}</span>' if r["tag"] else ""
-        # Nie einen Preis in der Übersicht zeigen (David: sah durch die 24h-
-        # Frische-Filterung "halbpatzig" aus, mal Preis mal keiner). Liste zeigt
-        # konsequent nur Bild+Name+Tag+Preisverlauf-Cue; der Preis kommt erst
-        # (immer frisch geprüft, falls nötig) beim Klick auf /preis.
-        price = ""
+        # Kein Preis UND kein Tag-Text ("Preis gefallen" etc.) in der Übersicht —
+        # beides sind Preis-Aussagen, David will die Liste konsequent preislos.
+        # Der Preis/Tag kommt erst (frisch geprüft) beim Klick auf /preis.
         return (f'<a href="https://www.snagga.de/preis/{r["asin"]}">{img}'
-                f'<span class="r-main"><span class="r-name">{name}</span>{tag}</span>'
-                f'<span class="r-side">{price}<span class="r-cue">{_CHART_ICON} Preisverlauf</span></span></a>')
+                f'<span class="r-main"><span class="r-name">{name}</span></span>'
+                f'<span class="r-side"><span class="r-cue">{_CHART_ICON} Preisverlauf</span></span></a>')
 
     q_esc = html.escape(q[:60])
     if rows:
