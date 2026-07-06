@@ -417,6 +417,81 @@ _CHART_ICON = ('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" '
                '<rect x="16" y="14" width="3" height="6"/>'
                '</svg>')
 
+# ── Gemeinsamer Preis+Stats-Block (Preiszeile + VERSAND/BEWERTUNG/REVIEWS/
+#    AKTUALISIERT) — EIN Format für /preis UND /deal, damit das Design nicht an
+#    jeder Stelle neu erfunden wird. CSS + HTML-Generator als Paar. ──────────
+_PRICE_STATS_CSS = """
+  .pp-price-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:4px 0 16px; }
+  .pp-price { font-size:28px; font-weight:700; color:#1F1E1D; }
+  .pp-orig { font-size:15px; text-decoration:line-through; color:#7E7A75; }
+  .pp-disc { background:#C85E43; color:#fff; padding:3px 9px; font-size:12px; font-weight:600; letter-spacing:0.5px; }
+  .pp-stats-row { display:flex; gap:22px; flex-wrap:wrap; align-items:flex-start; margin-bottom:20px; }
+  .pp-stat { display:flex; flex-direction:column; gap:3px; }
+  .pp-stat-right { margin-left:auto; }
+  .pp-stat-label { font-size:10px; text-transform:uppercase; letter-spacing:0.6px; color:#7E7A75; font-weight:600; }
+  .pp-stat-val { font-size:14px; font-weight:600; color:#1F1E1D; }
+  .pp-star { color:#F5A623; }
+"""
+
+_AGE_COLORS = {"fresh": "#1E7A3C", "ok": "#E8500A", "stale": "#888888"}
+
+
+def _fmt_age(ts) -> tuple[str, str] | None:
+    """Alter seit `ts` als (Text, Level). Level steuert die Farbe (fresh/ok/stale) —
+    gleiche Schwellen wie fmtAge/AGE_COLORS im Frontend."""
+    if not ts:
+        return None
+    mins = int((datetime.utcnow() - ts).total_seconds() // 60)
+    if mins < 1:
+        return ("gerade eben", "fresh")
+    if mins < 60:
+        return (f"vor {mins}m", "fresh")
+    hrs = mins // 60
+    if hrs < 6:
+        return (f"vor {hrs}h", "fresh")
+    if hrs < 24:
+        return (f"vor {hrs}h", "ok")
+    days = hrs // 24
+    return (f"vor {days} Tag{'en' if days > 1 else ''}", "stale")
+
+
+def _price_stats_html(current: float, original: float, price_ok: bool,
+                      rating: float, reviews: int, prime: bool, age_ts) -> str:
+    """
+    Baut den gemeinsamen Preis+Stats-Block. `price_ok` = darf der aktuelle Preis
+    gezeigt werden (Amazon-Compliance: last_checked < 24h ODER aktiver Deal).
+    Preiszeile nur bei price_ok; Versand/Bewertung/Reviews/Aktualisiert immer,
+    da keine Aktuellpreis-Aussage.
+    """
+    def eur(v):
+        return (f"{v:.2f}".replace(".", ",") + " €") if v and v > 0 else "—"
+
+    price_row = ""
+    if price_ok and current > 0:
+        disc = round((1 - current / original) * 100) if original > current else 0
+        orig_html = f'<span class="pp-orig">{eur(original)}</span>' if original > current else ''
+        disc_html = f'<span class="pp-disc">−{disc}%</span>' if disc > 0 else ''
+        price_row = (f'<div class="pp-price-row"><span class="pp-price">{eur(current)}</span>'
+                     f'{orig_html}{disc_html}</div>')
+
+    bits = []
+    if prime:
+        bits.append('<div class="pp-stat"><div class="pp-stat-label">Versand</div>'
+                    '<div class="pp-stat-val" style="color:#00A8E0">Prime</div></div>')
+    if rating and rating > 0:
+        bits.append('<div class="pp-stat"><div class="pp-stat-label">Bewertung</div>'
+                    f'<div class="pp-stat-val">{rating:.1f} <span class="pp-star">★</span></div></div>')
+    if reviews and reviews > 0:
+        rev_txt = (f"{reviews/1000:.1f}".replace(".", ",") + "T") if reviews >= 1000 else str(reviews)
+        bits.append('<div class="pp-stat"><div class="pp-stat-label">Reviews</div>'
+                    f'<div class="pp-stat-val">{rev_txt}</div></div>')
+    age = _fmt_age(age_ts)
+    if age:
+        bits.append(f'<div class="pp-stat pp-stat-right"><div class="pp-stat-label">Aktualisiert</div>'
+                    f'<div class="pp-stat-val" style="color:{_AGE_COLORS[age[1]]}">{age[0]}</div></div>')
+    stats_row = f'<div class="pp-stats-row">{"".join(bits)}</div>' if bits else ''
+    return price_row + stats_row
+
 # Vanilla JS fürs Teilen auf statischen SSR-Kacheln (Kategorie-Seite, "Ähnliche
 # Deals") — dort gibt es kein React, daher eigenständige Klick-Logik statt
 # der shareOrCopy()-Funktion aus dem Frontend.
@@ -635,7 +710,8 @@ async def deal_page(asin: str):
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             "SELECT name, brand, image_url, current_price, original_price, tag, category, "
-            "rating, reviews, affiliate_url, is_active FROM products WHERE asin=$1",
+            "rating, reviews, affiliate_url, is_active, prime, last_checked, last_updated "
+            "FROM products WHERE asin=$1",
             asin,
         )
     if not row:
@@ -717,7 +793,13 @@ async def deal_page(asin: str):
         (f", {disc}% günstiger als der bisherige Preis." if disc > 0 else ".")
     )
 
-    rating_html = f'<p class="meta">⭐ {rating:.1f} ({reviews} Bewertungen)</p>' if rating > 0 and reviews > 0 else ""
+    # Gemeinsamer Preis+Stats-Block (Preiszeile + Versand/Bewertung/Reviews/
+    # Aktualisiert) — identisch zu /preis und Modal. Deal-Seite ist immer aktiv,
+    # daher price_ok=True (Preis darf gezeigt werden).
+    deal_price_stats = _price_stats_html(
+        current, original, True, rating, reviews, bool(row["prime"]),
+        row["last_checked"] or row["last_updated"],
+    )
 
     ld_json: dict = {
         "@context":   "https://schema.org/",
@@ -813,12 +895,8 @@ async def deal_page(asin: str):
   .brand {{ font-size:11px; text-transform:uppercase; letter-spacing:1.5px; color:#7E7A75; font-weight:600; margin-bottom:10px; }}
   .tag {{ display:inline-block; background:#C85E43; color:#fff; font-size:13px; font-weight:700; padding:4px 10px; margin-bottom:12px; }}
   h1 {{ font-size:31px; font-weight:700; line-height:1.35; margin:0 0 24px; }}
-  .price-row {{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px; }}
-  .price {{ font-size:38px; font-weight:700; }}
-  .original {{ font-size:16px; text-decoration:line-through; color:#7E7A75; font-weight:400; }}
-  .disc {{ background:#C85E43; color:#fff; padding:3px 9px; font-size:12px; font-weight:600; }}
-  .meta {{ font-size:13px; color:#7E7A75; margin:0 0 8px; }}
-  .cta {{ display:flex; align-items:center; justify-content:center; gap:10px; background:#C85E43; color:#fff; padding:16px 28px; font-size:14px; font-weight:600; text-decoration:none; margin-top:20px; }}
+  {_PRICE_STATS_CSS}
+  .cta {{ display:flex; align-items:center; justify-content:center; gap:10px; background:#C85E43; color:#fff; padding:16px 28px; font-size:16px; font-weight:600; text-decoration:none; margin-top:20px; }}
   .back {{ display:block; margin-top:16px; color:#153D68; font-size:14px; text-decoration:none; }}
   .affiliate-note {{ font-size:12px; color:#7E7A75; line-height:1.5; margin:18px 0 0; }}
 </style>
@@ -841,14 +919,8 @@ async def deal_page(asin: str):
     <div class="brand">{category}</div>
     {f'<div class="tag">{tag}</div>' if tag else ''}
     <h1>{name}</h1>
-    <div class="price-row">
-      <span class="price">{price_txt}</span>
-      {f'<span class="original">{original_txt}</span>' if disc > 0 else ''}
-      {f'<span class="disc">-{disc}%</span>' if disc > 0 else ''}
-    </div>
-    {rating_html}
-    <p class="meta">Kategorie: {category}</p>
-    <a class="cta" href="{affiliate}" rel="nofollow sponsored noopener" target="_blank">Zum Angebot bei Amazon {_arrow_icon('right')}</a>
+    {deal_price_stats}
+    <a class="cta" href="{affiliate}" rel="nofollow sponsored noopener" target="_blank">Zum Angebot bei Amazon</a>
     <p class="affiliate-note">* Affiliate-Hinweis: Als Amazon-Partner verdienen wir an qualifizierten Käufen — für dich entstehen keine Mehrkosten. Der angezeigte Preis kann abweichen; massgeblich ist der Preis bei Amazon zum Kaufzeitpunkt.</p>
     <a class="back" href="https://www.snagga.de/preis/{asin}">📈 Preisverlauf & Preis-Check ansehen {_arrow_icon('right')}</a>
     {f'<a class="back" href="https://www.snagga.de/kategorie/{SLUG_BY_CATEGORY[row["category"]]}">Alle {category}-Deals ansehen {_arrow_icon("right")}</a>' if row["category"] in SLUG_BY_CATEGORY else ''}
@@ -1697,69 +1769,15 @@ async def price_page(request: Request, asin: str):
   <p class="alert-legal">Du bekommst zuerst eine Bestätigungs-Mail (Double-Opt-in). Deine Adresse nutzen wir ausschließlich für diesen Preisalarm — siehe <a href="https://www.snagga.de/legal">Datenschutz</a>.</p>
 </form>"""
 
-    # Preis + Sterne + Bewertungen oberhalb des CTA-Buttons — 1:1 dasselbe Format
-    # wie im React-Modal-Popup (Preiszeile mit Streichpreis+Rabatt-Badge, darunter
-    # VERSAND/BEWERTUNG/REVIEWS/AKTUALISIERT als einheitliche Stat-Reihe), damit
-    # das Design überall gleich ist statt an jeder Stelle neu erfunden.
-    # Preiszeile ist eine Aktuellpreis-Aussage → nur bei Frische (24h-Compliance).
-    # Sterne/Reviews/Versand/Alter sind keine Preis-Aussage und bleiben immer an.
-    _pp_price_row = ''
-    if (is_active or fresh_check) and current > 0:
-        _orig = row["original_price"] or 0
-        _disc = round((1 - current / _orig) * 100) if _orig > current else 0
-        _orig_html = f'<span class="pp-orig">{eur(_orig)}</span>' if _orig > current else ''
-        _disc_html = f'<span class="pp-disc">−{_disc}%</span>' if _disc > 0 else ''
-        _pp_price_row = (f'<div class="pp-price-row"><span class="pp-price">{eur(current)}</span>'
-                          f'{_orig_html}{_disc_html}</div>')
-
-    def _fmt_age(ts) -> tuple[str, str] | None:
-        if not ts:
-            return None
-        mins = int((datetime.utcnow() - ts).total_seconds() // 60)
-        if mins < 1:
-            return ("gerade eben", "fresh")
-        if mins < 60:
-            return (f"vor {mins}m", "fresh")
-        hrs = mins // 60
-        if hrs < 6:
-            return (f"vor {hrs}h", "fresh")
-        if hrs < 24:
-            return (f"vor {hrs}h", "ok")
-        days = hrs // 24
-        return (f"vor {days} Tag{'en' if days > 1 else ''}", "stale")
-
-    _AGE_COLORS = {"fresh": "#1E7A3C", "ok": "#E8500A", "stale": "#888888"}
-
-    _pp_stats = []
-    if row["prime"]:
-        _pp_stats.append(
-            '<div class="pp-stat"><div class="pp-stat-label">Versand</div>'
-            '<div class="pp-stat-val" style="color:#00A8E0">Prime</div></div>'
-        )
-    if row["rating"] and row["rating"] > 0:
-        _pp_stats.append(
-            '<div class="pp-stat"><div class="pp-stat-label">Bewertung</div>'
-            f'<div class="pp-stat-val">{row["rating"]:.1f} <span class="pp-star">★</span></div></div>'
-        )
-    _reviews = row["reviews"] or 0
-    if _reviews > 0:
-        _reviews_txt = (f"{_reviews/1000:.1f}".replace(".", ",") + "T") if _reviews >= 1000 else str(_reviews)
-        _pp_stats.append(
-            f'<div class="pp-stat"><div class="pp-stat-label">Reviews</div>'
-            f'<div class="pp-stat-val">{_reviews_txt}</div></div>'
-        )
-    # Fallback auf last_updated, falls ein frisch entdeckter Deal (Discovery via
-    # /deal) noch keinen Preis-Check durchlaufen hat (last_checked=NULL).
-    _age = _fmt_age(row["last_checked"] or row["last_updated"])
-    if _age:
-        _age_txt, _age_level = _age
-        _pp_stats.append(
-            f'<div class="pp-stat pp-stat-right"><div class="pp-stat-label">Aktualisiert</div>'
-            f'<div class="pp-stat-val" style="color:{_AGE_COLORS[_age_level]}">{_age_txt}</div></div>'
-        )
-    _pp_stats_row = f'<div class="pp-stats-row">{"".join(_pp_stats)}</div>' if _pp_stats else ''
-
-    price_stats_block = _pp_price_row + _pp_stats_row
+    # Preis + Stats oberhalb des CTA-Buttons — gemeinsames Format mit /deal und
+    # dem React-Modal (siehe _price_stats_html). Preiszeile nur bei Frische
+    # (24h-Compliance); Fallback auf last_updated wenn ein frisch entdeckter Deal
+    # noch keinen Preis-Check durchlaufen hat (last_checked=NULL).
+    price_stats_block = _price_stats_html(
+        current, row["original_price"] or 0, (is_active or fresh_check),
+        row["rating"] or 0, row["reviews"] or 0, bool(row["prime"]),
+        row["last_checked"] or row["last_updated"],
+    )
 
     # "Aktueller Preis" ist eine Aktuellpreis-Aussage → nur bei last_checked<24h
     # zeigen (Amazon-Compliance, siehe Memory). Historische Werte (Tief, Ø) sind
@@ -1850,16 +1868,7 @@ async def price_page(request: Request, asin: str):
   .prod-img img {{ max-width:100%; max-height:280px; object-fit:contain; cursor:zoom-in; }}
   #snagga-lb {{ display:none; position:fixed; inset:0; z-index:999; background:rgba(31,30,29,0.92); align-items:center; justify-content:center; cursor:zoom-out; }}
   #snagga-lb img {{ max-width:90vw; max-height:90vh; object-fit:contain; }}
-  .pp-price-row {{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:4px 0 16px; }}
-  .pp-price {{ font-size:28px; font-weight:700; color:#1F1E1D; }}
-  .pp-orig {{ font-size:15px; text-decoration:line-through; color:#7E7A75; }}
-  .pp-disc {{ background:#C85E43; color:#fff; padding:3px 9px; font-size:12px; font-weight:600; letter-spacing:0.5px; }}
-  .pp-stats-row {{ display:flex; gap:22px; flex-wrap:wrap; align-items:flex-start; margin-bottom:20px; }}
-  .pp-stat {{ display:flex; flex-direction:column; gap:3px; }}
-  .pp-stat-right {{ margin-left:auto; }}
-  .pp-stat-label {{ font-size:10px; text-transform:uppercase; letter-spacing:0.6px; color:#7E7A75; font-weight:600; }}
-  .pp-stat-val {{ font-size:14px; font-weight:600; color:#1F1E1D; }}
-  .pp-star {{ color:#F5A623; }}
+  {_PRICE_STATS_CSS}
   /* Chart ans Zellenende drücken, damit Unterkante Chart == Unterkante
      Affiliate-Hinweis (col-left-top) — beide Spalten nutzen dieselbe
      margin-top:auto-Technik, unabhängig davon welche Seite von Natur aus
@@ -1870,7 +1879,7 @@ async def price_page(request: Request, asin: str):
   .verdict .v-head {{ font-size:13px; color:#7E7A75; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px; }}
   .verdict .v-label {{ font-size:24px; font-weight:800; color:{vcolor}; }}
   .verdict .v-reason {{ font-size:14px; color:#4A4845; margin-top:4px; }}
-  .cta {{ display:block; text-align:center; padding:14px; font-weight:700; font-size:16px; text-decoration:none; }}
+  .cta {{ display:block; text-align:center; padding:14px; font-weight:600; font-size:16px; text-decoration:none; }}
   .cta-buy {{ background:#C85E43; color:#fff; }}
   .cta-wait {{ background:#F2EFEA; color:#4A4845; }}
   .cta-note {{ font-size:12px; color:#7E7A75; margin:8px 0 0; }}
