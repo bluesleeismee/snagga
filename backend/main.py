@@ -1689,6 +1689,27 @@ async def price_page(request: Request, asin: str):
   <p class="alert-legal">Du bekommst zuerst eine Bestätigungs-Mail (Double-Opt-in). Deine Adresse nutzen wir ausschließlich für diesen Preisalarm — siehe <a href="https://www.snagga.de/legal">Datenschutz</a>.</p>
 </form>"""
 
+    # Preis + Sterne + Bewertungen oberhalb des CTA-Buttons (wie im React-Modal-
+    # Popup). Preis nur bei Frische zeigen (dieselbe Amazon-Compliance-Regel wie
+    # unten bei den Eckdaten); Sterne/Reviews sind keine Preis-Aussage und daher
+    # unabhängig von der Frische erlaubt.
+    _pp_bits = []
+    if (is_active or fresh_check) and current > 0:
+        _pp_bits.append(f'<span class="pp-price">{eur(current)}</span>')
+    if row["rating"] and row["rating"] > 0:
+        _pp_bits.append(
+            '<span class="pp-stat"><span class="pp-stat-label">Bewertung</span>'
+            f'<span class="pp-stat-val">{row["rating"]:.1f} <span class="pp-star">★</span></span></span>'
+        )
+    _reviews = row["reviews"] or 0
+    if _reviews > 0:
+        _reviews_txt = (f"{_reviews/1000:.1f}".replace(".", ",") + "T") if _reviews >= 1000 else str(_reviews)
+        _pp_bits.append(
+            '<span class="pp-stat"><span class="pp-stat-label">Reviews</span>'
+            f'<span class="pp-stat-val">{_reviews_txt}</span></span>'
+        )
+    price_stats_block = f'<div class="pp-price-stats">{"".join(_pp_bits)}</div>' if _pp_bits else ''
+
     # "Aktueller Preis" ist eine Aktuellpreis-Aussage → nur bei last_checked<24h
     # zeigen (Amazon-Compliance, siehe Memory). Historische Werte (Tief, Ø) sind
     # keine Aktuellpreis-Aussage und bleiben unabhängig von der Frische erlaubt.
@@ -1772,10 +1793,23 @@ async def price_page(request: Request, asin: str):
   h2 {{ font-size:19px; margin:36px 0 8px; }}
   .layout {{ display:grid; grid-template-columns:1fr 1.15fr; grid-template-rows:auto auto; grid-auto-flow:column; column-gap:28px; row-gap:36px; align-items:stretch; }}
   @media (max-width:820px) {{ .layout {{ grid-template-columns:1fr; grid-auto-flow:row; }} }}
-  .col-left-top {{ display:flex; flex-direction:column; }}
+  .col-left-top, .col-right-top {{ display:flex; flex-direction:column; }}
   .col-right-top h2:first-child, .col-left-bottom h2:first-child, .col-right-bottom h2:first-child {{ margin-top:0; }}
   .prod-img {{ background:#fff; border:1px solid #EAE6E1; padding:18px; display:flex; align-items:center; justify-content:center; margin-bottom:16px; }}
-  .prod-img img {{ max-width:100%; max-height:280px; object-fit:contain; }}
+  .prod-img img {{ max-width:100%; max-height:280px; object-fit:contain; cursor:zoom-in; }}
+  #snagga-lb {{ display:none; position:fixed; inset:0; z-index:999; background:rgba(31,30,29,0.92); align-items:center; justify-content:center; cursor:zoom-out; }}
+  #snagga-lb img {{ max-width:90vw; max-height:90vh; object-fit:contain; }}
+  .pp-price-stats {{ display:flex; align-items:baseline; gap:22px; flex-wrap:wrap; margin:2px 0 14px; }}
+  .pp-price {{ font-size:28px; font-weight:800; color:#1F1E1D; }}
+  .pp-stat {{ display:flex; flex-direction:column; gap:3px; }}
+  .pp-stat-label {{ font-size:10px; text-transform:uppercase; letter-spacing:0.6px; color:#7E7A75; font-weight:600; }}
+  .pp-stat-val {{ font-size:14px; font-weight:700; color:#1F1E1D; }}
+  .pp-star {{ color:#F5A623; }}
+  /* Chart ans Zellenende drücken, damit Unterkante Chart == Unterkante
+     Affiliate-Hinweis (col-left-top) — beide Spalten nutzen dieselbe
+     margin-top:auto-Technik, unabhängig davon welche Seite von Natur aus
+     höher ist (langer Titel vs. hoher Chart). */
+  .chart-push {{ margin-top:auto; }}
   .cta-note-bottom {{ margin-top:auto; }}
   .verdict {{ border-left:5px solid {vcolor}; background:#fff; padding:16px 20px; margin-bottom:16px; }}
   .verdict .v-head {{ font-size:13px; color:#7E7A75; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px; }}
@@ -1813,11 +1847,13 @@ async def price_page(request: Request, asin: str):
 </head>
 <body>
 {_SITE_HEADER_HTML}
+<div id="snagga-lb" onclick="this.style.display='none'"><img id="snagga-lb-img" src="" alt=""></div>
 <main>
 <div class="layout">
   <div class="col-left-top">
-    <div class="prod-img"><img src="{image}" alt="{name}"></div>
+    <div class="prod-img"><img src="{image}" alt="{name}" onclick="document.getElementById('snagga-lb-img').src=this.src;document.getElementById('snagga-lb').style.display='flex'"></div>
     <h1>{name}</h1>
+    {price_stats_block}
     {cta}
     <p class="cta-note cta-note-bottom">* Affiliate-Hinweis: Als Amazon-Partner verdienen wir an qualifizierten Käufen — für dich entstehen keine Mehrkosten. Der angezeigte Preis kann abweichen; massgeblich ist der Preis bei Amazon zum Kaufzeitpunkt.</p>
   </div>
@@ -1827,7 +1863,7 @@ async def price_page(request: Request, asin: str):
   <div class="col-right-top">
     {verdict_block}
     <h2>Preisverlauf</h2>
-    {chart_block}
+    <div class="chart-push">{chart_block}</div>
   </div>
   <div class="col-right-bottom">
     <h2>Preis-Eckdaten</h2>
