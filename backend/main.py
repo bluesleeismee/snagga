@@ -1612,8 +1612,8 @@ async def preis_check(request: Request, q: str = Query(default="")):
         # (unten) noch genug "echte" Produkte für die Top-20 übrig sind — sonst
         # würde z.B. bei "Samsung Galaxy S25" die Hülle vors Handy rutschen, weil
         # sie eher ein Deal-Signal hat als das Gerät selbst.
-        sql = (f"SELECT asin, name, brand, image_url, current_price, tag, is_active, last_checked "
-               f"FROM products WHERE {conds} "
+        sql = (f"SELECT asin, name, brand, image_url, tag FROM products "
+               f"WHERE {conds} "
                f"ORDER BY is_active DESC, has_real_history DESC, deal_score DESC LIMIT 60")
         async with pool.acquire() as conn:
             rows = await conn.fetch(sql, *tokens)
@@ -1632,18 +1632,11 @@ async def preis_check(request: Request, q: str = Query(default="")):
         img = f'<img src="{html.escape(r["image_url"])}" alt="" loading="lazy">' if r["image_url"] else ""
         name = html.escape((r["name"] or "Produkt")[:90])
         tag = f'<span class="r-tag">{html.escape(r["tag"])}</span>' if r["tag"] else ""
-        # Preis ist eine Aktuellpreis-Aussage → nur bei is_active ODER
-        # last_checked<24h zeigen (Amazon-Compliance, kein live geprüfter Wert
-        # hier — dieselbe Regel wie auf /preis und /deal). Sonst nur Bild+Name+
-        # Preisverlauf-Cue; der frische Preis kommt beim Klick auf /preis.
+        # Nie einen Preis in der Übersicht zeigen (David: sah durch die 24h-
+        # Frische-Filterung "halbpatzig" aus, mal Preis mal keiner). Liste zeigt
+        # konsequent nur Bild+Name+Tag+Preisverlauf-Cue; der Preis kommt erst
+        # (immer frisch geprüft, falls nötig) beim Klick auf /preis.
         price = ""
-        fresh = r["is_active"] or (
-            r["last_checked"] is not None
-            and datetime.utcnow() - r["last_checked"] < timedelta(hours=PRICE_FRESH_HOURS)
-        )
-        if fresh and r["current_price"]:
-            price_txt = f"{r['current_price']:.2f}".replace(".", ",")
-            price = f'<span class="r-price">{price_txt} €</span>'
         return (f'<a href="https://www.snagga.de/preis/{r["asin"]}">{img}'
                 f'<span class="r-main"><span class="r-name">{name}</span>{tag}</span>'
                 f'<span class="r-side">{price}<span class="r-cue">{_CHART_ICON} Preisverlauf</span></span></a>')
@@ -1679,7 +1672,11 @@ async def price_page(request: Request, asin: str):
     Katalogs sind reine Stubs (Name+Eckdaten, keine Historie). Beim ersten Klick
     auf eine solche/veraltete Seite wird die Historie live geholt (1 Token) und
     gespeichert — rate-limitiert wie /preis-check, damit kein Missbrauch das
-    Tagesbudget leert. Aktive Deals sind ausgenommen (schon stündlich geprüft).
+    Tagesbudget leert. Greift IMMER wenn noch kein Chart da ist (auch bei
+    aktiven Deals — Bug bis 2026-07-06: aktive Deals waren komplett ausgenommen,
+    obwohl ihnen z.B. durch eine Lücke im stündlichen Preis-Check die Historie
+    fehlen kann; die Suche zeigt aktive Deals zuerst, sodass genau das erste
+    Suchergebnis oft chartlos blieb), sonst nur bei veraltetem Preis (>24h).
     """
     if not re.match(r"^[A-Z0-9]{10}$", asin):
         return _not_found_page("Produkt nicht gefunden")
@@ -1699,7 +1696,9 @@ async def price_page(request: Request, asin: str):
 
     stale = (row["last_checked"] is None
              or datetime.utcnow() - row["last_checked"] > timedelta(hours=PRICE_FRESH_HOURS))
-    if not row["is_active"] and stale:
+    # Ad hoc live holen wenn: kein Chart da (egal ob aktiver Deal oder Stub) ODER
+    # nicht-aktiv und der gespeicherte Preis veraltet (Compliance-Refresh).
+    if (not row["has_real_history"]) or (not row["is_active"] and stale):
         ip = (request.headers.get("x-forwarded-for")
               or (request.client.host if request.client else "?")).split(",")[0].strip()
         if _pc_rate_ok(ip):

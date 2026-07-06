@@ -455,6 +455,18 @@ async def hourly_keepa_price_check():
                         "INSERT INTO price_history (asin, price, timestamp) VALUES ($1,$2,$3)",
                         asin, live_price, now,
                     )
+                    # Bug (gefunden 2026-07-06): dieser Zweig setzte has_real_history
+                    # NIE, obwohl über viele stündliche Checks hinweg echte Punkte
+                    # entstehen — Produkte blieben für immer chartlos, obwohl >=2
+                    # echte Preispunkte längst da waren. Sobald genug zusammenkamen,
+                    # jetzt Chart aktivieren (dieselbe Schwelle wie _price_chart_svg).
+                    cnt = await conn.fetchval(
+                        "SELECT count(*) FROM price_history WHERE asin=$1", asin
+                    )
+                    if cnt >= 2:
+                        await conn.execute(
+                            "UPDATE products SET has_real_history=true WHERE asin=$1", asin
+                        )
 
     if deactivated > 0:
         await _promote_backups_simple(deactivated)
