@@ -412,7 +412,7 @@ export default function ProductModal({ deal, onClose }) {
                   <div style={{ fontWeight: 600, color: 'var(--text)' }}>{fmtReviews(deal.reviews)}</div>
                 </div>
               )}
-              {deal.last_updated && (() => { const age = fmtAge(deal.last_updated); return age ? (
+              {detail?.last_checked && (() => { const age = fmtAge(detail.last_checked); return age ? (
                 <div style={{ marginLeft: 'auto' }}>
                   <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, letterSpacing: 0.5, marginBottom: 3 }}>AKTUALISIERT</div>
                   <div style={{ fontWeight: 600, color: AGE_COLORS[age.level] }}>{age.text}</div>

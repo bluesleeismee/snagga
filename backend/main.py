@@ -1257,7 +1257,8 @@ async def api_product_detail(asin: str):
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             "SELECT asin, name, avg_price, avg90_price, avg180_price, all_time_low, "
-            "current_price, is_active, has_real_history FROM products WHERE asin=$1",
+            "current_price, is_active, has_real_history, last_checked, last_updated "
+            "FROM products WHERE asin=$1",
             asin,
         )
         if not row:
@@ -1279,6 +1280,13 @@ async def api_product_detail(asin: str):
         "chart_svg_full":   d["chart_svg_full"],
         "has_more_history": d["has_more_history"],
         "suggested_target": d["suggested"],
+        # last_checked statt last_updated: identische Quelle wie die 24h-
+        # Compliance-Pruefung, wird live bei jedem Modal-Oeffnen frisch geholt
+        # (statt last_updated aus dem beim Seitenladen gecachten Deals-Snapshot).
+        # Fallback auf last_updated, falls ein frisch entdeckter Deal (Discovery
+        # via /deal) noch keinen Preis-Check durchlaufen hat (last_checked=NULL).
+        "last_checked":     (row["last_checked"] or row["last_updated"]).isoformat()
+                            if (row["last_checked"] or row["last_updated"]) else None,
         "is_active":        bool(row["is_active"]),
     }
 
@@ -1560,7 +1568,7 @@ async def price_page(request: Request, asin: str):
             "SELECT asin, name, brand, image_url, current_price, original_price, "
             "all_time_low, avg_price, avg90_price, avg180_price, category, "
             "affiliate_url, is_active, rating, reviews, tag, has_real_history, prime, "
-            "last_checked "
+            "last_checked, last_updated "
             "FROM products WHERE asin=$1",
             asin,
         )
@@ -1579,7 +1587,7 @@ async def price_page(request: Request, asin: str):
                     "SELECT asin, name, brand, image_url, current_price, original_price, "
                     "all_time_low, avg_price, avg90_price, avg180_price, category, "
                     "affiliate_url, is_active, rating, reviews, tag, has_real_history, prime, "
-                    "last_checked "
+                    "last_checked, last_updated "
                     "FROM products WHERE asin=$1",
                     asin,
                 )
@@ -1740,7 +1748,9 @@ async def price_page(request: Request, asin: str):
             f'<div class="pp-stat"><div class="pp-stat-label">Reviews</div>'
             f'<div class="pp-stat-val">{_reviews_txt}</div></div>'
         )
-    _age = _fmt_age(row["last_checked"])
+    # Fallback auf last_updated, falls ein frisch entdeckter Deal (Discovery via
+    # /deal) noch keinen Preis-Check durchlaufen hat (last_checked=NULL).
+    _age = _fmt_age(row["last_checked"] or row["last_updated"])
     if _age:
         _age_txt, _age_level = _age
         _pp_stats.append(
@@ -1848,7 +1858,7 @@ async def price_page(request: Request, asin: str):
   .pp-stat {{ display:flex; flex-direction:column; gap:3px; }}
   .pp-stat-right {{ margin-left:auto; }}
   .pp-stat-label {{ font-size:10px; text-transform:uppercase; letter-spacing:0.6px; color:#7E7A75; font-weight:600; }}
-  .pp-stat-val {{ font-size:14px; font-weight:700; color:#1F1E1D; }}
+  .pp-stat-val {{ font-size:14px; font-weight:600; color:#1F1E1D; }}
   .pp-star {{ color:#F5A623; }}
   /* Chart ans Zellenende drücken, damit Unterkante Chart == Unterkante
      Affiliate-Hinweis (col-left-top) — beide Spalten nutzen dieselbe
