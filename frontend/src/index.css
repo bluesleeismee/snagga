@@ -16,6 +16,12 @@ html, body, #root {
 /* overflow-x: clip verhindert horizontales Scrollen OHNE einen neuen Scroll-Container zu erzeugen
    (overflow-x: hidden würde overflow-y: auto erzwingen → body/root wird Scroll-Container → window.scrollY = 0) */
 html { overflow-x: clip; }
+/* scrollbar-gutter: stable reserviert die Scrollbar-Breite IMMER, auch wenn die
+   Seite (noch) nicht scrollt. Ohne das verschiebt sich der zu 98%-zentrierte
+   Header (und damit das Logo) je nach Seiteninhalt um die Scrollbar-Breite
+   (~15-17px unter Windows/Chrome) — z.B. zwischen einer kurzen Produktseite
+   ohne Scrollbalken und einer langen Kategorie-Liste mit Scrollbalken. */
+html { scrollbar-gutter: stable; }
 body, #root { width: 100%; }
 
 :root {

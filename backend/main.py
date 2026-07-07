@@ -397,6 +397,12 @@ document.documentElement.setAttribute('data-theme',t);
 _THEME_VARS_CSS = """
   :root { --bg:#FAF8F5; --bg-card:#FFFFFF; --bg-img:#FAF9F7; --border:#EAE6E1; --text:#1F1E1D; --muted:#7E7A75; --accent:#C85E43; }
   [data-theme="dark"] { --bg:#0e0d0d; --bg-card:#221F1C; --bg-img:#2A2724; --border:#38342F; --text:#EDE9E3; --muted:#9A938A; --accent:#D4694A; }
+  /* scrollbar-gutter: stable reserviert die Scrollbar-Breite immer, auch ohne
+     Scrollbalken — spiegelt frontend/src/index.css. Ohne das verschiebt sich
+     der zu 98% zentrierte Header samt Logo je nach Seitenlänge (z.B. kurze
+     Produktseite ohne Scrollbalken vs. lange Kategorie-Liste mit) minimal
+     nach links/rechts, obwohl derselbe Header-Code auf beiden Seiten läuft. */
+  html { scrollbar-gutter: stable; }
 """
 
 # Einheitlicher Header für ALLE SSR-Seiten — Logo/Breite 1:1 aus dem
