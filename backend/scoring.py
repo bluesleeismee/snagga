@@ -413,53 +413,36 @@ def calculate_deal_score(
 def best_price_since_months(history: list, current: float) -> int | None:
     """
     Wie viele Monate liegt der letzte Zeitpunkt zurück, an dem das Produkt
-    genauso günstig oder günstiger war als jetzt (2% Toleranz)?
+    SICHTBAR günstiger war als jetzt (>2% unter current)?
 
     history: chronologische Liste [(preis_eur, datetime), …] ECHTER Keepa-Punkte.
-    Die aktuelle Niedrigpreis-Phase am Ende der History zählt nicht mit —
-    sie IST der Deal. War der Preis davor nie so tief, zählt die volle
-    History-Spanne ("Bester Preis seit Aufzeichnungsbeginn").
+    Harte Regel: die Aussage "Bester Preis seit N Monaten" steht direkt neben
+    dem Chart, das dieselbe History zeigt. Es darf im behaupteten Zeitraum
+    KEIN einziger sichtbar tieferer Punkt existieren — auch kein kurzer
+    Ausreißer (z.B. ein Ein-Tages-Blitzangebot) —, sonst sieht der Kunde im
+    selben Chart einen Preis, der die Behauptung widerlegt. Deshalb wird
+    rückwärts ab jetzt nach dem JÜNGSTEN Punkt gesucht, der spürbar billiger
+    war; alles danach (also der beanspruchte Zeitraum) muss lückenlos bei
+    oder über dem aktuellen Preis liegen. War der Preis nirgends in der
+    History spürbar billiger, zählt die volle History-Spanne
+    ("Bester Preis seit Aufzeichnungsbeginn").
 
     None, wenn keine belastbare Aussage möglich ist (zu wenig History, oder
-    der Preis war praktisch durchgehend so günstig → kein echtes Urteil).
+    der jüngste billigere Punkt liegt selbst erst wenige Wochen zurück).
     """
     if not history or len(history) < 3 or not current or current <= 0:
         return None
-    tol = current * 1.02
+    tol_low = current * 0.98  # >2% billiger gilt als sichtbar tieferer Punkt
     now = datetime.utcnow()
 
-    # Ein Preis-"teurer als jetzt"-Ausschlag zählt nur als echte Trennung
-    # zwischen "damals teurer" und "davor auch schon mal so günstig", wenn er
-    # mindestens so lange anhielt. Sonst reicht ein einzelner Tagesausreißer
-    # (z.B. 1 Tag 3 Cent über der Toleranz) mitten in einer monatelangen
-    # günstigen Phase, um fälschlich die gesamte günstige Zeit davor zu
-    # überspringen und ein viel zu altes "seit X Monaten" zu behaupten —
-    # obwohl der Preis in Wahrheit fast durchgehend niedriger war als heute.
-    MIN_GAP_DAYS = 14
+    anchor = history[0][1]  # Fallback: nirgends sichtbar billiger -> ganze Spanne
+    for price, ts in reversed(history):
+        if price < tol_low:
+            anchor = ts
+            break
 
-    i = len(history) - 1
-    while True:
-        # Trailing-Tief überspringen (die laufende Deal-Phase: bereits ≤ tol)
-        while i >= 0 and history[i][0] <= tol:
-            i -= 1
-        if i < 0:
-            return None  # war im gesamten Fenster nie teurer → kein Urteil
-
-        # Von dort rückwärts: zusammenhängender Block, der > tol war
-        j = i
-        while j >= 0 and history[j][0] > tol:
-            j -= 1
-        gap_start = history[j + 1][1]
-        gap_days = (history[i][1] - gap_start).days
-
-        if gap_days >= MIN_GAP_DAYS:
-            anchor = history[j][1] if j >= 0 else history[0][1]
-            months = (now - anchor).days // 30
-            return int(months) if months >= 1 else None
-
-        # Zu kurzer Ausreißer, um als echte teure Phase zu zählen — als Teil
-        # der günstigen Zeit behandeln und weiter zurück suchen.
-        i = j
+    months = (now - anchor).days // 30
+    return int(months) if months >= 1 else None
 
 
 def determine_tag(
