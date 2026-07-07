@@ -428,21 +428,38 @@ def best_price_since_months(history: list, current: float) -> int | None:
     tol = current * 1.02
     now = datetime.utcnow()
 
-    # Trailing-Tief überspringen (die laufende Deal-Phase)
+    # Ein Preis-"teurer als jetzt"-Ausschlag zählt nur als echte Trennung
+    # zwischen "damals teurer" und "davor auch schon mal so günstig", wenn er
+    # mindestens so lange anhielt. Sonst reicht ein einzelner Tagesausreißer
+    # (z.B. 1 Tag 3 Cent über der Toleranz) mitten in einer monatelangen
+    # günstigen Phase, um fälschlich die gesamte günstige Zeit davor zu
+    # überspringen und ein viel zu altes "seit X Monaten" zu behaupten —
+    # obwohl der Preis in Wahrheit fast durchgehend niedriger war als heute.
+    MIN_GAP_DAYS = 14
+
     i = len(history) - 1
-    while i >= 0 and history[i][0] <= tol:
-        i -= 1
-    if i < 0:
-        return None  # war im gesamten Fenster nie teurer → kein Urteil
+    while True:
+        # Trailing-Tief überspringen (die laufende Deal-Phase: bereits ≤ tol)
+        while i >= 0 and history[i][0] <= tol:
+            i -= 1
+        if i < 0:
+            return None  # war im gesamten Fenster nie teurer → kein Urteil
 
-    # Von dort rückwärts: letzter Punkt, der schon einmal ≤ tol war
-    j = i
-    while j >= 0 and history[j][0] > tol:
-        j -= 1
-    anchor = history[j][1] if j >= 0 else history[0][1]
+        # Von dort rückwärts: zusammenhängender Block, der > tol war
+        j = i
+        while j >= 0 and history[j][0] > tol:
+            j -= 1
+        gap_start = history[j + 1][1]
+        gap_days = (history[i][1] - gap_start).days
 
-    months = (now - anchor).days // 30
-    return int(months) if months >= 1 else None
+        if gap_days >= MIN_GAP_DAYS:
+            anchor = history[j][1] if j >= 0 else history[0][1]
+            months = (now - anchor).days // 30
+            return int(months) if months >= 1 else None
+
+        # Zu kurzer Ausreißer, um als echte teure Phase zu zählen — als Teil
+        # der günstigen Zeit behandeln und weiter zurück suchen.
+        i = j
 
 
 def determine_tag(
