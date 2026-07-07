@@ -2,12 +2,15 @@
   "name": "Snagga",
   "short_name": "Snagga",
   "description": "Täglich ausgewählte Amazon-Deals",
-  "theme_color": "#EF4444",
-  "background_color": "#0F0F12",
+  "theme_color": "#153D68",
+  "background_color": "#153D68",
   "display": "standalone",
   "orientation": "portrait",
   "start_url": "/",
   "icons": [
-    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "/favicon-32x32.png", "sizes": "32x32", "type": "image/png" },
+    { "src": "/android-chrome-192x192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/android-chrome-512x512.png", "sizes": "512x512", "type": "image/png" }
   ]
 }
