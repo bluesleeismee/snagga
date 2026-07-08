@@ -221,12 +221,13 @@ export default function ProductModal({ deal, onClose }) {
         style={{
           background: 'var(--bg-card)',
           width: '100%',
-          maxWidth: isStacked ? '100%' : 1280,
+          maxWidth: isStacked ? '100%' : 1600,
           height: isMobile ? '100dvh' : 'auto',
           maxHeight: isMobile ? '100dvh' : '95vh',
           display: isStacked ? 'flex' : 'grid',
           flexDirection: 'column',
           gridTemplateColumns: '1.2fr 0.8fr',
+          gridTemplateRows: 'auto auto',
           overflowY: 'auto',
           position: 'relative',
           boxShadow: '0 30px 70px rgba(0,0,0,0.2)',
@@ -276,20 +277,21 @@ export default function ProductModal({ deal, onClose }) {
           </svg>
         </button>
 
-        {/* ── LEFT: Gallery ── */}
+        {/* ── LEFT TOP: Gallery ── */}
         <div
           style={{
             background: 'var(--bg-img)',
-            padding: isMobile ? '48px 24px 20px' : isStacked ? '40px 32px 20px' : '48px 48px 32px',
+            padding: isMobile ? '48px 24px 20px' : isStacked ? '40px 32px 20px' : '36px 40px 102px',
             display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
             borderRight: isStacked ? 'none' : '1px solid var(--border)',
             borderBottom: isStacked ? '1px solid var(--border)' : 'none',
+            gridColumn: isStacked ? 'auto' : '1', gridRow: isStacked ? 'auto' : '1',
           }}
         >
           <div
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
-            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', minHeight: isMobile ? 220 : isStacked ? 280 : 360 }}
+            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', minHeight: isMobile ? 220 : isStacked ? 280 : 260 }}
           >
             {images.length > 1 && (
               <button
@@ -303,7 +305,7 @@ export default function ProductModal({ deal, onClose }) {
               <img
                 src={currentImg} alt={deal.name}
                 onClick={() => setLightbox(true)}
-                style={{ maxWidth: '100%', maxHeight: isMobile ? 200 : 400, objectFit: 'contain', cursor: 'zoom-in' }}
+                style={{ maxWidth: '100%', maxHeight: isMobile ? 200 : 280, objectFit: 'contain', cursor: 'zoom-in' }}
                 draggable={false}
               />
             ) : (
@@ -345,12 +347,13 @@ export default function ProductModal({ deal, onClose }) {
           onTouchStart={isStacked ? handleDetailTouchStart : undefined}
           onTouchEnd={isStacked ? handleDetailTouchEnd : undefined}
           style={{
-            padding: isMobile ? '28px 24px 40px' : '48px 44px',
-            display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+            padding: isMobile ? '28px 24px 40px' : '28px 44px',
+            display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', gap: 24,
             // Auf Mobile/Tablet (gestapelt) KEIN eigener Scrollbereich → das ganze
             // Modal scrollt als Einheit (statt schmalem inneren Scroll).
             overflowY: isStacked ? 'visible' : 'auto',
             minWidth: 0,
+            gridColumn: isStacked ? 'auto' : '2', gridRow: isStacked ? 'auto' : '1 / 3',
           }}
         >
           <div>
@@ -360,7 +363,7 @@ export default function ProductModal({ deal, onClose }) {
             </div>
 
             {/* Title */}
-            <h2 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, lineHeight: 1.3, color: 'var(--text)', paddingRight: isMobile ? 0 : 32 }}>
+            <h2 style={{ fontSize: isMobile ? 20 : 19, fontWeight: 700, lineHeight: 1.35, color: 'var(--text)', paddingRight: isMobile ? 0 : 32 }}>
               {deal.name}
             </h2>
           </div>
@@ -439,68 +442,13 @@ export default function ProductModal({ deal, onClose }) {
               onMouseLeave={e => e.currentTarget.style.filter = ''}
             >
               Zum Angebot bei Amazon
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12,5 19,12 12,19"/>
-              </svg>
             </a>
           </div>
-        </div>
-
-        {/* ── FULL-WIDTH: Urteil · Preisverlauf · Preisalarm ── */}
-        <div
-          style={{
-            gridColumn: '1 / -1',
-            borderTop: '1px solid var(--border)',
-            padding: isMobile ? '24px 24px 40px' : '32px 44px 40px',
-            display: 'flex', flexDirection: 'column', gap: 28,
-          }}
-        >
-          {/* Preisverlauf */}
-          <div>
-            <div style={sectionLabel}>Preisverlauf</div>
-            {!detail && !detailErr && (
-              <div style={{ height: 120, display: 'flex', alignItems: 'center', color: 'var(--muted)', fontSize: 13 }}>Lädt …</div>
-            )}
-            {detailErr && (
-              <p style={{ fontSize: 13, color: 'var(--muted)' }}>Preisverlauf konnte gerade nicht geladen werden.</p>
-            )}
-            {detail && (detail.has_real_history && detail.chart_svg
-              ? <div>
-                  <div
-                    style={{ background: '#fff', border: '1px solid var(--border)', padding: '14px 12px 8px' }}
-                    dangerouslySetInnerHTML={{ __html: (showFullChart && detail.chart_svg_full) ? detail.chart_svg_full : detail.chart_svg }}
-                  />
-                  {detail.has_more_history && (
-                    <button
-                      onClick={() => setShowFullChart(v => !v)}
-                      style={{ marginTop: 10, background: 'none', border: '1px solid var(--border)', color: 'var(--muted)', padding: '7px 14px', fontSize: 13, cursor: 'pointer' }}
-                    >
-                      {showFullChart ? 'Letzte 365 Tage anzeigen' : 'Gesamte Preishistorie anzeigen'}
-                    </button>
-                  )}
-                </div>
-              : <p style={{ fontSize: 13, color: 'var(--muted)' }}>Der geprüfte Preisverlauf für dieses Produkt wird gerade aufgebaut — schau bald wieder vorbei.</p>
-            )}
-          </div>
-
-          {/* Preis-Eckdaten */}
-          {detail && (
-            <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap' }}>
-              {[['Aktueller Preis', detail.current_price], ['Allzeittief', detail.atl], ['Ø 90 Tage', detail.avg90], ['Ø 180 Tage', detail.avg180]]
-                .filter(([, v]) => v > 0)
-                .map(([label, v]) => (
-                  <div key={label}>
-                    <div style={{ ...sectionLabel, marginBottom: 4 }}>{label}</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{fmtPrice(v)}</div>
-                  </div>
-                ))}
-            </div>
-          )}
 
           {/* Preisalarm */}
           <div style={{
             borderTop: '1px solid var(--border)', borderLeft: '4px solid var(--accent)',
-            background: 'var(--bg-img)', padding: '20px 20px 20px 18px', marginTop: 4,
+            background: 'var(--bg-img)', padding: '14px 20px 14px 18px',
           }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>🔔 Preisalarm setzen</div>
             {alarmState === 'ok' ? (
@@ -510,27 +458,29 @@ export default function ProductModal({ deal, onClose }) {
                 <p style={{ fontSize: 13, color: 'var(--text)', marginBottom: 14, lineHeight: 1.5 }}>
                   Wir schicken dir eine E-Mail, sobald der Preis auf deinen Wunschpreis fällt. Kostenlos, jederzeit abbestellbar.
                 </p>
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <input
                     type="email" required placeholder="deine@email.de" value={alarmEmail}
                     onChange={e => setAlarmEmail(e.target.value)} aria-label="E-Mail-Adresse"
-                    style={{ ...alarmInput, flex: 1, minWidth: 200 }}
+                    style={{ ...alarmInput, width: '100%' }}
                   />
-                  <input
-                    type="number" required min="1" step="0.01" placeholder="Wunschpreis €" value={alarmPrice}
-                    onChange={e => setAlarmPrice(e.target.value)} aria-label="Wunschpreis in Euro"
-                    style={{ ...alarmInput, width: 150 }}
-                  />
-                  <button
-                    type="submit" disabled={alarmState === 'sending'}
-                    style={{
-                      background: 'var(--accent)', color: '#fff', border: 'none', padding: '0 22px', height: 46,
-                      fontSize: 14, fontWeight: 600, cursor: alarmState === 'sending' ? 'default' : 'pointer',
-                      opacity: alarmState === 'sending' ? 0.7 : 1,
-                    }}
-                  >
-                    {alarmState === 'sending' ? 'Sende …' : 'Alarm aktivieren'}
-                  </button>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <input
+                      type="number" required min="1" step="0.01" placeholder="Wunschpreis €" value={alarmPrice}
+                      onChange={e => setAlarmPrice(e.target.value)} aria-label="Wunschpreis in Euro"
+                      style={{ ...alarmInput, flex: 1, minWidth: 0 }}
+                    />
+                    <button
+                      type="submit" disabled={alarmState === 'sending'}
+                      style={{
+                        background: 'var(--accent)', color: '#fff', border: 'none', padding: '0 22px', height: 46,
+                        fontSize: 14, fontWeight: 600, cursor: alarmState === 'sending' ? 'default' : 'pointer',
+                        opacity: alarmState === 'sending' ? 0.7 : 1, flexShrink: 0,
+                      }}
+                    >
+                      {alarmState === 'sending' ? 'Sende …' : 'Alarm aktivieren'}
+                    </button>
+                  </div>
                 </div>
                 {alarmState === 'error' && (
                   <p style={{ fontSize: 13, color: '#8b1a1a', marginTop: 10 }}>{alarmMsg}</p>
@@ -540,6 +490,65 @@ export default function ProductModal({ deal, onClose }) {
                 </p>
               </form>
             )}
+          </div>
+        </div>
+
+        {/* ── LEFT BOTTOM: Preis-Eckdaten · Preisverlauf ── */}
+        <div
+          style={{
+            gridColumn: isStacked ? 'auto' : '1', gridRow: isStacked ? 'auto' : '2',
+            borderTop: '1px solid var(--border)',
+            padding: isMobile ? '24px 24px 40px' : '18px 40px 24px',
+            display: 'flex', flexDirection: 'column', gap: 14,
+          }}
+        >
+          {/* Preis-Eckdaten (links, vertikal) + Preisverlauf (rechts) auf gleicher Ebene */}
+          <div style={{ display: 'flex', gap: isStacked ? 20 : 36, flexDirection: isStacked ? 'column' : 'row', alignItems: isStacked ? 'stretch' : 'flex-start' }}>
+            {/* Preis-Eckdaten */}
+            {detail && (
+              <div style={{
+                display: 'flex', flexDirection: isStacked ? 'row' : 'column',
+                flexWrap: 'wrap', gap: isStacked ? 20 : 18,
+                minWidth: isStacked ? 'auto' : 150, flexShrink: 0,
+              }}>
+                {[['Aktueller Preis', detail.current_price], ['Allzeittief', detail.atl], ['Ø 90 Tage', detail.avg90], ['Ø 180 Tage', detail.avg180]]
+                  .filter(([, v]) => v > 0)
+                  .map(([label, v]) => (
+                    <div key={label}>
+                      <div style={{ ...sectionLabel, marginBottom: 4 }}>{label}</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{fmtPrice(v)}</div>
+                    </div>
+                  ))}
+              </div>
+            )}
+
+            {/* Preisverlauf */}
+            <div style={{ flex: 1, minWidth: 0, width: isStacked ? '100%' : 'auto' }}>
+              <div style={sectionLabel}>Preisverlauf</div>
+              {!detail && !detailErr && (
+                <div style={{ height: 120, display: 'flex', alignItems: 'center', color: 'var(--muted)', fontSize: 13 }}>Lädt …</div>
+              )}
+              {detailErr && (
+                <p style={{ fontSize: 13, color: 'var(--muted)' }}>Preisverlauf konnte gerade nicht geladen werden.</p>
+              )}
+              {detail && (detail.has_real_history && detail.chart_svg
+                ? <div>
+                    <div
+                      style={{ background: '#fff', border: '1px solid var(--border)', padding: '14px 12px 8px', maxWidth: isStacked ? '100%' : 720 }}
+                      dangerouslySetInnerHTML={{ __html: (showFullChart && detail.chart_svg_full) ? detail.chart_svg_full : detail.chart_svg }}
+                    />
+                    {detail.has_more_history && (
+                      <button
+                        onClick={() => setShowFullChart(v => !v)}
+                        style={{ marginTop: 10, background: 'none', border: '1px solid var(--border)', color: 'var(--muted)', padding: '7px 14px', fontSize: 13, cursor: 'pointer' }}
+                      >
+                        {showFullChart ? 'Letzte 365 Tage anzeigen' : 'Gesamte Preishistorie anzeigen'}
+                      </button>
+                    )}
+                  </div>
+                : <p style={{ fontSize: 13, color: 'var(--muted)' }}>Der geprüfte Preisverlauf für dieses Produkt wird gerade aufgebaut — schau bald wieder vorbei.</p>
+              )}
+            </div>
           </div>
 
           {/* Dauerhafte, teilbare Preisseite (SEO) */}

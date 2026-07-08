@@ -413,18 +413,21 @@ def calculate_deal_score(
 def best_price_since_months(history: list, current: float) -> int | None:
     """
     Wie viele Monate liegt der letzte Zeitpunkt zurück, an dem das Produkt
-    SICHTBAR günstiger war als jetzt (>2% unter current)?
+    (auch nur geringfügig) günstiger war als jetzt?
 
     history: chronologische Liste [(preis_eur, datetime), …] ECHTER Keepa-Punkte.
     Harte Regel: die Aussage "Bester Preis seit N Monaten" steht direkt neben
     dem Chart, das dieselbe History zeigt. Es darf im behaupteten Zeitraum
-    KEIN einziger sichtbar tieferer Punkt existieren — auch kein kurzer
-    Ausreißer (z.B. ein Ein-Tages-Blitzangebot) —, sonst sieht der Kunde im
-    selben Chart einen Preis, der die Behauptung widerlegt. Deshalb wird
-    rückwärts ab jetzt nach dem JÜNGSTEN Punkt gesucht, der spürbar billiger
-    war; alles danach (also der beanspruchte Zeitraum) muss lückenlos bei
-    oder über dem aktuellen Preis liegen. War der Preis nirgends in der
-    History spürbar billiger, zählt die volle History-Spanne
+    KEIN einziger tieferer oder gleich hoher Punkt existieren — auch kein
+    kurzer Ausreißer (z.B. ein Ein-Tages-Blitzangebot) und auch keine nur
+    geringfügig tiefere Preisspitze —, sonst sieht der Kunde im selben Chart
+    einen Preis, der die Behauptung widerlegt. Die Toleranz ist deshalb NUR
+    für Rundungsrauschen gedacht (Keepa liefert Cent-Werte), nicht um echte,
+    aber kleine Preisvorteile zu ignorieren. Deshalb wird rückwärts ab jetzt
+    nach dem JÜNGSTEN Punkt gesucht, der (über Rundungsrauschen hinaus)
+    billiger war; alles danach (also der beanspruchte Zeitraum) muss
+    lückenlos bei oder über dem aktuellen Preis liegen. War der Preis
+    nirgends in der History billiger, zählt die volle History-Spanne
     ("Bester Preis seit Aufzeichnungsbeginn").
 
     None, wenn keine belastbare Aussage möglich ist (zu wenig History, oder
@@ -432,7 +435,10 @@ def best_price_since_months(history: list, current: float) -> int | None:
     """
     if not history or len(history) < 3 or not current or current <= 0:
         return None
-    tol_low = current * 0.98  # >2% billiger gilt als sichtbar tieferer Punkt
+    # Nur Rundungsrauschen tolerieren (Keepa rundet auf Cents) — 0.3%, nicht 2%.
+    # Ein Punkt, der spürbar (auch nur ~1%) billiger war, MUSS den Claim verhindern,
+    # weil derselbe Punkt im daneben gerenderten Chart sichtbar ist.
+    tol_low = current * 0.997
     now = datetime.utcnow()
 
     anchor = history[0][1]  # Fallback: nirgends sichtbar billiger -> ganze Spanne

@@ -910,6 +910,15 @@ async def fetch_and_store_history(asin: str) -> bool:
                                   (min(hist_prices) if hist_prices else None)) if v and v > 0]
     atl = min(atl_candidates) if atl_candidates else kd["current_price"]
 
+    # Tag MUSS aus derselben history/atl-Momentaufnahme berechnet werden, die
+    # unten in price_history geschrieben wird — sonst kann der Badge-Text
+    # (z.B. "Bester Preis seit über 1 Jahr") einen Preis behaupten, den der
+    # daneben gerenderte Chart widerlegt. Diese Funktion kam aus einem Deep-
+    # Sync-artigen /product-Call → atl_confirmed=True, wie in nightly_deep_sync.
+    months = best_price_since_months(hist, kd["current_price"])
+    tag = determine_tag(kd["current_price"], atl, kd["avg90_price"], kd["avg180_price"],
+                        atl_confirmed=True, months_since_lower=months)
+
     async with db.acquire() as conn:
         await conn.execute("""
             UPDATE products SET
@@ -917,12 +926,14 @@ async def fetch_and_store_history(asin: str) -> bool:
                 avg90_price = $5, avg180_price = $6, rating = $7, reviews = $8,
                 sales_rank = $9, last_checked = $10, last_viewed = $10,
                 image_url = CASE WHEN $11 != '' THEN $11 ELSE image_url END,
-                brand     = CASE WHEN $12 != '' THEN $12 ELSE brand END
+                brand     = CASE WHEN $12 != '' THEN $12 ELSE brand END,
+                tag       = $13
             WHERE asin = $1
         """,
             asin, kd["current_price"], atl, kd["avg_price"],
             kd["avg90_price"], kd["avg180_price"], kd["rating"], kd["reviews"],
             kd["sales_rank"], now, kd["image_url"], (kd.get("brand") or ""),
+            tag,
         )
         if hist:
             await conn.execute("DELETE FROM price_history WHERE asin=$1", asin)
