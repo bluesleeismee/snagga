@@ -51,7 +51,9 @@ export default function ProductModal({ deal, onClose }) {
   // Quelle wie die SSR-Preisseite, damit das Modal exakt dasselbe zeigt.
   const [detail, setDetail]       = useState(null)
   const [detailErr, setDetailErr] = useState(false)
-  const [showFullChart, setShowFullChart] = useState(false)
+  // Zeitraum-Umschalter für den Chart (90 Tage / 1 Jahr / Gesamt) — identisch
+  // zur SSR-Preisseite (/preis/{asin}), siehe main.py _chart_windows.
+  const [chartWindow, setChartWindow] = useState('90')
   // Preisalarm-Formular direkt im Modal (kein Wegnavigieren).
   const [alarmEmail, setAlarmEmail] = useState('')
   const [alarmPrice, setAlarmPrice] = useState('')
@@ -60,7 +62,7 @@ export default function ProductModal({ deal, onClose }) {
 
   // Beim Öffnen eines Produkts Details laden und Formularzustand zurücksetzen.
   useEffect(() => {
-    setAlarmState('idle'); setAlarmMsg(''); setAlarmEmail(''); setAlarmPrice(''); setShowFullChart(false)
+    setAlarmState('idle'); setAlarmMsg(''); setAlarmEmail(''); setAlarmPrice(''); setChartWindow('90')
     if (!deal?.asin) return
     let cancelled = false
     setDetail(null); setDetailErr(false)
@@ -460,10 +462,16 @@ export default function ProductModal({ deal, onClose }) {
           gridColumn: isStacked ? 'auto' : '2', gridRow: isStacked ? 'auto' : '2',
           padding: isMobile ? '0 24px 40px' : isStacked ? '0 44px 40px' : '18px 44px 24px',
         }}>
-          {/* Unsichtbarer Platzhalter in exakt der Höhe des "Preisverlauf"-Labels
+          {/* Unsichtbarer Platzhalter in exakt der Höhe von Label + Zeitraum-Tabs
               links, damit die Alarm-Box IMMER auf Höhe des Chart-Bilds beginnt
-              (nicht auf Höhe des Labels) — unabhängig von Schriftgrösse/Zeilenhöhe. */}
-          {!isStacked && <div style={{ ...sectionLabel, visibility: 'hidden' }}>Preisverlauf</div>}
+              (nicht auf Höhe von Label/Tabs) — durch Wiederverwendung derselben
+              Komponenten bleibt das robust, auch wenn sich deren Höhe mal ändert. */}
+          {!isStacked && (
+            <div style={{ visibility: 'hidden' }} aria-hidden="true">
+              <div style={sectionLabel}>Preisverlauf</div>
+              {detail?.has_real_history && detail.chart_svg_90 && <ChartTabs value={chartWindow} onChange={() => {}} />}
+            </div>
+          )}
           <div style={{
             borderTop: '1px solid var(--border)', borderLeft: '4px solid var(--accent)',
             background: 'var(--bg-img)', padding: '14px 20px 14px 18px',
@@ -549,20 +557,13 @@ export default function ProductModal({ deal, onClose }) {
               {detailErr && (
                 <p style={{ fontSize: 13, color: 'var(--muted)' }}>Preisverlauf konnte gerade nicht geladen werden.</p>
               )}
-              {detail && (detail.has_real_history && detail.chart_svg
+              {detail && (detail.has_real_history && detail.chart_svg_90
                 ? <div>
+                    <ChartTabs value={chartWindow} onChange={setChartWindow} />
                     <div
                       style={{ background: '#fff', border: '1px solid var(--border)', padding: '14px 12px 8px', maxWidth: isStacked ? '100%' : 720 }}
-                      dangerouslySetInnerHTML={{ __html: (showFullChart && detail.chart_svg_full) ? detail.chart_svg_full : detail.chart_svg }}
+                      dangerouslySetInnerHTML={{ __html: CHART_SVG_BY_WINDOW[chartWindow](detail) || detail.chart_svg_90 }}
                     />
-                    {detail.has_more_history && (
-                      <button
-                        onClick={() => setShowFullChart(v => !v)}
-                        style={{ marginTop: 10, background: 'none', border: '1px solid var(--border)', color: 'var(--muted)', padding: '7px 14px', fontSize: 13, cursor: 'pointer' }}
-                      >
-                        {showFullChart ? 'Letzte 365 Tage anzeigen' : 'Gesamte Preishistorie anzeigen'}
-                      </button>
-                    )}
                   </div>
                 : <p style={{ fontSize: 13, color: 'var(--muted)' }}>Der geprüfte Preisverlauf für dieses Produkt wird gerade aufgebaut — schau bald wieder vorbei.</p>
               )}
@@ -590,6 +591,39 @@ export default function ProductModal({ deal, onClose }) {
 const sectionLabel = {
   fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.5,
   color: 'var(--muted)', fontWeight: 600, marginBottom: 12,
+}
+
+// Zeitraum-Umschalter für den Preisverlauf-Chart — identisch zur SSR-Preisseite
+// (main.py: _chart_windows / .chart-tab CSS), damit das Modal exakt dasselbe zeigt.
+const CHART_WINDOWS = [['90', '90 Tage'], ['365', '1 Jahr'], ['full', 'Gesamt']]
+const CHART_SVG_BY_WINDOW = {
+  '90':  d => d.chart_svg_90,
+  '365': d => d.chart_svg,
+  'full': d => d.chart_svg_full,
+}
+
+function ChartTabs({ value, onChange }) {
+  return (
+    <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+      {CHART_WINDOWS.map(([key, label]) => {
+        const active = key === value
+        return (
+          <button
+            key={key} type="button" onClick={() => onChange(key)}
+            style={{
+              background: active ? 'var(--accent)' : 'none',
+              border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+              color: active ? '#fff' : 'var(--accent)',
+              padding: '7px 16px', fontSize: 13, fontFamily: 'inherit',
+              fontWeight: active ? 600 : 400, cursor: 'pointer',
+            }}
+          >
+            {label}
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 const alarmInput = {

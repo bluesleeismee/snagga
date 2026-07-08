@@ -1381,6 +1381,7 @@ async def api_product_detail(asin: str):
         "avg90":            d["avg90"],
         "avg180":           d["avg180"],
         "has_real_history": bool(row["has_real_history"]),
+        "chart_svg_90":     d["chart_svg_90"],
         "chart_svg":        d["chart_svg"],
         "chart_svg_full":   d["chart_svg_full"],
         "has_more_history": d["has_more_history"],
