@@ -281,7 +281,7 @@ export default function ProductModal({ deal, onClose }) {
         <div
           style={{
             background: 'var(--bg-img)',
-            padding: isMobile ? '48px 24px 20px' : isStacked ? '40px 32px 20px' : '36px 40px 102px',
+            padding: isMobile ? '48px 24px 20px' : isStacked ? '40px 32px 20px' : '29px 40px 49px',
             display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
             borderRight: isStacked ? 'none' : '1px solid var(--border)',
             borderBottom: isStacked ? '1px solid var(--border)' : 'none',
@@ -291,7 +291,7 @@ export default function ProductModal({ deal, onClose }) {
           <div
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
-            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', minHeight: isMobile ? 220 : isStacked ? 280 : 260 }}
+            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', minHeight: isMobile ? 220 : isStacked ? 280 : 360 }}
           >
             {images.length > 1 && (
               <button
@@ -305,7 +305,7 @@ export default function ProductModal({ deal, onClose }) {
               <img
                 src={currentImg} alt={deal.name}
                 onClick={() => setLightbox(true)}
-                style={{ maxWidth: '100%', maxHeight: isMobile ? 200 : 280, objectFit: 'contain', cursor: 'zoom-in' }}
+                style={{ maxWidth: '100%', maxHeight: isMobile ? 200 : 360, objectFit: 'contain', cursor: 'zoom-in' }}
                 draggable={false}
               />
             ) : (
@@ -449,6 +449,7 @@ export default function ProductModal({ deal, onClose }) {
           <div style={{
             borderTop: '1px solid var(--border)', borderLeft: '4px solid var(--accent)',
             background: 'var(--bg-img)', padding: '14px 20px 14px 18px',
+            marginTop: isStacked ? 0 : 20,
           }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>🔔 Preisalarm setzen</div>
             {alarmState === 'ok' ? (
