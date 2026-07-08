@@ -342,18 +342,24 @@ export default function ProductModal({ deal, onClose }) {
           )}
         </div>
 
-        {/* ── RIGHT: Details ── */}
+        {/* ── RIGHT TOP: Titel · Preis · Stats · CTA ──
+             Eigene Grid-Zelle (nur Zeile 1, nicht spannend) mit
+             justifyContent:'space-between' — dadurch sitzt der CTA-Button IMMER
+             an der Unterkante von Zeile 1, unabhängig von der Titellänge, weil
+             Grid diese Zelle automatisch auf die Höhe der Bildspalte streckt.
+             Das ersetzt fest verdrahtete Pixel-Werte, die nur für eine
+             bestimmte Titellänge stimmten. */}
         <div
           onTouchStart={isStacked ? handleDetailTouchStart : undefined}
           onTouchEnd={isStacked ? handleDetailTouchEnd : undefined}
           style={{
-            padding: isMobile ? '28px 24px 40px' : '28px 44px',
-            display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', gap: 74,
+            padding: isMobile ? '28px 24px 40px' : isStacked ? '28px 44px 40px' : '28px 44px 0px',
+            display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
             // Auf Mobile/Tablet (gestapelt) KEIN eigener Scrollbereich → das ganze
             // Modal scrollt als Einheit (statt schmalem inneren Scroll).
             overflowY: isStacked ? 'visible' : 'auto',
             minWidth: 0,
-            gridColumn: isStacked ? 'auto' : '2', gridRow: isStacked ? 'auto' : '1 / 3',
+            gridColumn: isStacked ? 'auto' : '2', gridRow: isStacked ? 'auto' : '1',
           }}
         >
           <div>
@@ -444,12 +450,23 @@ export default function ProductModal({ deal, onClose }) {
               Zum Angebot bei Amazon
             </a>
           </div>
+        </div>
 
-          {/* Preisalarm */}
+        {/* ── RIGHT BOTTOM: Preisalarm ──
+             Eigene Grid-Zelle (Zeile 2, wie die Preisverlauf-Zelle links) —
+             beide Zellen beginnen an derselben Zeilengrenze, dadurch stimmen
+             ihre Oberkanten automatisch überein, ganz ohne Pixel-Tuning. */}
+        <div style={{
+          gridColumn: isStacked ? 'auto' : '2', gridRow: isStacked ? 'auto' : '2',
+          padding: isMobile ? '0 24px 40px' : isStacked ? '0 44px 40px' : '18px 44px 24px',
+        }}>
+          {/* Unsichtbarer Platzhalter in exakt der Höhe des "Preisverlauf"-Labels
+              links, damit die Alarm-Box IMMER auf Höhe des Chart-Bilds beginnt
+              (nicht auf Höhe des Labels) — unabhängig von Schriftgrösse/Zeilenhöhe. */}
+          {!isStacked && <div style={{ ...sectionLabel, visibility: 'hidden' }}>Preisverlauf</div>}
           <div style={{
             borderTop: '1px solid var(--border)', borderLeft: '4px solid var(--accent)',
             background: 'var(--bg-img)', padding: '14px 20px 14px 18px',
-            marginTop: isStacked ? 0 : -30,
           }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>🔔 Preisalarm setzen</div>
             {alarmState === 'ok' ? (
