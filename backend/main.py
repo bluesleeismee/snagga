@@ -1938,20 +1938,23 @@ async def price_page(request: Request, asin: str):
   h1 {{ font-size:24px; line-height:1.35; margin:0 0 20px; }}
   h2 {{ font-size:19px; margin:36px 0 8px; }}
   .layout {{ display:grid; grid-template-columns:1fr 1.15fr; grid-template-rows:auto auto; grid-auto-flow:column; column-gap:28px; row-gap:36px; align-items:stretch; }}
-  @media (max-width:820px) {{ .layout {{ grid-template-columns:1fr; grid-auto-flow:row; }} }}
-  .col-left-top, .col-right-top {{ display:flex; flex-direction:column; }}
-  .col-right-top h2:first-child, .col-left-bottom h2:first-child, .col-right-bottom h2:first-child {{ margin-top:0; }}
-  .prod-img {{ background:#fff; border:1px solid #EAE6E1; padding:18px; display:flex; align-items:center; justify-content:center; margin-bottom:16px; }}
-  .prod-img img {{ max-width:100%; max-height:280px; object-fit:contain; cursor:zoom-in; }}
+  /* Mobile: gestapelt in Lese-Reihenfolge Bild → Titel/Preis/CTA → Preisinfo/Chart →
+     Preisalarm, statt der DOM-Reihenfolge (die für die Desktop-Quadranten gebraucht wird). */
+  @media (max-width:820px) {{
+    .layout {{ grid-template-columns:1fr; grid-auto-flow:row; }}
+    .col-left-top {{ order:1; }}
+    .col-right-top {{ order:2; }}
+    .col-left-bottom {{ order:3; }}
+    .col-right-bottom {{ order:4; }}
+  }}
+  .col-left-top {{ display:flex; flex-direction:column; align-items:center; justify-content:center; }}
+  .col-right-top {{ display:flex; flex-direction:column; justify-content:space-between; }}
+  .col-left-bottom h2:first-child, .col-right-bottom h2:first-child {{ margin-top:0; }}
+  .prod-img {{ background:#fff; border:1px solid #EAE6E1; padding:18px; display:flex; align-items:center; justify-content:center; width:100%; }}
+  .prod-img img {{ max-width:100%; max-height:320px; object-fit:contain; cursor:zoom-in; }}
   #snagga-lb {{ display:none; position:fixed; inset:0; z-index:999; background:rgba(31,30,29,0.92); align-items:center; justify-content:center; cursor:zoom-out; }}
   #snagga-lb img {{ max-width:90vw; max-height:90vh; object-fit:contain; }}
   {_PRICE_STATS_CSS}
-  /* Chart ans Zellenende drücken, damit Unterkante Chart == Unterkante
-     Affiliate-Hinweis (col-left-top) — beide Spalten nutzen dieselbe
-     margin-top:auto-Technik, unabhängig davon welche Seite von Natur aus
-     höher ist (langer Titel vs. hoher Chart). */
-  .chart-push {{ margin-top:auto; }}
-  .cta-note-bottom {{ margin-top:auto; }}
   .verdict {{ border-left:5px solid {vcolor}; background:var(--bg-card); padding:16px 20px; margin-bottom:16px; }}
   .verdict .v-head {{ font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:4px; }}
   .verdict .v-label {{ font-size:24px; font-weight:800; color:{vcolor}; }}
@@ -1993,22 +1996,24 @@ async def price_page(request: Request, asin: str):
 <div class="layout">
   <div class="col-left-top">
     <div class="prod-img"><img src="{image}" alt="{name}" onclick="document.getElementById('snagga-lb-img').src=this.src;document.getElementById('snagga-lb').style.display='flex'"></div>
-    <h1>{name}</h1>
-    {price_stats_block}
-    {cta}
-    <p class="cta-note cta-note-bottom">* Affiliate-Hinweis: Als Amazon-Partner verdienen wir an qualifizierten Käufen — für dich entstehen keine Mehrkosten. Der angezeigte Preis kann abweichen; massgeblich ist der Preis bei Amazon zum Kaufzeitpunkt.</p>
   </div>
   <div class="col-left-bottom">
-    {alert_form}
-  </div>
-  <div class="col-right-top">
-    {verdict_block}
-    <h2>Preisverlauf</h2>
-    <div class="chart-push">{chart_block}</div>
-  </div>
-  <div class="col-right-bottom">
     <h2>Preis-Eckdaten</h2>
     <table class="stats">{stats_rows}</table>
+    <h2>Preisverlauf</h2>
+    {chart_block}
+  </div>
+  <div class="col-right-top">
+    <h1>{name}</h1>
+    <div>
+      {verdict_block}
+      {price_stats_block}
+      {cta}
+      <p class="cta-note">* Affiliate-Hinweis: Als Amazon-Partner verdienen wir an qualifizierten Käufen — für dich entstehen keine Mehrkosten. Der angezeigte Preis kann abweichen; massgeblich ist der Preis bei Amazon zum Kaufzeitpunkt.</p>
+    </div>
+  </div>
+  <div class="col-right-bottom">
+    {alert_form}
   </div>
 </div>
 
