@@ -338,10 +338,15 @@ def _parse_product(p: dict) -> dict | None:
     avg90  = stats.get("avg90")  or []
     avg180 = stats.get("avg180") or []
 
-    all_time_low   = _first_pos(atl,    0, 1) or current_price
-    avg_price      = _first_pos(avg90,  0, 1) or _first_pos(avg30, 0, 1) or current_price
-    avg90_price    = _first_pos(avg90,  0, 1) or current_price
-    avg180_price   = _first_pos(avg180, 0, 1) or current_price
+    # BuyBox(18) zuerst — wie überall sonst (current_price, History), siehe Kommentar
+    # oben. Vorher liefen ATL/Ø nur über Amazon(0)/New(1) und ignorierten BuyBox
+    # komplett: bei Produkten, deren BuyBox meist unter Amazons/New-Preisen liegt
+    # (Standardfall bei Drittanbieter-Deals), lag der ausgewiesene Ø90/Ø180 dadurch
+    # weit über dem, was die BuyBox-basierte Chart-Linie tatsächlich zeigt.
+    all_time_low   = _first_pos(atl,    IDX_BUYBOX, IDX_AMAZON, IDX_NEW) or current_price
+    avg_price      = _first_pos(avg90,  IDX_BUYBOX, IDX_AMAZON, IDX_NEW) or _first_pos(avg30, IDX_BUYBOX, IDX_AMAZON, IDX_NEW) or current_price
+    avg90_price    = _first_pos(avg90,  IDX_BUYBOX, IDX_AMAZON, IDX_NEW) or current_price
+    avg180_price   = _first_pos(avg180, IDX_BUYBOX, IDX_AMAZON, IDX_NEW) or current_price
     original_price = avg180_price
 
     if original_price < current_price:
