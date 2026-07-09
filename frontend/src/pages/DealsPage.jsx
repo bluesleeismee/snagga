@@ -528,7 +528,8 @@ export default function DealsPage() {
       }}>
         <div style={{
           maxWidth: 1840, width: '98%', margin: '0 auto',
-          padding: isMobile ? '10px 14px' : '13px 0',
+          padding: isMobile ? '10px 0' : '13px 0',
+          paddingLeft: !isDesktop ? 14 : 0, paddingRight: !isDesktop ? 14 : 0,
           display: 'flex',
           flexDirection: isMobile ? 'column' : 'row',
           justifyContent: 'space-between',
@@ -656,7 +657,12 @@ export default function DealsPage() {
       <div ref={spacerRef} />{/* spacer height set imperatively by ResizeObserver */}
 
       {/* ── MAIN ── */}
-      <main style={{ maxWidth: 1840, width: '98%', margin: '0 auto', padding: isMobile ? '12px 0 24px' : '20px 0 32px', minHeight: 'calc(100vh - var(--header-h))', display: 'flex', flexDirection: 'column' }}>
+      <main style={{
+        maxWidth: 1840, width: '98%', margin: '0 auto',
+        padding: isMobile ? '12px 0 24px' : '20px 0 32px',
+        paddingLeft: !isDesktop ? 14 : 0, paddingRight: !isDesktop ? 14 : 0,
+        minHeight: 'calc(100vh - var(--header-h))', display: 'flex', flexDirection: 'column',
+      }}>
 
         {/* Preis-Check — Kern-Utility, auf allen Geräten sichtbar */}
         <PriceCheckHero isMobile={isMobile} />

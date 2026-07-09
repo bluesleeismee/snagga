@@ -47,7 +47,12 @@ body, #root { width: 100%; }
   --accent-light: #3A2218;
 }
 
-body { background: var(--bg); color: var(--text); overflow-x: hidden; transition: background 0.25s, color 0.25s; }
+/* overflow-x: clip statt hidden — aus demselben Grund wie beim html-Selektor oben
+   (hidden würde overflow-y: auto erzwingen → body wird ein eigener Scroll-Container
+   ohne scrollbar-gutter, dessen Scrollbar-Breite nur normal-flow-Inhalt wie <main>
+   schmaler macht, nicht aber position:fixed-Elemente wie den Header — das Logo und
+   der Content-Bereich driften dadurch bis zu ~15px auseinander). */
+body { background: var(--bg); color: var(--text); overflow-x: clip; transition: background 0.25s, color 0.25s; }
 
 .no-scroll { scrollbar-width: none; -ms-overflow-style: none; }
 .no-scroll::-webkit-scrollbar { display: none; }
