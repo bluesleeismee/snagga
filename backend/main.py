@@ -341,7 +341,6 @@ def _cat_label(category: str) -> str:
 # Einleitungstext pro Kategorieseite — gibt Google echten, einzigartigen Inhalt
 # (statt nur einem Kachel-Grid = "Thin Content") und erklärt Besuchern den USP.
 _CATEGORY_INTROS = {
-    "Elektronik & Foto": "Kopfhörer, Fernseher, Tablets, Powerbanks: Elektronik ist besonders anfällig für aufgeblähte Streichpreise. snagga gleicht jeden Deal mit der echten Preishistorie ab, damit du erkennst, ob ein Rabatt wirklich einer ist.",
     "Computer & Zubehör": "Von SSDs und Monitoren bis zu Tastaturen und Mäusen: Diese Computer-Angebote sind gegen die tatsächliche Preisentwicklung geprüft – kein erfundener Streichpreis, sondern echte Bestpreise.",
     "Küche, Haushalt & Wohnen": "Kaffeevollautomaten, Saugroboter, Heißluftfritteusen und Co. werden oft künstlich rabattiert. Hier siehst du zu jedem Produkt den echten Preisverlauf und das Allzeittief.",
     "Games": "Konsolen, Controller und Spiele zum geprüften Bestpreis. Wir gleichen jeden Deal mit der Preishistorie ab, damit du keinen aufgeblähten Streichpreis bezahlst.",
