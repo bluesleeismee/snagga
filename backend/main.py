@@ -1957,7 +1957,7 @@ async def price_page(request: Request, asin: str):
   .col-right-top {{ display:flex; flex-direction:column; justify-content:space-between; }}
   /* box-sizing:border-box ist Pflicht hier — sonst addiert width:100% + padding
      die Box breiter als die Grid-Zelle und sie läuft links über den Rand hinaus. */
-  .prod-img {{ box-sizing:border-box; background:#fff; border:1px solid #EAE6E1; padding:24px; display:flex; align-items:center; justify-content:center; width:100%; min-height:420px; }}
+  .prod-img {{ box-sizing:border-box; background:var(--bg-img); border:1px solid var(--border); padding:24px; display:flex; align-items:center; justify-content:center; width:100%; min-height:420px; }}
   .prod-img img {{ max-width:100%; max-height:100%; object-fit:contain; cursor:zoom-in; }}
   #snagga-lb {{ display:none; position:fixed; inset:0; z-index:999; background:rgba(31,30,29,0.92); align-items:center; justify-content:center; cursor:zoom-out; }}
   #snagga-lb img {{ max-width:90vw; max-height:90vh; object-fit:contain; }}
