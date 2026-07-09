@@ -338,21 +338,6 @@ _CATEGORY_LABELS = {
 def _cat_label(category: str) -> str:
     return _CATEGORY_LABELS.get(category, category or "")
 
-# Einleitungstext pro Kategorieseite — gibt Google echten, einzigartigen Inhalt
-# (statt nur einem Kachel-Grid = "Thin Content") und erklärt Besuchern den USP.
-_CATEGORY_INTROS = {
-    "Computer & Zubehör": "Von SSDs und Monitoren bis zu Tastaturen und Mäusen: Diese Computer-Angebote sind gegen die tatsächliche Preisentwicklung geprüft – kein erfundener Streichpreis, sondern echte Bestpreise.",
-    "Küche, Haushalt & Wohnen": "Kaffeevollautomaten, Saugroboter, Heißluftfritteusen und Co. werden oft künstlich rabattiert. Hier siehst du zu jedem Produkt den echten Preisverlauf und das Allzeittief.",
-    "Games": "Konsolen, Controller und Spiele zum geprüften Bestpreis. Wir gleichen jeden Deal mit der Preishistorie ab, damit du keinen aufgeblähten Streichpreis bezahlst.",
-    "Auto & Motorrad": "Dashcams, Pflegeprodukte und Zubehör für Auto und Motorrad – mit geprüfter Preishistorie statt Dauer-Rabatt, der nur so aussieht.",
-    "Sport & Freizeit": "Fitnessgeräte, Fahrräder und Outdoor-Ausrüstung: Sport-Deals, deren Rabatt gegen die echte Preisentwicklung geprüft ist.",
-    "Drogerie & Körperpflege": "Elektrische Zahnbürsten, Rasierer, Haarpflege und mehr – Drogerie-Angebote, bei denen der Streichpreis mit der tatsächlichen Preishistorie abgeglichen ist.",
-    "Baumarkt": "Akkuschrauber, Werkzeug und Hochdruckreiniger von Marken wie Bosch, Makita oder Kärcher – geprüft auf echte Preissenkungen statt Fantasie-Rabatt.",
-    "Musikinstrumente & DJ-Equipment": "Gitarren, Keyboards, Audio-Interfaces und DJ-Equipment zum geprüften Bestpreis – der Rabatt wird gegen die tatsächliche Preishistorie kontrolliert.",
-    "Kamera & Foto": "Kameras, Objektive, Action-Cams und Stative: Foto-Deals mit echtem Preisverlauf statt erfundenem Streichpreis.",
-    "Elektro-Großgeräte": "Waschmaschinen, Kühlschränke, Geschirrspüler und Trockner: Bei grossen Haushaltsgeräten lohnt der Blick auf die echte Preishistorie besonders – snagga zeigt dir, wann der Preis wirklich gefallen ist.",
-}
-
 # Repliziert das Kachel-Layout von DealCard.jsx 1:1 (Maße, Farben, Grid-
 # Breakpoints) für serverseitig gerenderte Seiten (Kategorie, ähnliche Deals).
 _CARD_CSS = """
@@ -1072,9 +1057,6 @@ async def category_page(slug: str):
         body_extra = '<p>Gerade läuft in dieser Kategorie kein Deal. Schau bald wieder vorbei!</p>'
         ld_script = ""
 
-    intro_html = (f'<p class="cat-intro">{html.escape(_CATEGORY_INTROS[category])}</p>'
-                  if category in _CATEGORY_INTROS else "")
-
     other_cats = "".join(
         f'<a href="https://www.snagga.de/kategorie/{s}">{html.escape(n)}</a>'
         for s, n in CATEGORY_SLUGS.items() if s != slug
@@ -1100,7 +1082,6 @@ async def category_page(slug: str):
   {_SITE_HEADER_CSS}
   main {{ max-width:1840px; width:98%; margin:0 auto; padding:32px 0; }}
   h1 {{ font-size:26px; margin-bottom:4px; }}
-  .cat-intro {{ font-size:15px; line-height:1.6; color:var(--text); margin:12px 0 28px; }}
   {_CARD_CSS}
   .catnav {{ display:flex; flex-wrap:wrap; gap:8px; margin-top:40px; }}
   .catnav a {{ font-size:13px; background:var(--bg-card); border:1px solid var(--border); border-radius:20px; padding:6px 14px; text-decoration:none; color:var(--accent); }}
@@ -1112,7 +1093,6 @@ async def category_page(slug: str):
 {_SITE_HEADER_HTML}
 <main>
 <h1>{cat_esc} Angebote</h1>
-{intro_html}
 <p>{desc}</p>
 {body_extra}
 <nav class="catnav">{other_cats}</nav>
