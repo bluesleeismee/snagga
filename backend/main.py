@@ -1159,8 +1159,54 @@ def _parse_ts(raw) -> Optional[datetime]:
         return None
 
 
-def _price_chart_svg(points: list, avg90: float, atl: float,
-                     current: float = 0, days: int | None = None) -> str:
+def _window_points(points: list, current: float, days: int | None) -> list[tuple[float, "datetime"]]:
+    """
+    Parst (Preis, Zeitstempel)-Paare, hängt den aktuellen Preis als Schlusspunkt an
+    (die Linie soll immer beim heutigen Preis enden — die Keepa-Serie kann nach-
+    laufen) und fenstert optional auf die letzten `days` Tage (None = ganze
+    History). Gemeinsame Basis für Chart-SVG UND Ø-Berechnung (_windowed_avg),
+    damit die angezeigte Ø-Zahl garantiert zum sichtbaren Chart-Fenster passt.
+    """
+    parsed = [(float(p), _parse_ts(ts)) for p, ts in points if p and float(p) > 0]
+    if current and current > 0:
+        now_dt = datetime.utcnow()
+        last_p, last_t = parsed[-1] if parsed else (None, None)
+        if last_p is None or abs(last_p - current) > 0.005 or (last_t and last_t < now_dt - timedelta(days=1)):
+            parsed.append((float(current), now_dt))
+    if days and parsed:
+        cutoff   = datetime.utcnow() - timedelta(days=days)
+        windowed = [x for x in parsed if x[1] and x[1] >= cutoff]
+        if len(windowed) >= 2:
+            parsed = windowed
+    return parsed
+
+
+def _windowed_avg(points: list, current: float, days: int | None) -> float:
+    """
+    Zeitgewichteter Durchschnittspreis über dasselbe Fenster, das _price_chart_svg
+    für dieselben (points, current, days) zeichnet: jeder Preis zählt so lange, wie
+    er bis zum nächsten Punkt gültig war (deckt sich mit der Treppenkurve, statt
+    ihn wie ein naiver Mittelwert über Preisänderungs-Events zu verzerren).
+    """
+    parsed = _window_points(points, current, days)
+    if len(parsed) < 2:
+        return parsed[0][0] if parsed else 0.0
+    total_w = weighted_sum = 0.0
+    for i in range(len(parsed) - 1):
+        price, t0 = parsed[i]
+        t1 = parsed[i + 1][1]
+        if not t0 or not t1:
+            continue
+        w = (t1 - t0).total_seconds()
+        if w <= 0:
+            continue
+        weighted_sum += price * w
+        total_w += w
+    return round(weighted_sum / total_w, 2) if total_w > 0 else parsed[-1][0]
+
+
+def _price_chart_svg(points: list, avg: float, atl: float,
+                     current: float = 0, days: int | None = None, avg_label: str = "Ø 90 Tage") -> str:
     """
     Inline-SVG-Preisverlauf als TREPPENKURVE mit echter Zeitachse (SSR, kein JS).
     points: chronologische Liste (Preis, Zeitstempel). Der Preis hält konstant bis
@@ -1168,24 +1214,10 @@ def _price_chart_svg(points: list, avg90: float, atl: float,
     current: aktueller Preis — wird als letzter Punkt angehängt, damit die Linie
              immer beim heutigen Preis endet (die Keepa-Serie kann nachlaufen).
     days:    zeigt nur die letzten N Tage (Default-Ansicht); None = ganze History.
+    avg/avg_label: Wert + Beschriftung der gestrichelten Ø-Linie — passend zum
+             jeweiligen Fenster (90 Tage/1 Jahr/Gesamt), nicht mehr fix Ø90.
     """
-    parsed = [(float(p), _parse_ts(ts)) for p, ts in points if p and float(p) > 0]
-
-    # Aktuellen Preis als Schlusspunkt anhängen, damit die Linie beim heutigen
-    # Preis endet (behebt "Linie hängt in der Vergangenheit fest").
-    if current and current > 0:
-        now_dt = datetime.utcnow()
-        last_p, last_t = parsed[-1] if parsed else (None, None)
-        if last_p is None or abs(last_p - current) > 0.005 or (last_t and last_t < now_dt - timedelta(days=1)):
-            parsed.append((float(current), now_dt))
-
-    # Optional auf die letzten `days` Tage fenstern (Default). Bleiben dabei <2
-    # Punkte übrig (z.B. seltene Preisänderungen), ganze Serie zeigen.
-    if days and parsed:
-        cutoff   = datetime.utcnow() - timedelta(days=days)
-        windowed = [x for x in parsed if x[1] and x[1] >= cutoff]
-        if len(windowed) >= 2:
-            parsed = windowed
+    parsed = _window_points(points, current, days)
 
     if len(parsed) < 2:
         return ""
@@ -1225,11 +1257,11 @@ def _price_chart_svg(points: list, avg90: float, atl: float,
     cx, cy = xs[-1], ys[-1]
 
     avg_line = ""
-    if avg90 and ymin <= avg90 <= ymax:
-        ay = to_y(avg90)
+    if avg and ymin <= avg <= ymax:
+        ay = to_y(avg)
         avg_line = (
             f'<line x1="{PAD_L}" y1="{ay:.1f}" x2="{W - PAD_R}" y2="{ay:.1f}" stroke="#7E7A75" stroke-width="1.2" stroke-dasharray="4,3"/>'
-            f'<text x="{W - PAD_R}" y="{ay - 4:.1f}" text-anchor="end" font-size="11" fill="#7E7A75">Ø 90 Tage {fmt(avg90)}</text>'
+            f'<text x="{W - PAD_R}" y="{ay - 4:.1f}" text-anchor="end" font-size="11" fill="#7E7A75">{avg_label} {fmt(avg)}</text>'
         )
     atl_line = ""
     if atl and ymin <= atl <= ymax:
@@ -1315,14 +1347,19 @@ def _compute_detail(row, hist_rows) -> dict:
     if atl and current and atl > current:
         atl = current
     verdict, vcolor, vreason = _price_verdict(current, avg90, atl)
+    # Ø 1 Jahr / Ø Gesamt gibt es bei Keepa nicht als fertigen Stat (nur 30/90/180d)
+    # — lokal aus derselben `points`-Reihe berechnet, die auch den Chart zeichnet
+    # (zeitgewichtet, siehe _windowed_avg), damit die angezeigte Ø-Zahl JEDES
+    # Fensters garantiert zur sichtbaren Chart-Linie desselben Fensters passt.
+    avg365   = _windowed_avg(points, current, 365)
+    avg_full = _windowed_avg(points, current, None)
     # Chart nur mit verifizierter Keepa-Historie — nie erfundene Kurven zeigen.
-    # Drei Zeitfenster für den 90/365/Gesamt-Umschalter auf der Preisseite;
-    # chart_svg (=365 Tage) und chart_svg_full bleiben unverändert, damit das
-    # bestehende Modal-Chart-Umschalten (React) unangetastet weiterläuft.
+    # Drei Zeitfenster für den 90/365/Gesamt-Umschalter auf der Preisseite; jedes
+    # bekommt seine eigene Ø-Linie (statt fix Ø90 in allen drei anzuzeigen).
     if row["has_real_history"]:
-        chart_svg_90   = _price_chart_svg(points, avg90, atl, current=current, days=90)
-        chart_svg      = _price_chart_svg(points, avg90, atl, current=current, days=365)
-        chart_svg_full = _price_chart_svg(points, avg90, atl, current=current)
+        chart_svg_90   = _price_chart_svg(points, avg90,   atl, current=current, days=90,  avg_label="Ø 90 Tage")
+        chart_svg      = _price_chart_svg(points, avg365,  atl, current=current, days=365, avg_label="Ø 1 Jahr")
+        chart_svg_full = _price_chart_svg(points, avg_full, atl, current=current,          avg_label="Ø Gesamt")
     else:
         chart_svg_90 = chart_svg = chart_svg_full = ""
     # Umschalter nur zeigen, wenn es History älter als 365 Tage gibt.
@@ -1340,7 +1377,7 @@ def _compute_detail(row, hist_rows) -> dict:
     else:
         suggested = ""
     return {
-        "current": current, "avg90": avg90, "avg180": avg180, "atl": atl,
+        "current": current, "avg90": avg90, "avg180": avg180, "avg365": avg365, "avg_full": avg_full, "atl": atl,
         "verdict": verdict, "vcolor": vcolor, "vreason": vreason,
         "chart_svg_90": chart_svg_90, "chart_svg": chart_svg, "chart_svg_full": chart_svg_full,
         "has_more_history": has_more, "suggested": suggested,
@@ -1380,6 +1417,8 @@ async def api_product_detail(asin: str):
         "atl":              d["atl"],
         "avg90":            d["avg90"],
         "avg180":           d["avg180"],
+        "avg365":           d["avg365"],
+        "avg_full":         d["avg_full"],
         "has_real_history": bool(row["has_real_history"]),
         "chart_svg_90":     d["chart_svg_90"],
         "chart_svg":        d["chart_svg"],
@@ -1760,6 +1799,7 @@ async def price_page(request: Request, asin: str):
     # damit Modal und SSR-Preisseite garantiert identisch sind.
     detail = _compute_detail(row, hist)
     current, avg90, avg180, atl = detail["current"], detail["avg90"], detail["avg180"], detail["atl"]
+    avg365, avg_full            = detail["avg365"], detail["avg_full"]
     verdict, vcolor, vreason    = detail["verdict"], detail["vcolor"], detail["vreason"]
     chart_svg_90                = detail["chart_svg_90"]
     chart_svg                   = detail["chart_svg"]
@@ -1855,18 +1895,69 @@ async def price_page(request: Request, asin: str):
         row["last_checked"] or row["last_updated"],
     )
 
+    # Zeitraum-Umschalter: 90 Tage (Default) / 1 Jahr / Gesamt. Tabs nur zeigen,
+    # wenn sich die Fenster tatsächlich unterscheiden — bei kurzer History liefert
+    # _price_chart_svg für alle drei Fenster dieselbe Kurve. Tabs sitzen (wie im
+    # Popup) OBERHALB der weißen Chart-Box, nicht darin — dadurch kann der
+    # unsichtbare Platzhalter in der Preisalarm-Zelle Label+Tabs exakt nachbilden
+    # und die Alarm-Box auf Höhe der Chart-Box beginnen lassen.
+    _chart_windows = [("90", "90 Tage", chart_svg_90, avg90), ("365", "1 Jahr", chart_svg, avg365), ("full", "Gesamt", chart_svg_full, avg_full)]
+    _distinct = len({svg for _, _, svg, _ in _chart_windows if svg})
+    _has_tabs = bool(chart_svg_90 and _distinct > 1)
+    if _has_tabs:
+        _tabs = "".join(
+            f'<button type="button" class="chart-tab{" active" if key == "90" else ""}" '
+            f'data-target="chart-{key}" onclick="snaggaChartTab(this)">{label}</button>'
+            for key, label, _, _ in _chart_windows
+        )
+        _panels = "".join(
+            f'<div id="chart-{key}" style="{"" if key == "90" else "display:none"}">{svg}</div>'
+            for key, _, svg, _ in _chart_windows
+        )
+        chart_tabs_html = f'<div class="chart-tabs">{_tabs}</div>'
+        chart_box_html = (
+            f'<div class="chart">{_panels}</div>'
+            "<script>function snaggaChartTab(btn){"
+            "var bar=btn.parentElement;"
+            "Array.prototype.forEach.call(bar.querySelectorAll('.chart-tab'),function(t){t.classList.remove('active')});"
+            "btn.classList.add('active');"
+            "['90','365','full'].forEach(function(k){"
+            "var el=document.getElementById('chart-'+k);"
+            "if(el)el.style.display=(btn.dataset.target==='chart-'+k)?'':'none';"
+            "var av=document.getElementById('eck-avg-'+k);"
+            "if(av)av.style.display=(btn.dataset.target==='chart-'+k)?'':'none';"
+            "});}</script>"
+        )
+    elif chart_svg_90:
+        chart_tabs_html = ''
+        chart_box_html = f'<div class="chart">{chart_svg_90}</div>'
+    else:
+        chart_tabs_html = ''
+        chart_box_html = '<p class="nochart">Der geprüfte Preisverlauf für dieses Produkt wird gerade aufgebaut — schau bald wieder vorbei.</p>'
+
     # "Aktueller Preis" ist eine Aktuellpreis-Aussage → nur bei last_checked<24h
     # zeigen (Amazon-Compliance, siehe Memory). Historische Werte (Tief, Ø) sind
     # keine Aktuellpreis-Aussage und bleiben unabhängig von der Frische erlaubt.
+    # Der Ø-Eintrag folgt dem Chart-Tab (90 Tage/1 Jahr/Gesamt) statt fix Ø90+Ø180
+    # zu zeigen — sonst passt die Zahl nicht zum gerade sichtbaren Chart-Fenster
+    # (Ø180 hatte ohnehin nie ein passendes Chart-Fenster).
     _price_rows = [("Aktueller Preis", current)] if (is_active or fresh_check) else []
+    if _has_tabs:
+        _avg_variants = "".join(
+            f'<div id="eck-avg-{key}" style="{"" if key == "90" else "display:none"}">'
+            f'<div class="section-label">Ø {label}</div><div class="eck-val">{eur(val)}</div></div>'
+            for key, label, _, val in _chart_windows if val and val > 0
+        )
+        avg_item_html = f'<div class="eck-item">{_avg_variants}</div>' if _avg_variants else ''
+    else:
+        avg_item_html = (
+            f'<div class="eck-item"><div class="section-label">Ø 90 Tage</div><div class="eck-val">{eur(avg90)}</div></div>'
+            if avg90 and avg90 > 0 else ''
+        )
     eck_items_html = "".join(
         f'<div class="eck-item"><div class="section-label">{label}</div><div class="eck-val">{eur(val)}</div></div>'
-        for label, val in _price_rows + [
-            ("Allzeittief", atl),
-            ("Ø 90 Tage", avg90),
-            ("Ø 180 Tage", avg180),
-        ] if val and val > 0
-    )
+        for label, val in _price_rows + [("Allzeittief", atl)] if val and val > 0
+    ) + avg_item_html
 
     # Ähnliche aktive Deals aus derselben Kategorie
     async with pool.acquire() as conn:
@@ -1883,43 +1974,6 @@ async def price_page(request: Request, asin: str):
     cat_slug = SLUG_BY_CATEGORY.get(category)
     cat_link = (f'<p><a class="back" href="https://www.snagga.de/kategorie/{cat_slug}">{_arrow_icon("left")} Alle {cat_esc}-Deals</a></p>'
                 if cat_slug else "")
-
-    # Zeitraum-Umschalter: 90 Tage (Default, passt zum Ø90-Text) / 1 Jahr / Gesamt.
-    # Tabs nur zeigen, wenn sich die Fenster tatsächlich unterscheiden — bei kurzer
-    # History liefert _price_chart_svg für alle drei Fenster dieselbe Kurve.
-    # Tabs sitzen (wie im Popup) OBERHALB der weißen Chart-Box, nicht darin —
-    # dadurch kann der unsichtbare Platzhalter in der Preisalarm-Zelle Label+Tabs
-    # exakt nachbilden und die Alarm-Box auf Höhe der Chart-Box beginnen lassen.
-    _chart_windows = [("90", "90 Tage", chart_svg_90), ("365", "1 Jahr", chart_svg), ("full", "Gesamt", chart_svg_full)]
-    _distinct = len({svg for _, _, svg in _chart_windows if svg})
-    if chart_svg_90 and _distinct > 1:
-        _tabs = "".join(
-            f'<button type="button" class="chart-tab{" active" if key == "90" else ""}" '
-            f'data-target="chart-{key}" onclick="snaggaChartTab(this)">{label}</button>'
-            for key, label, _ in _chart_windows
-        )
-        _panels = "".join(
-            f'<div id="chart-{key}" style="{"" if key == "90" else "display:none"}">{svg}</div>'
-            for key, _, svg in _chart_windows
-        )
-        chart_tabs_html = f'<div class="chart-tabs">{_tabs}</div>'
-        chart_box_html = (
-            f'<div class="chart">{_panels}</div>'
-            "<script>function snaggaChartTab(btn){"
-            "var bar=btn.parentElement;"
-            "Array.prototype.forEach.call(bar.querySelectorAll('.chart-tab'),function(t){t.classList.remove('active')});"
-            "btn.classList.add('active');"
-            "['90','365','full'].forEach(function(k){"
-            "var el=document.getElementById('chart-'+k);"
-            "if(el)el.style.display=(btn.dataset.target==='chart-'+k)?'':'none';"
-            "});}</script>"
-        )
-    elif chart_svg_90:
-        chart_tabs_html = ''
-        chart_box_html = f'<div class="chart">{chart_svg_90}</div>'
-    else:
-        chart_tabs_html = ''
-        chart_box_html = '<p class="nochart">Der geprüfte Preisverlauf für dieses Produkt wird gerade aufgebaut — schau bald wieder vorbei.</p>'
 
     return HTMLResponse(f"""<!DOCTYPE html>
 <html lang="de">
@@ -1982,7 +2036,11 @@ async def price_page(request: Request, asin: str):
      Chart-Box (links unten) — nicht auf Höhe von Label/Tabs. Nur oberhalb von
      1100px nötig/sinnvoll (siehe .eck-row-Schwellwert oben; unterhalb wird der
      Chart selbst zu schmal, um Label+Tabs zuverlässig 1:1 nachzubilden). */
-  .pp-alarm-spacer {{ visibility:hidden; display:flex; flex-direction:column; }}
+  /* pointer-events:none zusätzlich zu visibility:hidden — der Platzhalter kopiert
+     chart_tabs_html 1:1 (inkl. echter onclick-Handler), damit die Höhe exakt
+     passt; ohne das könnten Klicks versehentlich die unsichtbaren Duplikat-
+     Buttons statt der echten Tabs treffen. */
+  .pp-alarm-spacer {{ visibility:hidden; pointer-events:none; display:flex; flex-direction:column; }}
   @media (max-width:1100px) {{ .pp-alarm-spacer {{ display:none; }} }}
   .verdict {{ border-left:5px solid {vcolor}; background:var(--bg-card); padding:16px 20px; margin-bottom:16px; }}
   .verdict .v-head {{ font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:4px; }}

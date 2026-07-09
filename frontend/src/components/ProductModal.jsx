@@ -537,7 +537,7 @@ export default function ProductModal({ deal, onClose }) {
                 flexWrap: 'wrap', gap: isStacked ? 20 : 18,
                 minWidth: isStacked ? 'auto' : 150, flexShrink: 0,
               }}>
-                {[['Aktueller Preis', detail.current_price], ['Allzeittief', detail.atl], ['Ø 90 Tage', detail.avg90], ['Ø 180 Tage', detail.avg180]]
+                {[['Aktueller Preis', detail.current_price], ['Allzeittief', detail.atl], [AVG_LABEL_BY_WINDOW[chartWindow], AVG_BY_WINDOW[chartWindow](detail)]]
                   .filter(([, v]) => v > 0)
                   .map(([label, v]) => (
                     <div key={label}>
@@ -597,6 +597,14 @@ const CHART_SVG_BY_WINDOW = {
   '90':  d => d.chart_svg_90,
   '365': d => d.chart_svg,
   'full': d => d.chart_svg_full,
+}
+// Ø-Preis folgt demselben Fenster wie der Chart-Tab (statt fix Ø90+Ø180 zu
+// zeigen) — identisch zur SSR-Preisseite (main.py: _chart_windows / #eck-avg-*).
+const AVG_LABEL_BY_WINDOW = { '90': 'Ø 90 Tage', '365': 'Ø 1 Jahr', 'full': 'Ø Gesamt' }
+const AVG_BY_WINDOW = {
+  '90':  d => d.avg90,
+  '365': d => d.avg365,
+  'full': d => d.avg_full,
 }
 
 function ChartTabs({ value, onChange }) {
