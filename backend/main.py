@@ -723,7 +723,8 @@ async def deal_page(asin: str):
     pool = await get_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT name, brand, image_url, current_price, original_price, tag, category, "
+            "SELECT asin, name, brand, image_url, current_price, original_price, tag, category, "
+            "all_time_low, avg_price, avg90_price, avg180_price, has_real_history, "
             "rating, reviews, affiliate_url, is_active, prime, last_checked, last_updated "
             "FROM products WHERE asin=$1",
             asin,
@@ -733,7 +734,6 @@ async def deal_page(asin: str):
 
     canonical = f"https://www.snagga.de/deal/{asin}"
     name      = html.escape((row["name"] or "Deal")[:200])
-    image     = html.escape(row["image_url"] or "https://www.snagga.de/favicon.svg")
     affiliate = html.escape(row["affiliate_url"] or f"https://www.amazon.de/dp/{asin}")
 
     # Abgelaufene Deals: Seite bleibt erreichbar (keine toten Links aus Google),
@@ -793,8 +793,6 @@ async def deal_page(asin: str):
 
     current  = row["current_price"]  or 0
     original = row["original_price"] or 0
-    tag      = html.escape(row["tag"] or "")
-    category = html.escape(_cat_label(row["category"]) or "")
     rating   = row["rating"]  or 0
     reviews  = row["reviews"] or 0
     disc = round((original - current) / original * 100) if original > current else 0
@@ -806,14 +804,6 @@ async def deal_page(asin: str):
         (f"{row['tag']} — " if row["tag"] else "") +
         f"{row['name'] or 'Deal'} aktuell für {price_txt} auf snagga.de" +
         (f", {disc}% günstiger als der bisherige Preis." if disc > 0 else ".")
-    )
-
-    # Gemeinsamer Preis+Stats-Block (Preiszeile + Versand/Bewertung/Reviews/
-    # Aktualisiert) — identisch zu /preis und Modal. Deal-Seite ist immer aktiv,
-    # daher price_ok=True (Preis darf gezeigt werden).
-    deal_price_stats = _price_stats_html(
-        current, original, True, rating, reviews, bool(row["prime"]),
-        row["last_checked"] or row["last_updated"],
     )
 
     ld_json: dict = {
@@ -875,76 +865,25 @@ async def deal_page(asin: str):
             "reviewCount": int(reviews),
         }
 
-    return HTMLResponse(f"""<!DOCTYPE html>
-<html lang="de">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-{_THEME_INIT_SCRIPT}
-<title>{title}</title>
-<meta name="description" content="{desc}">
-<meta name="robots" content="index, follow">
-<link rel="canonical" href="{canonical}">
-<meta property="og:type" content="product">
-<meta property="og:title" content="{title}">
-<meta property="og:description" content="{desc}">
-<meta property="og:image" content="{image}">
-<meta property="og:url" content="{canonical}">
-<meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json">{json.dumps(ld_json, ensure_ascii=False)}</script>
-<style>
-  body {{ font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); margin:0; }}
-  {_SITE_HEADER_CSS}
-  .wrap {{ max-width:1840px; width:98%; margin:32px auto; background:var(--bg-card); display:grid; grid-template-columns:1fr 1.15fr; box-shadow:0 4px 24px rgba(0,0,0,0.06); position:relative; }}
-  @media (max-width:760px) {{ .wrap {{ grid-template-columns:1fr; margin:0; }} }}
-  .page-share {{ position:absolute; top:20px; right:20px; z-index:5; display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:50%; background:#fff; border:none; cursor:pointer; color:#7E7A75; box-shadow:0 1px 4px rgba(0,0,0,0.1); transition:background 0.15s, color 0.15s; }}
-  .page-share:hover {{ background:#FAF9F7; color:#1F1E1D; }}
-  .page-share.copied {{ color:#C85E43; }}
-  .page-share .icon-check {{ display:none; }}
-  .page-share.copied .icon-share {{ display:none; }}
-  .page-share.copied .icon-check {{ display:inline-block; }}
-  .gallery {{ background:#fff; padding:48px; display:flex; align-items:center; justify-content:center; border-right:1px solid #EAE6E1; }}
-  @media (max-width:760px) {{ .gallery {{ border-right:none; border-bottom:1px solid #EAE6E1; padding:32px; }} }}
-  .gallery img {{ max-width:100%; max-height:460px; object-fit:contain; }}
-  .details {{ padding:56px 52px; }}
-  @media (max-width:760px) {{ .details {{ padding:32px 24px; }} }}
-  .brand {{ font-size:11px; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); font-weight:600; margin-bottom:10px; }}
-  .tag {{ display:inline-block; background:var(--accent); color:#fff; font-size:13px; font-weight:700; padding:4px 10px; margin-bottom:12px; }}
-  h1 {{ font-size:31px; font-weight:700; line-height:1.35; margin:0 0 24px; }}
-  {_PRICE_STATS_CSS}
-  .cta {{ display:flex; align-items:center; justify-content:center; gap:10px; background:var(--accent); color:#fff; padding:16px 28px; font-size:16px; font-weight:600; text-decoration:none; margin-top:20px; }}
-  .back {{ display:block; margin-top:16px; color:var(--accent); font-size:14px; text-decoration:none; }}
-  .affiliate-note {{ font-size:12px; color:var(--muted); line-height:1.5; margin:18px 0 0; }}
-</style>
-{_CARD_SHARE_JS}
-</head>
-<body>
-{_SITE_HEADER_HTML}
-<div class="wrap">
-  <button class="page-share" title="Deal teilen" onclick="snaggaShare(event,this)" data-asin="{asin}" data-name="{name}" data-price="{price_txt}">
-    <svg class="icon-share" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-    </svg>
-    <svg class="icon-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-      <polyline points="20 6 9 17 4 12"/>
-    </svg>
-  </button>
-  <div class="gallery"><img src="{image}" alt="{name}"></div>
-  <div class="details">
-    <div class="brand">{category}</div>
-    {f'<div class="tag">{tag}</div>' if tag else ''}
-    <h1>{name}</h1>
-    {deal_price_stats}
-    <a class="cta" href="{affiliate}" rel="nofollow sponsored noopener" target="_blank">Zum Angebot bei Amazon</a>
-    <p class="affiliate-note">* Affiliate-Hinweis: Als Amazon-Partner verdienen wir an qualifizierten Käufen — für dich entstehen keine Mehrkosten. Der angezeigte Preis kann abweichen; massgeblich ist der Preis bei Amazon zum Kaufzeitpunkt.</p>
-    <a class="back" href="https://www.snagga.de/preis/{asin}">📈 Preisverlauf & Preis-Check ansehen {_arrow_icon('right')}</a>
-    {f'<a class="back" href="https://www.snagga.de/kategorie/{SLUG_BY_CATEGORY[row["category"]]}">Alle {category}-Deals ansehen {_arrow_icon("right")}</a>' if row["category"] in SLUG_BY_CATEGORY else ''}
-    <a class="back" href="https://www.snagga.de/">{_arrow_icon('left')} Alle Deals ansehen</a>
-  </div>
-</div>
-</body>
-</html>""")
+    # Gleiches Layout wie /preis/{asin} (David-Wunsch: "genau gleich") — beide
+    # Routen teilen sich _render_price_layout, damit sie garantiert identisch
+    # aussehen und künftige Design-Änderungen automatisch für beide gelten.
+    # Canonical zeigt auf /preis statt auf sich selbst: das ist die permanente
+    # Seite (siehe deren Docstring — "Wachsender Seitenbestand statt
+    # ablaufender Deal-Seiten"), /deal bleibt nur die teilbare Deal-Moment-URL
+    # und vermeidet so Duplicate-Content zwischen zwei identisch aussehenden,
+    # indexierbaren Seiten.
+    canonical = f"https://www.snagga.de/preis/{asin}"
+    async with pool.acquire() as conn:
+        hist = await conn.fetch(
+            "SELECT price, timestamp FROM price_history WHERE asin=$1 ORDER BY id DESC LIMIT 2000",
+            asin,
+        )
+    detail = _compute_detail(row, hist)
+    return await _render_price_layout(
+        asin, row, detail,
+        title=title, desc=desc, robots="index, follow", canonical=canonical, ld_json=ld_json,
+    )
 
 
 @app.api_route("/feed.xml", methods=["GET", "HEAD"])
@@ -1704,68 +1643,18 @@ async def preis_check(request: Request, q: str = Query(default="")):
                      q=q)
 
 
-@app.api_route("/preis/{asin}", methods=["GET", "HEAD"], response_class=HTMLResponse)
-async def price_page(request: Request, asin: str):
+async def _render_price_layout(asin: str, row, detail: dict, *, title: str, desc: str,
+                                robots: str, canonical: str, ld_json: dict) -> HTMLResponse:
     """
-    Dauerhafte Produkt-/Preisseite. Anders als /deal/{asin} läuft sie NIE ab und
-    ist IMMER indexierbar — auch wenn gerade kein Deal aktiv ist. Sie rankt auf
-    kaufnahe Suchanfragen ("{Produkt} Preisverlauf / günstigster Preis") und macht
-    die bereits bezahlte Keepa-Preishistorie zum zweiten Mal nutzbar. Wachsender
-    Seitenbestand statt ablaufender Deal-Seiten — dreht die SEO-Ökonomie um.
-
-    On-Demand-Chart (Katalog-Architektur, siehe Memory): Der Großteil des
-    Katalogs sind reine Stubs (Name+Eckdaten, keine Historie). Beim ersten Klick
-    auf eine solche/veraltete Seite wird die Historie live geholt (1 Token) und
-    gespeichert — rate-limitiert wie /preis-check, damit kein Missbrauch das
-    Tagesbudget leert. Greift IMMER wenn noch kein Chart da ist (auch bei
-    aktiven Deals — Bug bis 2026-07-06: aktive Deals waren komplett ausgenommen,
-    obwohl ihnen z.B. durch eine Lücke im stündlichen Preis-Check die Historie
-    fehlen kann; die Suche zeigt aktive Deals zuerst, sodass genau das erste
-    Suchergebnis oft chartlos blieb), sonst nur bei veraltetem Preis (>24h).
+    Rendert das komplette Preis-Layout (Bild/Titel/Preis/CTA oben, Preis-
+    Eckdaten+Chart/Preisalarm unten) — gemeinsam genutzt von /preis/{asin} UND
+    /deal/{asin} (aktive Deals), damit beide Seiten exakt dasselbe Design zeigen
+    (David-Wunsch: "genau gleich"). Titel/Beschreibung/Robots/Canonical/JSON-LD
+    unterscheiden sich pro Route (SEO-Wortlaut) und kommen daher vom Aufrufer,
+    der auch `detail = _compute_detail(row, hist)` bereits berechnet hat (sonst
+    würde der teure Chart-SVG-Aufbau doppelt laufen).
     """
-    if not re.match(r"^[A-Z0-9]{10}$", asin):
-        return _not_found_page("Produkt nicht gefunden")
-
     pool = await get_pool()
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT asin, name, brand, image_url, current_price, original_price, "
-            "all_time_low, avg_price, avg90_price, avg180_price, category, "
-            "affiliate_url, is_active, rating, reviews, tag, has_real_history, prime, "
-            "last_checked, last_updated "
-            "FROM products WHERE asin=$1",
-            asin,
-        )
-        if not row:
-            return _not_found_page("Produkt nicht gefunden")
-
-    stale = (row["last_checked"] is None
-             or datetime.utcnow() - row["last_checked"] > timedelta(hours=PRICE_FRESH_HOURS))
-    # Ad hoc live holen wenn: kein Chart da (egal ob aktiver Deal oder Stub) ODER
-    # nicht-aktiv und der gespeicherte Preis veraltet (Compliance-Refresh).
-    if (not row["has_real_history"]) or (not row["is_active"] and stale):
-        ip = (request.headers.get("x-forwarded-for")
-              or (request.client.host if request.client else "?")).split(",")[0].strip()
-        if _pc_rate_ok(ip):
-            await fetch_and_store_history(asin)
-            async with pool.acquire() as conn:
-                row = await conn.fetchrow(
-                    "SELECT asin, name, brand, image_url, current_price, original_price, "
-                    "all_time_low, avg_price, avg90_price, avg180_price, category, "
-                    "affiliate_url, is_active, rating, reviews, tag, has_real_history, prime, "
-                    "last_checked, last_updated "
-                    "FROM products WHERE asin=$1",
-                    asin,
-                )
-        # Bei Rate-Limit: einfach mit dem (evtl. veralteten) Stand weiterrendern —
-        # fresh_check unten sorgt dafür, dass kein veralteter Preis gezeigt wird.
-
-    async with pool.acquire() as conn:
-        await conn.execute("UPDATE products SET last_viewed=$1 WHERE asin=$2", datetime.utcnow(), asin)
-        hist = await conn.fetch(
-            "SELECT price, timestamp FROM price_history WHERE asin=$1 ORDER BY id DESC LIMIT 2000",
-            asin,
-        )
 
     name      = html.escape((row["name"] or "Produkt")[:150])
     image     = html.escape(row["image_url"] or "https://www.snagga.de/favicon.svg")
@@ -1774,9 +1663,6 @@ async def price_page(request: Request, asin: str):
     cat_esc   = html.escape(category)
     is_active = row["is_active"]
 
-    # Zahlen, Urteil und Chart kommen aus derselben Quelle wie /produkt/{asin},
-    # damit Modal und SSR-Preisseite garantiert identisch sind.
-    detail = _compute_detail(row, hist)
     current, avg90, avg180, atl = detail["current"], detail["avg90"], detail["avg180"], detail["atl"]
     avg365, avg_full            = detail["avg365"], detail["avg_full"]
     verdict, vcolor, vreason    = detail["verdict"], detail["vcolor"], detail["vreason"]
@@ -1786,41 +1672,6 @@ async def price_page(request: Request, asin: str):
 
     def eur(v: float) -> str:
         return (f"{v:.2f}".replace(".", ",") + " €") if v and v > 0 else "—"
-
-    # Indexierbar nur "gutes Zeug": aktiver Deal ODER Katalog-Quality. Dünne
-    # No-Name-Seiten (Ramsch) bekommen noindex → raus aus Google (verhindert
-    # Thin-Content-Abwertung der Domain); erreichbar bleiben sie trotzdem.
-    indexable = is_active or is_catalog_quality(
-        row["rating"] or 0, row["reviews"] or 0, row["brand"] or "", row["name"] or ""
-    )
-    robots = "index, follow" if indexable else "noindex, follow"
-
-    canonical = f"https://www.snagga.de/preis/{asin}"
-    title = f"{name} — Preisverlauf & Preis-Check | snagga.de"
-    desc  = html.escape(
-        f"Preisverlauf von {row['name'] or 'diesem Produkt'}: aktueller Preis {eur(current)}, "
-        f"Allzeittief {eur(atl)}, 90-Tage-Schnitt {eur(avg90)}. Lohnt sich der Kauf gerade? snagga sagt es dir."
-    )
-
-    ld_json: dict = {
-        "@context": "https://schema.org/",
-        "@type":    "Product",
-        "name":     (row["name"] or "Produkt")[:150],
-        "image":    [row["image_url"]] if row["image_url"] else [],
-        "category": category,
-    }
-    if row["brand"]:
-        ld_json["brand"] = {"@type": "Brand", "name": row["brand"]}
-    if current > 0:
-        ld_json["offers"] = {
-            "@type": "Offer", "url": canonical, "priceCurrency": "EUR",
-            "price": f"{current:.2f}",
-            "availability": "https://schema.org/InStock" if is_active else "https://schema.org/OutOfStock",
-        }
-    if row["rating"] and row["reviews"]:
-        ld_json["aggregateRating"] = {
-            "@type": "AggregateRating", "ratingValue": f"{row['rating']:.1f}", "reviewCount": int(row["reviews"]),
-        }
 
     # Urteil "Guter Preis?" bei aktiven Deals ODER kürzlich live geprüften
     # Produkten (z.B. gerade über den Preis-Check nachgeschlagen). Bei länger
@@ -2094,6 +1945,127 @@ async def price_page(request: Request, asin: str):
 {_CHART_HOVER_JS}
 </body>
 </html>""")
+
+
+@app.api_route("/preis/{asin}", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def price_page(request: Request, asin: str):
+    """
+    Dauerhafte Produkt-/Preisseite. Anders als /deal/{asin} läuft sie NIE ab und
+    ist IMMER indexierbar — auch wenn gerade kein Deal aktiv ist. Sie rankt auf
+    kaufnahe Suchanfragen ("{Produkt} Preisverlauf / günstigster Preis") und macht
+    die bereits bezahlte Keepa-Preishistorie zum zweiten Mal nutzbar. Wachsender
+    Seitenbestand statt ablaufender Deal-Seiten — dreht die SEO-Ökonomie um.
+
+    On-Demand-Chart (Katalog-Architektur, siehe Memory): Der Großteil des
+    Katalogs sind reine Stubs (Name+Eckdaten, keine Historie). Beim ersten Klick
+    auf eine solche/veraltete Seite wird die Historie live geholt (1 Token) und
+    gespeichert — rate-limitiert wie /preis-check, damit kein Missbrauch das
+    Tagesbudget leert. Greift IMMER wenn noch kein Chart da ist (auch bei
+    aktiven Deals — Bug bis 2026-07-06: aktive Deals waren komplett ausgenommen,
+    obwohl ihnen z.B. durch eine Lücke im stündlichen Preis-Check die Historie
+    fehlen kann; die Suche zeigt aktive Deals zuerst, sodass genau das erste
+    Suchergebnis oft chartlos blieb), sonst nur bei veraltetem Preis (>24h).
+    """
+    if not re.match(r"^[A-Z0-9]{10}$", asin):
+        return _not_found_page("Produkt nicht gefunden")
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT asin, name, brand, image_url, current_price, original_price, "
+            "all_time_low, avg_price, avg90_price, avg180_price, category, "
+            "affiliate_url, is_active, rating, reviews, tag, has_real_history, prime, "
+            "last_checked, last_updated "
+            "FROM products WHERE asin=$1",
+            asin,
+        )
+        if not row:
+            return _not_found_page("Produkt nicht gefunden")
+
+    stale = (row["last_checked"] is None
+             or datetime.utcnow() - row["last_checked"] > timedelta(hours=PRICE_FRESH_HOURS))
+    # Ad hoc live holen wenn: kein Chart da (egal ob aktiver Deal oder Stub) ODER
+    # nicht-aktiv und der gespeicherte Preis veraltet (Compliance-Refresh).
+    if (not row["has_real_history"]) or (not row["is_active"] and stale):
+        ip = (request.headers.get("x-forwarded-for")
+              or (request.client.host if request.client else "?")).split(",")[0].strip()
+        if _pc_rate_ok(ip):
+            await fetch_and_store_history(asin)
+            async with pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    "SELECT asin, name, brand, image_url, current_price, original_price, "
+                    "all_time_low, avg_price, avg90_price, avg180_price, category, "
+                    "affiliate_url, is_active, rating, reviews, tag, has_real_history, prime, "
+                    "last_checked, last_updated "
+                    "FROM products WHERE asin=$1",
+                    asin,
+                )
+        # Bei Rate-Limit: einfach mit dem (evtl. veralteten) Stand weiterrendern —
+        # fresh_check unten sorgt dafür, dass kein veralteter Preis gezeigt wird.
+
+    async with pool.acquire() as conn:
+        await conn.execute("UPDATE products SET last_viewed=$1 WHERE asin=$2", datetime.utcnow(), asin)
+        hist = await conn.fetch(
+            "SELECT price, timestamp FROM price_history WHERE asin=$1 ORDER BY id DESC LIMIT 2000",
+            asin,
+        )
+
+    name      = html.escape((row["name"] or "Produkt")[:150])
+    category  = row["category"] or ""
+    is_active = row["is_active"]
+
+    # Zahlen, Urteil und Chart kommen aus derselben Quelle wie /produkt/{asin},
+    # damit Modal und SSR-Preisseite garantiert identisch sind.
+    detail = _compute_detail(row, hist)
+    current, avg90, avg180, atl = detail["current"], detail["avg90"], detail["avg180"], detail["atl"]
+    avg365, avg_full            = detail["avg365"], detail["avg_full"]
+    verdict, vcolor, vreason    = detail["verdict"], detail["vcolor"], detail["vreason"]
+    chart_svg_90                = detail["chart_svg_90"]
+    chart_svg                   = detail["chart_svg"]
+    chart_svg_full              = detail["chart_svg_full"]
+
+    def eur(v: float) -> str:
+        return (f"{v:.2f}".replace(".", ",") + " €") if v and v > 0 else "—"
+
+    # Indexierbar nur "gutes Zeug": aktiver Deal ODER Katalog-Quality. Dünne
+    # No-Name-Seiten (Ramsch) bekommen noindex → raus aus Google (verhindert
+    # Thin-Content-Abwertung der Domain); erreichbar bleiben sie trotzdem.
+    indexable = is_active or is_catalog_quality(
+        row["rating"] or 0, row["reviews"] or 0, row["brand"] or "", row["name"] or ""
+    )
+    robots = "index, follow" if indexable else "noindex, follow"
+
+    canonical = f"https://www.snagga.de/preis/{asin}"
+    title = f"{name} — Preisverlauf & Preis-Check | snagga.de"
+    desc  = html.escape(
+        f"Preisverlauf von {row['name'] or 'diesem Produkt'}: aktueller Preis {eur(current)}, "
+        f"Allzeittief {eur(atl)}, 90-Tage-Schnitt {eur(avg90)}. Lohnt sich der Kauf gerade? snagga sagt es dir."
+    )
+
+    ld_json: dict = {
+        "@context": "https://schema.org/",
+        "@type":    "Product",
+        "name":     (row["name"] or "Produkt")[:150],
+        "image":    [row["image_url"]] if row["image_url"] else [],
+        "category": category,
+    }
+    if row["brand"]:
+        ld_json["brand"] = {"@type": "Brand", "name": row["brand"]}
+    if current > 0:
+        ld_json["offers"] = {
+            "@type": "Offer", "url": canonical, "priceCurrency": "EUR",
+            "price": f"{current:.2f}",
+            "availability": "https://schema.org/InStock" if is_active else "https://schema.org/OutOfStock",
+        }
+    if row["rating"] and row["reviews"]:
+        ld_json["aggregateRating"] = {
+            "@type": "AggregateRating", "ratingValue": f"{row['rating']:.1f}", "reviewCount": int(row["reviews"]),
+        }
+
+    return await _render_price_layout(
+        asin, row, detail,
+        title=title, desc=desc, robots=robots, canonical=canonical, ld_json=ld_json,
+    )
 
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
