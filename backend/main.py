@@ -1833,9 +1833,9 @@ async def price_page(request: Request, asin: str):
     # Preisalarm-Formular. Wunschpreis-Vorschlag: leicht unter dem aktuellen Preis,
     # sonst am Allzeittief orientiert.
     suggested = detail["suggested"]
-    alert_form = f"""<h2>🔔 Preisalarm setzen</h2>
-<form class="alert-form" method="post" action="https://www.snagga.de/alarm/setzen">
+    alert_form = f"""<form class="alert-form" method="post" action="https://www.snagga.de/alarm/setzen">
   <input type="hidden" name="asin" value="{asin}">
+  <h2 class="alert-title">🔔 Preisalarm setzen</h2>
   <p class="alert-intro">Wir schicken dir eine E-Mail, sobald der Preis auf deinen Wunschpreis fällt. Kostenlos, jederzeit abbestellbar.</p>
   <div class="alert-row">
     <input type="email" name="email" required placeholder="deine@email.de" aria-label="E-Mail-Adresse">
@@ -1859,8 +1859,8 @@ async def price_page(request: Request, asin: str):
     # zeigen (Amazon-Compliance, siehe Memory). Historische Werte (Tief, Ø) sind
     # keine Aktuellpreis-Aussage und bleiben unabhängig von der Frische erlaubt.
     _price_rows = [("Aktueller Preis", current)] if (is_active or fresh_check) else []
-    stats_rows = "".join(
-        f'<tr><td>{label}</td><td>{eur(val)}</td></tr>'
+    eck_items_html = "".join(
+        f'<div class="eck-item"><div class="section-label">{label}</div><div class="eck-val">{eur(val)}</div></div>'
         for label, val in _price_rows + [
             ("Allzeittief", atl),
             ("Ø 90 Tage", avg90),
@@ -1887,6 +1887,9 @@ async def price_page(request: Request, asin: str):
     # Zeitraum-Umschalter: 90 Tage (Default, passt zum Ø90-Text) / 1 Jahr / Gesamt.
     # Tabs nur zeigen, wenn sich die Fenster tatsächlich unterscheiden — bei kurzer
     # History liefert _price_chart_svg für alle drei Fenster dieselbe Kurve.
+    # Tabs sitzen (wie im Popup) OBERHALB der weißen Chart-Box, nicht darin —
+    # dadurch kann der unsichtbare Platzhalter in der Preisalarm-Zelle Label+Tabs
+    # exakt nachbilden und die Alarm-Box auf Höhe der Chart-Box beginnen lassen.
     _chart_windows = [("90", "90 Tage", chart_svg_90), ("365", "1 Jahr", chart_svg), ("full", "Gesamt", chart_svg_full)]
     _distinct = len({svg for _, _, svg in _chart_windows if svg})
     if chart_svg_90 and _distinct > 1:
@@ -1899,8 +1902,9 @@ async def price_page(request: Request, asin: str):
             f'<div id="chart-{key}" style="{"" if key == "90" else "display:none"}">{svg}</div>'
             for key, _, svg in _chart_windows
         )
-        chart_block = (
-            f'<div class="chart"><div class="chart-tabs">{_tabs}</div>{_panels}</div>'
+        chart_tabs_html = f'<div class="chart-tabs">{_tabs}</div>'
+        chart_box_html = (
+            f'<div class="chart">{_panels}</div>'
             "<script>function snaggaChartTab(btn){"
             "var bar=btn.parentElement;"
             "Array.prototype.forEach.call(bar.querySelectorAll('.chart-tab'),function(t){t.classList.remove('active')});"
@@ -1911,9 +1915,11 @@ async def price_page(request: Request, asin: str):
             "});}</script>"
         )
     elif chart_svg_90:
-        chart_block = f'<div class="chart">{chart_svg_90}</div>'
+        chart_tabs_html = ''
+        chart_box_html = f'<div class="chart">{chart_svg_90}</div>'
     else:
-        chart_block = '<p class="nochart">Der geprüfte Preisverlauf für dieses Produkt wird gerade aufgebaut — schau bald wieder vorbei.</p>'
+        chart_tabs_html = ''
+        chart_box_html = '<p class="nochart">Der geprüfte Preisverlauf für dieses Produkt wird gerade aufgebaut — schau bald wieder vorbei.</p>'
 
     return HTMLResponse(f"""<!DOCTYPE html>
 <html lang="de">
@@ -1947,14 +1953,37 @@ async def price_page(request: Request, asin: str):
     .col-left-bottom {{ order:3; }}
     .col-right-bottom {{ order:4; }}
   }}
-  .col-left-top {{ display:flex; flex-direction:column; align-items:center; justify-content:center; }}
+  .col-left-top {{ display:flex; }}
   .col-right-top {{ display:flex; flex-direction:column; justify-content:space-between; }}
-  .col-left-bottom h2:first-child, .col-right-bottom h2:first-child {{ margin-top:0; }}
-  .prod-img {{ background:#fff; border:1px solid #EAE6E1; padding:18px; display:flex; align-items:center; justify-content:center; width:100%; }}
-  .prod-img img {{ max-width:100%; max-height:320px; object-fit:contain; cursor:zoom-in; }}
+  /* box-sizing:border-box ist Pflicht hier — sonst addiert width:100% + padding
+     die Box breiter als die Grid-Zelle und sie läuft links über den Rand hinaus. */
+  .prod-img {{ box-sizing:border-box; background:#fff; border:1px solid #EAE6E1; padding:24px; display:flex; align-items:center; justify-content:center; width:100%; min-height:420px; }}
+  .prod-img img {{ max-width:100%; max-height:100%; object-fit:contain; cursor:zoom-in; }}
   #snagga-lb {{ display:none; position:fixed; inset:0; z-index:999; background:rgba(31,30,29,0.92); align-items:center; justify-content:center; cursor:zoom-out; }}
   #snagga-lb img {{ max-width:90vw; max-height:90vh; object-fit:contain; }}
   {_PRICE_STATS_CSS}
+  .section-label {{ font-size:11px; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); font-weight:600; margin:0 0 12px; }}
+  /* Preis-Eckdaten + Preisverlauf nebeneinander in einer Zeile — wie im Popup
+     (Eckdaten als schmale Stat-Liste links, Chart nimmt den Rest). 1100px statt
+     820px, weil bei knapperer Breite die 3 Chart-Tab-Buttons in der schmalen
+     Chart-Spalte umbrechen (identischer Schwellwert wie isStacked im Popup). */
+  .eck-row {{ display:flex; gap:36px; align-items:flex-start; }}
+  @media (max-width:1100px) {{ .eck-row {{ flex-direction:column; gap:20px; }} }}
+  .eck-stats {{ display:flex; flex-direction:column; gap:18px; min-width:150px; flex-shrink:0; }}
+  @media (max-width:1100px) {{ .eck-stats {{ flex-direction:row; flex-wrap:wrap; gap:20px; }} }}
+  .eck-val {{ font-size:15px; font-weight:700; color:var(--text); }}
+  /* display:flex hier (nicht nur beim Spacer) verhindert Margin-Collapsing
+     zwischen Label/Tabs/Chart-Box — sonst driftet die Höhe leicht gegenüber
+     dem unsichtbaren Platzhalter unten auseinander (der aus denselben Gründen
+     ebenfalls flex ist) und die Ausrichtung zur Preisalarm-Box stimmt nicht mehr. */
+  .eck-chart-col {{ flex:1; min-width:0; display:flex; flex-direction:column; }}
+  /* Unsichtbarer Platzhalter, der Label+Tabs der Chart-Spalte nachbildet, damit
+     die Preisalarm-Box (rechts unten) auf derselben Höhe beginnt wie die weiße
+     Chart-Box (links unten) — nicht auf Höhe von Label/Tabs. Nur oberhalb von
+     1100px nötig/sinnvoll (siehe .eck-row-Schwellwert oben; unterhalb wird der
+     Chart selbst zu schmal, um Label+Tabs zuverlässig 1:1 nachzubilden). */
+  .pp-alarm-spacer {{ visibility:hidden; display:flex; flex-direction:column; }}
+  @media (max-width:1100px) {{ .pp-alarm-spacer {{ display:none; }} }}
   .verdict {{ border-left:5px solid {vcolor}; background:var(--bg-card); padding:16px 20px; margin-bottom:16px; }}
   .verdict .v-head {{ font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:4px; }}
   .verdict .v-label {{ font-size:24px; font-weight:800; color:{vcolor}; }}
@@ -1963,17 +1992,13 @@ async def price_page(request: Request, asin: str):
   .cta-buy {{ background:var(--accent); color:#fff; }}
   .cta-wait {{ background:var(--bg-img); color:var(--muted); }}
   .cta-note {{ font-size:12px; color:var(--muted); margin:8px 0 0; }}
-  .chart {{ background:#fff; border:1px solid #EAE6E1; padding:20px 18px; margin:8px 0 20px; }}
+  .chart {{ background:#fff; border:1px solid #EAE6E1; padding:20px 18px; margin:0 0 20px; }}
   .nochart {{ background:#fff; border:1px solid #EAE6E1; padding:20px; color:#7E7A75; font-size:14px; }}
   .chart-tabs {{ display:flex; gap:8px; margin-bottom:14px; }}
   .chart-tab {{ background:none; border:1px solid var(--border); color:var(--accent); padding:7px 16px; font-size:13px; font-family:inherit; cursor:pointer; }}
   .chart-tab.active {{ background:var(--accent); color:#fff; border-color:var(--accent); font-weight:600; }}
-  table.stats {{ width:100%; border-collapse:collapse; background:var(--bg-card); border:1px solid var(--border); margin-top:8px; }}
-  table.stats td {{ padding:11px 16px; border-bottom:1px solid var(--border); font-size:14px; }}
-  table.stats tr:last-child td {{ border-bottom:none; }}
-  table.stats td:first-child {{ color:var(--muted); }}
-  table.stats td:last-child {{ text-align:right; font-weight:700; }}
-  .alert-form {{ background:var(--bg-card); border:1px solid var(--border); border-left:4px solid var(--accent); padding:22px 24px; margin:8px 0 8px; box-shadow:0 2px 10px rgba(0,0,0,0.05); }}
+  .alert-form {{ background:var(--bg-card); border:1px solid var(--border); border-left:4px solid var(--accent); padding:22px 24px; margin:0; box-shadow:0 2px 10px rgba(0,0,0,0.05); }}
+  .alert-title {{ font-size:16px; font-weight:700; color:var(--text); margin:0 0 6px; }}
   .alert-intro {{ font-size:14px; color:var(--text); margin:0 0 14px; }}
   .alert-row {{ display:flex; gap:10px; flex-wrap:wrap; }}
   .alert-row input {{ flex:1; min-width:140px; padding:12px 14px; border:1.5px solid var(--border); background:var(--bg-card); color:var(--text); font-size:15px; font-family:inherit; }}
@@ -1998,10 +2023,14 @@ async def price_page(request: Request, asin: str):
     <div class="prod-img"><img src="{image}" alt="{name}" onclick="document.getElementById('snagga-lb-img').src=this.src;document.getElementById('snagga-lb').style.display='flex'"></div>
   </div>
   <div class="col-left-bottom">
-    <h2>Preis-Eckdaten</h2>
-    <table class="stats">{stats_rows}</table>
-    <h2>Preisverlauf</h2>
-    {chart_block}
+    <div class="eck-row">
+      <div class="eck-stats">{eck_items_html}</div>
+      <div class="eck-chart-col">
+        <h2 class="section-label">Preisverlauf</h2>
+        {chart_tabs_html}
+        {chart_box_html}
+      </div>
+    </div>
   </div>
   <div class="col-right-top">
     <h1>{name}</h1>
@@ -2013,6 +2042,10 @@ async def price_page(request: Request, asin: str):
     </div>
   </div>
   <div class="col-right-bottom">
+    <div class="pp-alarm-spacer" aria-hidden="true">
+      <h2 class="section-label">Preisverlauf</h2>
+      {chart_tabs_html}
+    </div>
     {alert_form}
   </div>
 </div>
