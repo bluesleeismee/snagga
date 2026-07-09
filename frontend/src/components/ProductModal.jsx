@@ -577,9 +577,6 @@ export default function ProductModal({ deal, onClose }) {
             style={{ fontSize: 12, color: 'var(--muted)', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: 5 }}
           >
             Dauerhafte Preisseite öffnen
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12,5 19,12 12,19"/>
-            </svg>
           </a>
         </div>
       </div>
