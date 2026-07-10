@@ -1023,7 +1023,7 @@ async def category_page(slug: str):
   h1 {{ font-size:26px; margin-bottom:4px; }}
   {_CARD_CSS}
   .catnav {{ display:flex; flex-wrap:wrap; gap:8px; margin-top:40px; }}
-  .catnav a {{ font-size:13px; background:var(--bg-card); border:1px solid var(--border); border-radius:20px; padding:6px 14px; text-decoration:none; color:var(--accent); }}
+  .catnav a {{ font-size:13px; background:var(--bg-card); border:1px solid var(--border); border-radius:0; padding:6px 14px; text-decoration:none; color:var(--text); }}
   .back {{ display:inline-block; margin-top:20px; color:var(--accent); }}
 </style>
 {_CARD_SHARE_JS}
@@ -2414,7 +2414,7 @@ async def prime_day_page():
   .tip p {{ font-size:14px; margin:0; color:var(--text); }}
   {_CARD_CSS}
   .catnav {{ display:flex; flex-wrap:wrap; gap:8px; margin-top:40px; }}
-  .catnav a {{ font-size:13px; background:var(--bg-card); border:1px solid var(--border); border-radius:20px; padding:6px 14px; text-decoration:none; color:var(--accent); }}
+  .catnav a {{ font-size:13px; background:var(--bg-card); border:1px solid var(--border); border-radius:0; padding:6px 14px; text-decoration:none; color:var(--text); }}
   .back {{ display:inline-block; margin-top:20px; color:var(--accent); }}
 </style>
 {_CARD_SHARE_JS}
