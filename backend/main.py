@@ -1024,7 +1024,7 @@ async def category_page(slug: str):
   {_CARD_CSS}
   .catnav {{ display:flex; flex-wrap:wrap; gap:8px; margin-top:40px; }}
   .catnav a {{ font-size:13px; background:var(--bg-card); border:1px solid var(--border); border-radius:0; padding:6px 14px; text-decoration:none; color:var(--text); }}
-  .back {{ display:inline-block; margin-top:20px; color:var(--accent); }}
+  .back {{ display:inline-block; margin-top:20px; color:var(--text); }}
 </style>
 {_CARD_SHARE_JS}
 </head>
@@ -1035,7 +1035,7 @@ async def category_page(slug: str):
 <p>{desc}</p>
 {body_extra}
 <nav class="catnav">{other_cats}</nav>
-<p><a class="back" href="https://www.snagga.de/">{_arrow_icon('left')} Alle Deals ansehen</a></p>
+<p><a class="back" href="https://www.snagga.de/">Alle Deals ansehen</a></p>
 </main>
 </body>
 </html>""")
