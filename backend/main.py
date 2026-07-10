@@ -1467,6 +1467,10 @@ def _pc_shell(title_txt: str, body_html: str, status: int = 200, q: str = "") ->
                    background:var(--bg-card); color:var(--text); cursor:pointer; }}
   .chips button:hover {{ border-color:var(--accent); }}
   .chips button.on {{ background:var(--accent); border-color:var(--accent); color:#fff; }}
+  .results a.xhide {{ display:none; }}
+  .more-btn {{ display:block; width:100%; padding:12px; margin-top:4px; font-size:14px; font-weight:600;
+               border:1px solid var(--border); background:var(--bg-card); color:var(--accent); cursor:pointer; }}
+  .more-btn:hover {{ border-color:var(--accent); }}
   .results .r-side {{ display:flex; flex-direction:column; align-items:flex-end; gap:2px; margin-left:16px; flex-shrink:0; text-align:right; min-width:120px; }}
   .results .r-price {{ font-size:15px; font-weight:700; white-space:nowrap; }}
   .results .r-cue {{ display:inline-flex; align-items:center; gap:5px; font-size:12px; color:var(--accent); }}
@@ -1582,13 +1586,13 @@ async def preis_check(request: Request, q: str = Query(default="")):
             f"(name ILIKE '%' || ${i+1} || '%' OR brand ILIKE '%' || ${i+1} || '%')"
             for i in range(len(tokens))
         )
-        # Grosszügiger Kandidaten-Pool (60), damit nach Relevanz-/Zubehör-
-        # Nachrücken (unten) noch genug "echte" Produkte für die Top-20 übrig
-        # sind — sonst würde z.B. bei "Samsung Galaxy S25" die Hülle vors Handy
-        # rutschen, weil sie eher ein Deal-Signal hat als das Gerät selbst.
+        # Grosszügiger Kandidaten-Pool (300), damit nach Relevanz-/Zubehör-
+        # Nachrücken (unten) noch genug "echte" Produkte vorne stehen — sonst
+        # würde z.B. bei "Samsung Galaxy S25" die Hülle vors Handy rutschen,
+        # weil sie eher ein Deal-Signal hat als das Gerät selbst.
         sql = (f"SELECT asin, name, brand, image_url, category, rating, reviews, is_active "
                f"FROM products WHERE {conds} "
-               f"ORDER BY is_active DESC, has_real_history DESC, deal_score DESC LIMIT 60")
+               f"ORDER BY is_active DESC, has_real_history DESC, deal_score DESC LIMIT 300")
         async with pool.acquire() as conn:
             rows = await conn.fetch(sql, *tokens)
 
@@ -1621,11 +1625,14 @@ async def preis_check(request: Request, q: str = Query(default="")):
             _relevance(r),
             False if want_accessory else bool(_ACCESSORY_RE.search(r["name"] or "")),
         ))
-        rows = rows[:20]
+        # Bis zu 200 Treffer rendern (alle im HTML), aber initial nur 20 zeigen —
+        # der Rest wird clientseitig per "Alle anzeigen"-Button bzw. automatisch
+        # beim Klick auf einen Kategorie-Chip aufgedeckt. Kein Reload nötig.
+        rows = rows[:200]
     else:
         rows = []
 
-    def _result_item(r) -> str:
+    def _result_item(r, hidden: bool = False) -> str:
         img = f'<img src="{html.escape(r["image_url"])}" alt="" loading="lazy">' if r["image_url"] else ""
         name = html.escape((r["name"] or "Produkt")[:140])
         cat  = r["category"] or "Sonstiges"
@@ -1645,7 +1652,8 @@ async def preis_check(request: Request, q: str = Query(default="")):
             sub_bits.append(f'<span class="r-rating">&#9733; {rating:.1f} ({rev_txt})</span>')
         if r["is_active"]:
             sub_bits.append('<span class="r-deal">&#128293; Aktueller Deal</span>')
-        return (f'<a href="https://www.snagga.de/preis/{r["asin"]}" data-cat="{html.escape(cat)}">{img}'
+        cls = ' class="xhide"' if hidden else ""
+        return (f'<a href="https://www.snagga.de/preis/{r["asin"]}" data-cat="{html.escape(cat)}"{cls}>{img}'
                 f'<span class="r-main"><span class="r-name">{name}</span>'
                 f'<span class="r-sub">{"".join(sub_bits)}</span></span>'
                 f'<span class="r-side"><span class="r-cue">{_CHART_ICON} Preisverlauf</span></span></a>')
@@ -1668,15 +1676,30 @@ async def preis_check(request: Request, q: str = Query(default="")):
                 'b.addEventListener("click",function(){'
                 'document.querySelectorAll(".chips button").forEach(function(x){x.classList.remove("on")});'
                 'b.classList.add("on");var c=b.dataset.cat;'
+                # Chip-Klick deckt versteckte Treffer automatisch mit auf (inline
+                # display überschreibt die .xhide-Klasse) und macht den
+                # "Alle anzeigen"-Button damit überflüssig.
+                'var m=document.getElementById("show-all");if(m){m.remove()}'
                 'document.querySelectorAll(".results a").forEach(function(a){'
                 'a.style.display=(!c||a.dataset.cat===c)?"flex":"none"});'
                 '});});</script>'
             )
-        items = "".join(_result_item(r) for r in rows)
+        SHOW_FIRST = 20
+        items = "".join(_result_item(r, hidden=(i >= SHOW_FIRST)) for i, r in enumerate(rows))
+        more_html = ""
+        if len(rows) > SHOW_FIRST:
+            more_html = (
+                f'<button type="button" id="show-all" class="more-btn">'
+                f'Alle {len(rows)} Treffer anzeigen</button>'
+                '<script>document.getElementById("show-all").addEventListener("click",function(){'
+                'document.querySelectorAll(".results a.xhide").forEach(function(a){a.classList.remove("xhide")});'
+                'this.remove();});</script>'
+            )
         return _pc_shell(f"Preis-Check: {q[:60]}",
                          f"<h1>{len(rows)} Treffer f&uuml;r &bdquo;{q_esc}&ldquo;</h1>"
                          f"{chips_html}"
                          f'<div class="results">{items}</div>'
+                         f"{more_html}"
                          '<div class="hint">Genau dein Produkt nicht dabei? Füge oben den '
                          '<strong>Amazon-Link</strong> ein — dann prüfen wir es live und nehmen es auf.</div>',
                          q=q)
