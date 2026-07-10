@@ -1304,7 +1304,7 @@ def _compute_detail(row, hist_rows) -> dict:
 
 
 @app.get("/produkt/{asin}")
-async def api_product_detail(asin: str):
+async def api_product_detail(asin: str, request: Request):
     """
     JSON-Detaildaten fürs Produkt-Modal: Urteil, Preis-Eckdaten, Chart-SVG und
     Wunschpreis-Vorschlag — dieselbe Quelle wie die SSR-Seite /preis/{asin}, damit
@@ -1314,15 +1314,31 @@ async def api_product_detail(asin: str):
     if not re.match(r"^[A-Z0-9]{10}$", asin):
         raise HTTPException(status_code=404, detail="Produkt nicht gefunden")
     pool = await get_pool()
+
+    _row_sql = ("SELECT asin, name, avg_price, avg90_price, avg180_price, all_time_low, "
+                "current_price, is_active, has_real_history, last_checked, last_updated "
+                "FROM products WHERE asin=$1")
     async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT asin, name, avg_price, avg90_price, avg180_price, all_time_low, "
-            "current_price, is_active, has_real_history, last_checked, last_updated "
-            "FROM products WHERE asin=$1",
-            asin,
-        )
-        if not row:
-            raise HTTPException(status_code=404, detail="Produkt nicht gefunden")
+        row = await conn.fetchrow(_row_sql, asin)
+    if not row:
+        raise HTTPException(status_code=404, detail="Produkt nicht gefunden")
+
+    # On-Demand-Chart wie auf der SSR-Seite /preis/{asin} (dort Zeile ~2088):
+    # Frisch entdeckte Deals (z.B. "Neueste Picks") kommen vom /deal-Endpoint
+    # OHNE Historie und wären im Modal bis zum nächsten Preis-Check chartlos —
+    # "Preisverlauf wird gerade aufgebaut", obwohl 1 Token ihn sofort liefert.
+    # Gleiches IP-Rate-Limit wie der Preis-Check (Budget-Schutz).
+    stale = (row["last_checked"] is None
+             or datetime.utcnow() - row["last_checked"] > timedelta(hours=PRICE_FRESH_HOURS))
+    if (not row["has_real_history"]) or (not row["is_active"] and stale):
+        ip = (request.headers.get("x-forwarded-for")
+              or (request.client.host if request.client else "?")).split(",")[0].strip()
+        if _pc_rate_ok(ip):
+            await fetch_and_store_history(asin)
+            async with pool.acquire() as conn:
+                row = await conn.fetchrow(_row_sql, asin)
+
+    async with pool.acquire() as conn:
         hist = await conn.fetch(
             "SELECT price, timestamp FROM price_history WHERE asin=$1 ORDER BY id DESC LIMIT 2000",
             asin,
