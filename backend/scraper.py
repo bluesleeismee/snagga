@@ -15,7 +15,10 @@ from typing import Optional
 from datetime import datetime, timedelta
 
 from database import get_pool
-from keepa import fetch_keepa_deals, enrich_with_keepa, fetch_keepa_bestsellers, ELECTRONICS_CAT_IDS
+from keepa import (
+    fetch_keepa_deals, enrich_with_keepa, fetch_keepa_bestsellers,
+    fetch_keepa_category_children, ELECTRONICS_CAT_IDS,
+)
 from scoring import (
     CATEGORY_MAX_RANK,
     passes_hard_filters,
@@ -149,6 +152,67 @@ ROOTCAT_MAP: dict[int, str] = {
     16435111:    "Sport & Freizeit",
     16435731:    "Sport & Freizeit",
 }
+
+# ---------------------------------------------------------------------------
+# Seed-Knoten-Expansion: ROOTCAT_MAP-Knoten + deren direkte Unterknoten.
+# Die Bestseller-Liste eines ROOT-Knotens (z.B. "Elektronik & Foto") ist von
+# Billig-Zubehör dominiert (Schutzfolien, Hüllen, Batterien) — echte Produkte
+# wie ein iPhone stehen nur in der Bestseller-Liste ihres UNTERknotens
+# ("Handys & Smartphones"). Deshalb wird jeder Knoten 1 Ebene tief expandiert.
+# Kind-IDs kommen von Keepa /category (1 Token/Knoten) und werden in-memory
+# gecacht — der Amazon-Kategoriebaum ändert sich praktisch nie.
+# ---------------------------------------------------------------------------
+SEED_MAX_CHILDREN_PER_NODE = int(os.getenv("SEED_MAX_CHILDREN_PER_NODE", "25"))
+SEED_CHILDREN_TTL_HOURS = int(os.getenv("SEED_CHILDREN_TTL_HOURS", str(24 * 7)))
+
+_seed_children_cache: dict[int, list[int]] = {}
+_seed_children_fetched_at: datetime | None = None
+
+
+async def _expanded_seed_nodes(client: httpx.AsyncClient) -> tuple[list[tuple[int, str]], int]:
+    """
+    Baut die Seed-Knoten-Liste für seed_bestsellers: jeder ROOTCAT_MAP-Knoten
+    plus bis zu SEED_MAX_CHILDREN_PER_NODE direkte Unterknoten (gleiche
+    Snagga-Kategorie wie der Elternknoten — die endgültige Produkt-Kategorie
+    entscheidet ohnehin classify_category).
+
+    Kind-Discovery kostet 1 Token/Elternknoten, läuft aber nur alle
+    SEED_CHILDREN_TTL_HOURS (Default: wöchentlich) bzw. nach Neustart.
+    Gibt (Liste[(node_id, kategorie)], verbrauchte Tokens) zurück.
+    """
+    global _seed_children_fetched_at
+    tokens_used = 0
+    now = datetime.utcnow()
+
+    cache_stale = (
+        _seed_children_fetched_at is None
+        or (now - _seed_children_fetched_at) > timedelta(hours=SEED_CHILDREN_TTL_HOURS)
+    )
+    if cache_stale:
+        _seed_children_cache.clear()
+        _seed_children_fetched_at = None
+    # Fehlende Elternknoten (nach TTL-Reset oder gescheiterten Calls) nachholen.
+    # cost == 0 heißt Request-Fehler (auch "keine Kinder" kostet 1 Token) →
+    # nicht cachen, nächster Lauf versucht es erneut.
+    missing = [p for p in ROOTCAT_MAP if p not in _seed_children_cache]
+    for parent_id in missing:
+        children, cost = await fetch_keepa_category_children(parent_id, domain=3, client=client)
+        tokens_used += cost
+        if cost > 0:
+            _seed_children_cache[parent_id] = children[:SEED_MAX_CHILDREN_PER_NODE]
+    if all(p in _seed_children_cache for p in ROOTCAT_MAP):
+        _seed_children_fetched_at = _seed_children_fetched_at or now
+
+    nodes: list[tuple[int, str]] = []
+    seen: set[int] = set()
+    for parent_id, cat_name in ROOTCAT_MAP.items():
+        for node_id in [parent_id, *_seed_children_cache.get(parent_id, [])]:
+            if node_id in seen or node_id in EXCLUDE_ROOTCATS:
+                continue
+            seen.add(node_id)
+            nodes.append((node_id, cat_name))
+    return nodes, tokens_used
+
 
 # Explizit ausschließen (rootCat → None, egal was Keywords sagen)
 EXCLUDE_ROOTCATS: set[int] = {
@@ -1005,7 +1069,8 @@ async def seed_bestsellers(max_tokens: int = 6000, max_per_cat: int = 400,
     """
     Füllt den Katalog mit STUBS (Name+Eckdaten, KEINE Historie — Schicht C kommt
     erst on-demand beim /preis-Klick, siehe fetch_and_store_history) aus den
-    Bestsellern aller Kategorie-Knoten in ROOTCAT_MAP.
+    Bestsellern aller Kategorie-Knoten in ROOTCAT_MAP plus deren direkten
+    Unterknoten (via _expanded_seed_nodes, ~300-500 Knoten).
 
     Für jede Kategorie:
     1. Bestseller-ASIN-Liste holen (1 Token/Kategorie via /bestsellers)
@@ -1018,7 +1083,7 @@ async def seed_bestsellers(max_tokens: int = 6000, max_per_cat: int = 400,
     Hartes `max_tokens`-Limit: bricht Kategorienzuweisung sauber ab, sobald das
     Tagesbudget erreicht ist. Keine schleichenden Überziehungen.
 
-    `category_offset` rotiert die Startposition in ROOTCAT_MAP (~62 Knoten) —
+    `category_offset` rotiert die Startposition in der Seed-Knoten-Liste —
     ohne Rotation würden bei knappem Stunden-Budget immer dieselben ersten
     Kategorien bedient und spätere (z.B. Sport & Freizeit) nie erreicht. Der
     stündliche Job dreht den Offset weiter, der manuelle Admin-Push (großes
@@ -1032,12 +1097,16 @@ async def seed_bestsellers(max_tokens: int = 6000, max_per_cat: int = 400,
     tokens_used = 0
     stats: dict[str, dict] = {}
 
-    # Quelle: ALLE Kategorie-Knoten aus ROOTCAT_MAP (~62 inkl. Unterkategorien) für
-    # breite Abdeckung. Die endgültige Kategorie je Produkt entscheidet ohnehin
+    # Quelle: ALLE ROOTCAT_MAP-Knoten PLUS deren direkte Unterknoten (siehe
+    # _expanded_seed_nodes) — Root-Bestseller-Listen sind Zubehör-dominiert,
+    # echte Produkte (iPhone, TVs, …) stehen in den Unterknoten-Listen.
+    # Die endgültige Kategorie je Produkt entscheidet ohnehin
     # classify_category(title, root_cat) — der Knoten hier ist nur die Bezugsquelle.
     # Rotiert um category_offset (siehe Docstring), damit bei knappem Budget nicht
     # immer dieselben ersten Kategorien bedient werden.
-    cat_items = list(ROOTCAT_MAP.items())
+    async with httpx.AsyncClient(timeout=45) as client:
+        cat_items, discovery_cost = await _expanded_seed_nodes(client)
+    tokens_used += discovery_cost
     if cat_items:
         off = category_offset % len(cat_items)
         cat_items = cat_items[off:] + cat_items[:off]

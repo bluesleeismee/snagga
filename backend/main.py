@@ -1455,8 +1455,18 @@ def _pc_shell(title_txt: str, body_html: str, status: int = 200, q: str = "") ->
   .results a:hover {{ border-color:var(--accent); }}
   .results img {{ width:56px; height:56px; object-fit:contain; flex-shrink:0; background:#fff; }}
   .results .r-main {{ min-width:0; flex:1 1 auto; overflow:hidden; }}
-  .results .r-name {{ font-size:15px; font-weight:600; line-height:1.4; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
+  .results .r-name {{ font-size:15px; font-weight:600; line-height:1.4; display:-webkit-box;
+                      -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }}
+  .results .r-sub {{ display:flex; flex-wrap:wrap; gap:4px 14px; font-size:12.5px; margin-top:5px; opacity:.75; }}
+  .results .r-brand {{ font-weight:600; }}
+  .results .r-rating {{ color:#B45309; }}
+  .results .r-deal {{ color:#C2410C; font-weight:600; }}
   .results .r-tag {{ display:inline-block; font-size:12px; color:#1E7A3C; margin-top:4px; }}
+  .chips {{ display:flex; flex-wrap:wrap; gap:8px; margin:0 0 18px; }}
+  .chips button {{ padding:6px 14px; font-size:13px; border:1px solid var(--border); border-radius:999px;
+                   background:var(--bg-card); color:var(--text); cursor:pointer; }}
+  .chips button:hover {{ border-color:var(--accent); }}
+  .chips button.on {{ background:var(--accent); border-color:var(--accent); color:#fff; }}
   .results .r-side {{ display:flex; flex-direction:column; align-items:flex-end; gap:2px; margin-left:16px; flex-shrink:0; text-align:right; min-width:120px; }}
   .results .r-price {{ font-size:15px; font-weight:700; white-space:nowrap; }}
   .results .r-cue {{ display:inline-flex; align-items:center; gap:5px; font-size:12px; color:var(--accent); }}
@@ -1576,8 +1586,8 @@ async def preis_check(request: Request, q: str = Query(default="")):
         # Nachrücken (unten) noch genug "echte" Produkte für die Top-20 übrig
         # sind — sonst würde z.B. bei "Samsung Galaxy S25" die Hülle vors Handy
         # rutschen, weil sie eher ein Deal-Signal hat als das Gerät selbst.
-        sql = (f"SELECT asin, name, brand, image_url FROM products "
-               f"WHERE {conds} "
+        sql = (f"SELECT asin, name, brand, image_url, category, rating, reviews, is_active "
+               f"FROM products WHERE {conds} "
                f"ORDER BY is_active DESC, has_real_history DESC, deal_score DESC LIMIT 60")
         async with pool.acquire() as conn:
             rows = await conn.fetch(sql, *tokens)
@@ -1617,19 +1627,55 @@ async def preis_check(request: Request, q: str = Query(default="")):
 
     def _result_item(r) -> str:
         img = f'<img src="{html.escape(r["image_url"])}" alt="" loading="lazy">' if r["image_url"] else ""
-        name = html.escape((r["name"] or "Produkt")[:90])
+        name = html.escape((r["name"] or "Produkt")[:140])
+        cat  = r["category"] or "Sonstiges"
         # Kein Preis UND kein Tag-Text ("Preis gefallen" etc.) in der Übersicht —
-        # beides sind Preis-Aussagen, David will die Liste konsequent preislos.
-        # Der Preis/Tag kommt erst (frisch geprüft) beim Klick auf /preis.
-        return (f'<a href="https://www.snagga.de/preis/{r["asin"]}">{img}'
-                f'<span class="r-main"><span class="r-name">{name}</span></span>'
+        # beides sind Preis-Aussagen, David will die Liste konsequent preislos
+        # (bestätigt 2026-07-10). Der Preis kommt erst (frisch geprüft) beim
+        # Klick auf /preis. Rating/Reviews/Kategorie sind KEINE Preis-Aussagen.
+        sub_bits = []
+        brand = (r["brand"] or "").strip()
+        if brand:
+            sub_bits.append(f'<span class="r-brand">{html.escape(brand[:40])}</span>')
+        sub_bits.append(f'<span class="r-cat">{html.escape(cat)}</span>')
+        rating  = float(r["rating"] or 0)
+        reviews = int(r["reviews"] or 0)
+        if rating > 0 and reviews > 0:
+            rev_txt = f"{reviews:,}".replace(",", ".")
+            sub_bits.append(f'<span class="r-rating">&#9733; {rating:.1f} ({rev_txt})</span>')
+        if r["is_active"]:
+            sub_bits.append('<span class="r-deal">&#128293; Aktueller Deal</span>')
+        return (f'<a href="https://www.snagga.de/preis/{r["asin"]}" data-cat="{html.escape(cat)}">{img}'
+                f'<span class="r-main"><span class="r-name">{name}</span>'
+                f'<span class="r-sub">{"".join(sub_bits)}</span></span>'
                 f'<span class="r-side"><span class="r-cue">{_CHART_ICON} Preisverlauf</span></span></a>')
 
     q_esc = html.escape(q[:60])
     if rows:
+        # Kategorie-Filterchips: rein clientseitig über die gerenderten Treffer
+        # (kein Reload, keine Extra-Query). Nur zeigen, wenn es was zu filtern gibt.
+        from collections import Counter
+        cat_counts = Counter((r["category"] or "Sonstiges") for r in rows)
+        chips_html = ""
+        if len(cat_counts) > 1:
+            chip_btns = [f'<button type="button" class="on" data-cat="">Alle ({len(rows)})</button>']
+            for cat, n in cat_counts.most_common():
+                c_esc = html.escape(cat)
+                chip_btns.append(f'<button type="button" data-cat="{c_esc}">{c_esc} ({n})</button>')
+            chips_html = (
+                f'<div class="chips">{"".join(chip_btns)}</div>'
+                '<script>document.querySelectorAll(".chips button").forEach(function(b){'
+                'b.addEventListener("click",function(){'
+                'document.querySelectorAll(".chips button").forEach(function(x){x.classList.remove("on")});'
+                'b.classList.add("on");var c=b.dataset.cat;'
+                'document.querySelectorAll(".results a").forEach(function(a){'
+                'a.style.display=(!c||a.dataset.cat===c)?"flex":"none"});'
+                '});});</script>'
+            )
         items = "".join(_result_item(r) for r in rows)
         return _pc_shell(f"Preis-Check: {q[:60]}",
                          f"<h1>{len(rows)} Treffer f&uuml;r &bdquo;{q_esc}&ldquo;</h1>"
+                         f"{chips_html}"
                          f'<div class="results">{items}</div>'
                          '<div class="hint">Genau dein Produkt nicht dabei? Füge oben den '
                          '<strong>Amazon-Link</strong> ein — dann prüfen wir es live und nehmen es auf.</div>',

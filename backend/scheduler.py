@@ -26,8 +26,9 @@ async def _hourly_catalog_grow():
     """
     Stündlich brache Tokens in Katalog-Stubs investieren (Bestseller je Kategorie).
     category_offset = fortlaufender Stundenzähler seit Epoch — rotiert die
-    Startposition in ROOTCAT_MAP jede Stunde weiter, sodass über ~62 Stunden
-    (~2,6 Tage) jede Kategorie mal zuerst drankommt statt immer dieselben ersten.
+    Startposition in der Seed-Knoten-Liste (ROOTCAT_MAP + Unterknoten, ~300-500
+    Knoten) jede Stunde weiter, sodass über ~2-3 Wochen jeder Knoten mal zuerst
+    drankommt statt immer dieselben ersten.
     """
     hour_counter = int(datetime.utcnow().timestamp() // 3600)
     await seed_bestsellers(max_tokens=CATALOG_GROW_HOURLY_TOKENS, max_per_cat=300,

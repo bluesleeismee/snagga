@@ -295,6 +295,49 @@ async def fetch_keepa_bestsellers(
 
 
 # ---------------------------------------------------------------------------
+# /category — direkte Unterknoten eines Kategorie-Knotens (1 Token/Request)
+# ---------------------------------------------------------------------------
+
+async def fetch_keepa_category_children(
+    category_id: int,
+    domain: int = 3,
+    client: httpx.AsyncClient | None = None,
+) -> tuple[list[int], int]:
+    """
+    Liefert die direkten Kind-Knoten-IDs einer Amazon-Kategorie.
+    Kostet 1 Token/Request. Gibt (child_ids, tokens_consumed) zurück.
+    """
+    if not KEEPA_KEY:
+        return [], 0
+
+    own_client = client is None
+    if own_client:
+        client = httpx.AsyncClient(timeout=30)
+
+    try:
+        resp = await client.get(
+            f"{KEEPA_BASE}/category",
+            params={"key": KEEPA_KEY, "domain": domain, "category": category_id, "parents": 0},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        print(f"  Keepa /category Fehler cat {category_id}: {e}")
+        return [], 0
+    finally:
+        if own_client:
+            await client.aclose()
+
+    cats = data.get("categories") or {}
+    cat = cats.get(str(category_id)) or {}
+    children = [c for c in (cat.get("children") or []) if isinstance(c, int) and c > 0]
+    tokens_consumed = data.get("tokensConsumed") or 1
+    print(f"  Keepa /category cat {category_id}: {len(children)} Unterknoten · "
+          f"{tokens_consumed} Tokens verbraucht · {data.get('tokensLeft')} übrig")
+    return children, tokens_consumed
+
+
+# ---------------------------------------------------------------------------
 # /product — Deep-Sync (vollständige Anreicherung)
 # ---------------------------------------------------------------------------
 
