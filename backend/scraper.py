@@ -991,13 +991,14 @@ async def fetch_and_store_history(asin: str) -> bool:
                 sales_rank = $9, last_checked = $10, last_viewed = $10,
                 image_url = CASE WHEN $11 != '' THEN $11 ELSE image_url END,
                 brand     = CASE WHEN $12 != '' THEN $12 ELSE brand END,
-                tag       = $13
+                tag       = $13,
+                sub_category = CASE WHEN $14 != '' THEN $14 ELSE sub_category END
             WHERE asin = $1
         """,
             asin, kd["current_price"], atl, kd["avg_price"],
             kd["avg90_price"], kd["avg180_price"], kd["rating"], kd["reviews"],
             kd["sales_rank"], now, kd["image_url"], (kd.get("brand") or ""),
-            tag,
+            tag, kd.get("sub_category") or "",
         )
         if hist:
             await conn.execute("DELETE FROM price_history WHERE asin=$1", asin)
@@ -1183,9 +1184,10 @@ async def seed_bestsellers(max_tokens: int = 6000, max_per_cat: int = 400,
                            avg90_price, avg180_price, deal_score, rating, reviews, prime,
                            last_updated, last_checked, affiliate_url,
                            is_active, is_backup, is_top_pick, is_fba,
-                           sales_rank, tag, score_breakdown, first_seen, has_real_history)
+                           sales_rank, tag, score_breakdown, first_seen, has_real_history,
+                           sub_category)
                         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
-                                $16,$17,$18,false,false,false,$19,$20,'','',$16,false)
+                                $16,$17,$18,false,false,false,$19,$20,'','',$16,false,$21)
                         ON CONFLICT (asin) DO NOTHING
                     """,
                         asin, (title or "Produkt")[:200], kd.get("brand") or "",
@@ -1195,6 +1197,7 @@ async def seed_bestsellers(max_tokens: int = 6000, max_per_cat: int = 400,
                         0, kd["rating"], kd["reviews"], True,
                         now, now, f"https://www.amazon.de/dp/{asin}?tag={aff_tag}",
                         kd.get("is_fba") or False, kd["sales_rank"] or 0,
+                        kd.get("sub_category") or "",
                     )
                     added += 1
 
@@ -1295,7 +1298,8 @@ async def nightly_deep_sync():
                     last_checked    = $15,
                     last_deep_sync  = $15,
                     image_url       = CASE WHEN $16 != '' THEN $16 ELSE image_url END,
-                    brand           = CASE WHEN $17 != '' THEN $17 ELSE brand END
+                    brand           = CASE WHEN $17 != '' THEN $17 ELSE brand END,
+                    sub_category    = CASE WHEN $18 != '' THEN $18 ELSE sub_category END
                 WHERE asin = $1
             """,
                 asin,
@@ -1303,6 +1307,7 @@ async def nightly_deep_sync():
                 kd["avg_price"], kd["avg90_price"], kd["avg180_price"],
                 kd["rating"], kd["reviews"], kd["sales_rank"], kd["is_fba"],
                 score, tag, breakdown, now, kd["image_url"], (kd.get("brand") or ""),
+                kd.get("sub_category") or "",
             )
 
             # Echte Preishistorie IMMER frisch setzen: alte (evtl. simulierte)

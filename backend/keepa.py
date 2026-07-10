@@ -429,9 +429,19 @@ def _parse_product(p: dict) -> dict | None:
         if last_ship:
             is_fba = last_ship[-1] == 0
 
+    # Unterkategorie: Ebene direkt unter der Root-Kategorie aus dem categoryTree
+    # (kommt gratis im /product-Response mit, z.B. "Elektronik & Foto > Handys &
+    # Zubehör > Smartphones" → "Handys & Zubehör"). Für den Drilldown-Filter in
+    # der Suche — die Snagga-Hauptkategorie entscheidet weiter classify_category.
+    tree = p.get("categoryTree") or []
+    sub_category = ""
+    if len(tree) > 1 and isinstance(tree[1], dict):
+        sub_category = (tree[1].get("name") or "").strip()[:80]
+
     return {
         "title":          (p.get("title") or "").strip(),
         "brand":          (p.get("brand") or "").strip(),
+        "sub_category":   sub_category,
         "image_url":      image_url,
         "current_price":  current_price,
         "original_price": original_price,

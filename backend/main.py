@@ -1467,6 +1467,9 @@ def _pc_shell(title_txt: str, body_html: str, status: int = 200, q: str = "") ->
                    background:var(--bg-card); color:var(--text); cursor:pointer; }}
   .chips button:hover {{ border-color:var(--accent); }}
   .chips button.on {{ background:var(--accent); border-color:var(--accent); color:#fff; }}
+  .chips-sub {{ margin:-8px 0 18px 12px; }}
+  .chips-sub button {{ padding:4px 12px; font-size:12px; }}
+  .chips-sub:empty {{ display:none; }}
   .results a.xhide {{ display:none; }}
   .more-btn {{ display:block; width:100%; padding:12px; margin-top:4px; font-size:14px; font-weight:600;
                border:1px solid var(--border); background:var(--bg-card); color:var(--accent); cursor:pointer; }}
@@ -1552,9 +1555,9 @@ async def preis_check(request: Request, q: str = Query(default="")):
                    avg90_price, avg180_price, deal_score, rating, reviews, prime,
                    last_updated, last_checked, affiliate_url,
                    is_active, is_backup, is_top_pick, is_fba,
-                   sales_rank, tag, score_breakdown, first_seen)
+                   sales_rank, tag, score_breakdown, first_seen, sub_category)
                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
-                        $16,$17,$18,false,false,false,$19,$20,'','',$16)
+                        $16,$17,$18,false,false,false,$19,$20,'','',$16,$21)
                 ON CONFLICT (asin) DO NOTHING
             """,
                 asin, (kd["title"] or "Produkt")[:200], kd.get("brand") or "",
@@ -1564,6 +1567,7 @@ async def preis_check(request: Request, q: str = Query(default="")):
                 0, kd["rating"], kd["reviews"], True,
                 now, now, f"https://www.amazon.de/dp/{asin}?tag={aff_tag}",
                 kd["is_fba"], kd["sales_rank"] or 0,
+                kd.get("sub_category") or "",
             )
             if hist:
                 await conn.execute("DELETE FROM price_history WHERE asin=$1", asin)
@@ -1590,7 +1594,7 @@ async def preis_check(request: Request, q: str = Query(default="")):
         # Nachrücken (unten) noch genug "echte" Produkte vorne stehen — sonst
         # würde z.B. bei "Samsung Galaxy S25" die Hülle vors Handy rutschen,
         # weil sie eher ein Deal-Signal hat als das Gerät selbst.
-        sql = (f"SELECT asin, name, brand, image_url, category, rating, reviews, is_active "
+        sql = (f"SELECT asin, name, brand, image_url, category, sub_category, rating, reviews, is_active "
                f"FROM products WHERE {conds} "
                f"ORDER BY is_active DESC, has_real_history DESC, deal_score DESC LIMIT 300")
         async with pool.acquire() as conn:
@@ -1653,7 +1657,9 @@ async def preis_check(request: Request, q: str = Query(default="")):
         if r["is_active"]:
             sub_bits.append('<span class="r-deal">&#128293; Aktueller Deal</span>')
         cls = ' class="xhide"' if hidden else ""
-        return (f'<a href="https://www.snagga.de/preis/{r["asin"]}" data-cat="{html.escape(cat)}"{cls}>{img}'
+        sub = html.escape((r["sub_category"] or "").strip())
+        return (f'<a href="https://www.snagga.de/preis/{r["asin"]}" data-cat="{html.escape(cat)}"'
+                f' data-sub="{sub}"{cls}>{img}'
                 f'<span class="r-main"><span class="r-name">{name}</span>'
                 f'<span class="r-sub">{"".join(sub_bits)}</span></span>'
                 f'<span class="r-side"><span class="r-cue">{_CHART_ICON} Preisverlauf</span></span></a>')
@@ -1670,19 +1676,43 @@ async def preis_check(request: Request, q: str = Query(default="")):
             for cat, n in cat_counts.most_common():
                 c_esc = html.escape(cat)
                 chip_btns.append(f'<button type="button" data-cat="{c_esc}">{c_esc} ({n})</button>')
+            # Zwei Chip-Ebenen: Hauptkategorie-Klick blendet darunter die Amazon-
+            # Unterkategorien der Treffer ein (data-sub, aus Keepa categoryTree).
+            # Alt-Stubs ohne sub_category laufen unter "Weitere". Chip-Klick deckt
+            # versteckte Treffer automatisch mit auf (inline display überschreibt
+            # .xhide) und entfernt den "Alle anzeigen"-Button.
             chips_html = (
-                f'<div class="chips">{"".join(chip_btns)}</div>'
-                '<script>document.querySelectorAll(".chips button").forEach(function(b){'
-                'b.addEventListener("click",function(){'
-                'document.querySelectorAll(".chips button").forEach(function(x){x.classList.remove("on")});'
-                'b.classList.add("on");var c=b.dataset.cat;'
-                # Chip-Klick deckt versteckte Treffer automatisch mit auf (inline
-                # display überschreibt die .xhide-Klasse) und macht den
-                # "Alle anzeigen"-Button damit überflüssig.
-                'var m=document.getElementById("show-all");if(m){m.remove()}'
-                'document.querySelectorAll(".results a").forEach(function(a){'
-                'a.style.display=(!c||a.dataset.cat===c)?"flex":"none"});'
-                '});});</script>'
+                f'<div class="chips" id="chips-main">{"".join(chip_btns)}</div>'
+                '<div class="chips chips-sub" id="chips-sub"></div>'
+                """<script>(function(){
+var rows=function(){return document.querySelectorAll(".results a")};
+function reveal(){var m=document.getElementById("show-all");if(m){m.remove()}}
+function apply(cat,sub){rows().forEach(function(a){
+  var ok=(!cat||a.dataset.cat===cat)&&(!sub||(a.dataset.sub||"Weitere")===sub);
+  a.style.display=ok?"flex":"none";});}
+function mark(box,btn){box.querySelectorAll("button").forEach(function(x){x.classList.remove("on")});btn.classList.add("on")}
+function buildSub(cat){
+  var box=document.getElementById("chips-sub");box.innerHTML="";
+  if(!cat){return}
+  var counts={},total=0;
+  rows().forEach(function(a){if(a.dataset.cat===cat){var s=a.dataset.sub||"Weitere";counts[s]=(counts[s]||0)+1;total++;}});
+  var keys=Object.keys(counts);
+  if(keys.length<2){return}
+  keys.sort(function(x,y){return counts[y]-counts[x]});
+  var all=document.createElement("button");
+  all.type="button";all.className="on";all.textContent="Alle ("+total+")";
+  all.addEventListener("click",function(){mark(box,all);apply(cat,"")});
+  box.appendChild(all);
+  keys.forEach(function(s){
+    var b=document.createElement("button");
+    b.type="button";b.textContent=s+" ("+counts[s]+")";
+    b.addEventListener("click",function(){mark(box,b);apply(cat,s)});
+    box.appendChild(b);});}
+document.querySelectorAll("#chips-main button").forEach(function(b){
+  b.addEventListener("click",function(){
+    mark(document.getElementById("chips-main"),b);reveal();
+    var c=b.dataset.cat;buildSub(c);apply(c,"");});});
+})();</script>"""
             )
         SHOW_FIRST = 20
         items = "".join(_result_item(r, hidden=(i >= SHOW_FIRST)) for i, r in enumerate(rows))

@@ -70,6 +70,10 @@ MIGRATE_PRODUCTS = [
     # (Schicht C) wird nur für aktive Deals + kürzlich angesehene Produkte gehalten,
     # der Rest wird evictet (Stub bleibt, Chart bei erneutem Klick neu geholt).
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS last_viewed TIMESTAMP",
+    # Amazon-Unterkategorie (Ebene unter der Root, aus Keepa categoryTree) für
+    # den Drilldown-Filter der Suche. Leer bei Alt-Stubs, füllt sich bei jeder
+    # /product-Anreicherung (Seeding, Deep-Sync, /preis-Klick) von selbst.
+    "ALTER TABLE products ADD COLUMN IF NOT EXISTS sub_category TEXT DEFAULT ''",
 ]
 
 CREATE_PRICE_HISTORY = """
