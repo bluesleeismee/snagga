@@ -435,17 +435,38 @@ def best_price_since_months(history: list, current: float) -> int | None:
     """
     if not history or len(history) < 3 or not current or current <= 0:
         return None
-    # Nur Rundungsrauschen tolerieren (Keepa rundet auf Cents) — 0.3%, nicht 2%.
-    # Ein Punkt, der spürbar (auch nur ~1%) billiger war, MUSS den Claim verhindern,
-    # weil derselbe Punkt im daneben gerenderten Chart sichtbar ist.
-    tol_low = current * 0.997
+    # Ein früherer Punkt bricht den Claim, sobald er NICHT spürbar teurer als jetzt
+    # war — also auch bei PREISGLEICHHEIT, nicht nur wenn er billiger war (Docstring:
+    # kein tieferer ODER gleich hoher Punkt). Vorher testete die Schleife strikt
+    # `price < current*0.997`, also nur ~0.3 % billigere Punkte; ein Produkt, das
+    # immer wieder exakt denselben Aktionspreis erreicht (z.B. B0BGRDMRPR: 29,91 €
+    # mehrfach in den letzten 90 Tagen), fand so KEINEN früheren Punkt und behauptete
+    # "Bester Preis seit über 1 Jahr", obwohl derselbe Preis erst vor Wochen im
+    # daneben gerenderten Chart sichtbar galt. Toleranz jetzt nach oben: ein Punkt bis
+    # 0.3 % über dem aktuellen Preis zählt als „gleich günstig" (nur Rundungsrauschen).
+    tol = current * 1.003
     now = datetime.utcnow()
 
-    anchor = history[0][1]  # Fallback: nirgends sichtbar billiger -> ganze Spanne
+    # Die aktuelle Tief-Strecke bis heute überspringen (sonst ankert der jüngste,
+    # zum aktuellen Preis gehörende Punkt sofort auf „jetzt"): erst zurückgehen, bis
+    # der Preis einmal spürbar ÜBER dem aktuellen lag, und dann den jüngsten Punkt
+    # suchen, der wieder gleich günstig oder günstiger war — das ist der ehrliche
+    # „seit"-Zeitpunkt.
+    anchor = history[0][1]  # Fallback: davor nie so günstig -> ganze Spanne
+    seen_higher = False
     for price, ts in reversed(history):
-        if price < tol_low:
+        if not seen_higher:
+            if price > tol:
+                seen_higher = True
+            continue
+        if price <= tol:
             anchor = ts
             break
+
+    # Preis war nie spürbar über dem aktuellen (flache Linie / aktuell teuerster
+    # Stand) → keine belastbare „Bester Preis seit"-Aussage möglich.
+    if not seen_higher:
+        return None
 
     months = (now - anchor).days // 30
     return int(months) if months >= 1 else None
