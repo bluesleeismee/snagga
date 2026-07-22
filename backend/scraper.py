@@ -489,22 +489,33 @@ async def hourly_keepa_price_check():
                 kd   = enriched.get(asin) or {}
                 hist = kd.get("history") or []
                 months = best_price_since_months(hist, live_price)
-                tag = determine_tag(live_price, atl, avg90, avg180,
-                                    atl_confirmed=False, months_since_lower=months)
+                # Bestätigtes Allzeittief — dieselbe Quelle wie der nächtliche Deep-Sync:
+                # enrich_with_keepa ruft /product, kd["all_time_low"] ist also der ECHTE
+                # ATL aus Keepas stats (nicht der avg365-Proxy aus /deal). Tiefer als der
+                # gespeicherte Wert ODER der aktuelle Preis kann es nie sein → min() der
+                # drei. Damit darf der stündliche Check "Allzeittiefpreis" vergeben, statt
+                # den vom Deep-Sync korrekt gesetzten Tag jede Stunde mit atl_confirmed=
+                # False zu überschreiben — der Bug, durch den echte Allzeittiefs binnen
+                # ~1h nach dem Sync verschwanden und nur "Historisch günstig" o.ä. blieb.
+                atl_now = min((v for v in (atl, kd.get("all_time_low") or 0.0, live_price) if v > 0),
+                              default=live_price)
+                tag = determine_tag(live_price, atl_now, avg90, avg180,
+                                    atl_confirmed=True, months_since_lower=months)
                 # last_updated wird mit-refresht: bestätigt-gute Deals laufen nicht aus,
                 # auch wenn Keepa sie nicht mehr als "frischen" Deal im /deal-Stream meldet.
                 # (Volatilität steuert oben nur die weak_volatile-Deaktivierung; die
                 #  Prüf-Frequenz ergibt sich aus deal_score-Perzentil + last_checked.)
-                # all_time_low mitziehen: fällt der Preis unter das gespeicherte
-                # Tief, ist das neue Tief der aktuelle Preis. Verhindert den
-                # unmöglichen Zustand "aktueller Preis < Allzeittief" zwischen
-                # zwei Deep-Syncs. NULLIF(...,0) fängt den Default 0 ab.
+                # all_time_low = atl_now (frisch aus /product, per min() nie über dem
+                # gespeicherten Tief oder dem aktuellen Preis) — hält den angezeigten
+                # "Allzeittief"-Wert konsistent zum oben berechneten Tag und verhindert
+                # den unmöglichen Zustand "aktueller Preis < Allzeittief" zwischen zwei
+                # Deep-Syncs.
                 await conn.execute(
                     "UPDATE products SET current_price=$2, deal_score=$3, tag=$4, "
                     "last_checked=$5, last_updated=$5, score_breakdown=$6, "
-                    "all_time_low = LEAST(NULLIF(all_time_low, 0), $2) "
+                    "all_time_low = $7 "
                     "WHERE asin=$1",
-                    asin, live_price, score, tag, now, breakdown,
+                    asin, live_price, score, tag, now, breakdown, atl_now,
                 )
 
                 # Kostenlose Keepa-History einspielen → Chart aktuell, Marke mitnehmen.
