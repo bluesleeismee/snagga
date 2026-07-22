@@ -1252,7 +1252,8 @@ def _compute_detail(row, hist_rows) -> dict:
     """
     points  = [(h["price"], h["timestamp"]) for h in reversed(hist_rows) if h["price"] and h["price"] > 0]
     current = row["current_price"] or 0
-    avg90   = row["avg90_price"] or row["avg_price"] or 0
+    # Keepas fertiger 90-Tage-Stat nur noch als Fallback (siehe avg90 unten).
+    avg90_keepa = row["avg90_price"] or row["avg_price"] or 0
     avg180  = row["avg180_price"] or 0
     atl     = row["all_time_low"] or 0
     # ATL konsistent zum angezeigten Chart: das echte Tief der gespeicherten
@@ -1264,13 +1265,21 @@ def _compute_detail(row, hist_rows) -> dict:
     # Anzeige-Sicherung: Ein Allzeittief kann logisch nie über dem aktuellen Preis liegen.
     if atl and current and atl > current:
         atl = current
-    verdict, vcolor, vreason = _price_verdict(current, avg90, atl)
-    # Ø 1 Jahr / Ø Gesamt gibt es bei Keepa nicht als fertigen Stat (nur 30/90/180d)
-    # — lokal aus derselben `points`-Reihe berechnet, die auch den Chart zeichnet
-    # (zeitgewichtet, siehe _windowed_avg), damit die angezeigte Ø-Zahl JEDES
-    # Fensters garantiert zur sichtbaren Chart-Linie desselben Fensters passt.
+    # Ø 90 Tage / 1 Jahr / Gesamt ALLE aus derselben `points`-Reihe berechnen, die
+    # auch den Chart zeichnet (zeitgewichtet, siehe _windowed_avg) — so passt die
+    # angezeigte Ø-Zahl JEDES Fensters garantiert zur sichtbaren Chart-Linie
+    # desselben Fensters. Ø90 kam früher direkt aus Keepas stats.avg90 (DB-Feld
+    # avg90_price); das wird aber nur nächtlich/beim Deep-Sync aktualisiert, während
+    # die points (Chart, Ø1J, ØGesamt) stündlich frisch reinlaufen. Folge: die
+    # Ø-90-Linie lief der Chart-Kurve hinterher und lag bei fallenden Preisen sogar
+    # ÜBER Ø-1-Jahr/Ø-Gesamt (z.B. B0GCVNYRV6: Ø90 49,90 € > Ø1J 43,17 € bei aktuell
+    # 29,99 €), und das Kauf-Urteil überzeichnete den Rabatt. Zusätzlich kann Keepas
+    # Stat einen anderen Preistyp (BuyBox/Amazon/New) mitteln als die Chart-Linie
+    # folgt. Keepa-Stat bleibt nur Fallback für Produkte ganz ohne gespeicherte History.
+    avg90    = _windowed_avg(points, current, 90) or avg90_keepa
     avg365   = _windowed_avg(points, current, 365)
     avg_full = _windowed_avg(points, current, None)
+    verdict, vcolor, vreason = _price_verdict(current, avg90, atl)
     # Chart nur mit verifizierter Keepa-Historie — nie erfundene Kurven zeigen.
     # Drei Zeitfenster für den 90/365/Gesamt-Umschalter auf der Preisseite; jedes
     # bekommt seine eigene Ø-Linie (statt fix Ø90 in allen drei anzuzeigen).
