@@ -407,6 +407,87 @@ def calculate_deal_score(
 
 
 # ---------------------------------------------------------------------------
+# Allzeittief — EINE kanonische Quelle für Tag, Kauf-Urteil und Anzeige
+# ---------------------------------------------------------------------------
+
+# Toleranz für die ABSOLUTE Aussage "Allzeittiefpreis": keine. Der Claim steht
+# direkt neben dem Chart und neben der ausgewiesenen Zahl "Allzeittief" — jeder
+# Cent Abstand ist für den Kunden sichtbar als Widerspruch. Historie: die
+# Toleranz stand auf 1.03, wodurch ein Preis 3 % ÜBER dem Tief als Allzeittief
+# beworben wurde (30,56 € bei Tief 22,59 €, weil zusätzlich ein Proxy-ATL
+# durchrutschte — siehe resolve_atl).
+ATL_TOL = 1.0
+
+# Wie viele echte Historienpunkte nötig sind, damit das Minimum der gespeicherten
+# Preishistorie als belastbares Tief gilt. Ein einzelner Punkt ist immer der
+# gerade eingefügte aktuelle Preis — der würde sich selbst zum Allzeittief erklären.
+ATL_MIN_HISTORY_POINTS = 3
+
+
+def resolve_atl(
+    current:        float,
+    keepa_atl:      float = 0.0,   # stats.atl aus /product (0 = nicht vorhanden)
+    stored_atl:     float = 0.0,   # products.all_time_low
+    stored_confirmed: bool = False,  # products.atl_confirmed
+    history_prices: list | None = None,  # Preise der gespeicherten/frischen Historie
+) -> tuple[float, bool]:
+    """
+    Löst das Allzeittief aus allen verfügbaren Quellen auf und sagt, ob es
+    BELEGT ist. Rückgabe: (atl, confirmed).
+
+    Warum diese Funktion existiert — die drei Fehlerquellen, die "Allzeittief"
+    dreimal falsch gemacht haben, alle mit derselben Wurzel: es gab keine
+    einzige Quelle der Wahrheit.
+
+      1. Der /deal-Endpoint liefert KEIN Allzeittief. Er liefert den 365-Tage-
+         Durchschnitt, der als „ATL-Proxy" in dieselbe Spalte `all_time_low`
+         geschrieben wurde — ununterscheidbar vom echten Tief. Beim HDMI-Kabel
+         war dieser Proxy 30,43 € (= Ø Gesamt) bei echtem Tief 22,59 €.
+      2. Der stündliche Preis-Check las diese Spalte und übergab sie mit
+         `atl_confirmed=True` an determine_tag — der Proxy wurde also zum
+         „bestätigten" Tief gewaschen: 30,56 € ≤ 30,43 € × 1,03 → Allzeittiefpreis.
+      3. Überall wurde `min(…, current_price)` gerechnet bzw. `or current_price`
+         als Fallback benutzt. Damit ist das „Tief" per Konstruktion NIE über dem
+         aktuellen Preis — die Prüfung `current <= atl` kann dann gar nicht mehr
+         fehlschlagen. Ein fehlendes Tief wurde so zum garantierten Allzeittief.
+
+    Regeln hier, ausnahmslos:
+      * Der AKTUELLE Preis ist niemals Beleg für ein Tief. Er wird nicht in die
+        Kandidatenliste aufgenommen — sonst beweist sich der Claim selbst.
+      * Ein Proxy (avg365 aus /deal) ist niemals Beleg. `stored_atl` zählt nur,
+        wenn es einmal als belegt markiert wurde (`stored_confirmed`).
+      * Belege sind: Keepas stats.atl aus /product und das Minimum einer echten
+        Preishistorie mit mindestens ATL_MIN_HISTORY_POINTS Punkten.
+      * Ohne Beleg → (0.0, False). Kein Rückfall auf irgendeinen Ersatzwert.
+    """
+    evidence: list[float] = []
+    if keepa_atl and keepa_atl > 0:
+        evidence.append(float(keepa_atl))
+    if stored_confirmed and stored_atl and stored_atl > 0:
+        evidence.append(float(stored_atl))
+    hp = [float(p) for p in (history_prices or []) if p and p > 0]
+    if len(hp) >= ATL_MIN_HISTORY_POINTS:
+        evidence.append(min(hp))
+
+    if not evidence:
+        return 0.0, False
+    return round(min(evidence), 2), True
+
+
+def atl_for_display(atl: float, current: float) -> float:
+    """
+    Anzeigewert für „Allzeittief". Ein Tief kann logisch nie über dem aktuellen
+    Preis liegen (Keepas Stats laufen einem frischen Tief nach) → nach unten
+    klemmen. NUR für die Anzeige — die Tag-/Urteilslogik rechnet mit dem
+    unbeschnittenen `atl` aus resolve_atl(), damit der Claim nicht durch das
+    Klemmen selbst wahr wird.
+    """
+    if atl and atl > 0:
+        return round(min(atl, current), 2) if current and current > 0 else atl
+    return round(current, 2) if current and current > 0 else 0.0
+
+
+# ---------------------------------------------------------------------------
 # Tags
 # ---------------------------------------------------------------------------
 
@@ -474,28 +555,30 @@ def best_price_since_months(history: list, current: float) -> int | None:
 
 def determine_tag(
     current: float,
-    atl: float,        # Echter ATL (nur aus /product Deep-Sync, sonst 0)
+    atl: float,        # BELEGTES Allzeittief aus resolve_atl(), sonst 0
     avg90:  float,
     avg180: float,
-    atl_confirmed: bool = False,   # True nur wenn ATL aus /product stammt
+    atl_confirmed: bool = False,   # zweiter Rückgabewert von resolve_atl()
     months_since_lower: int | None = None,  # aus best_price_since_months()
 ) -> str:
     """
     Gibt den höchstpriorisierten Tag zurück (maximal einer pro Deal).
 
-    "Allzeittiefpreis" wird NUR vergeben wenn der echte ATL bekannt ist
-    (atl_confirmed=True, kommt aus /product Deep-Sync).
-    Aus /deal-Daten steht nur avg365 als Proxy — das reicht NICHT für den Tag.
+    `atl`/`atl_confirmed` MÜSSEN aus resolve_atl() kommen. Jeder Aufrufer, der
+    `atl_confirmed=True` von Hand setzt oder einen Wert übergibt, in den der
+    aktuelle Preis oder der avg365-Proxy aus /deal eingeflossen ist, erzeugt
+    genau den Bug, für den resolve_atl() geschrieben wurde: einen
+    „Allzeittiefpreis"-Badge neben einem Chart, der ihn widerlegt.
 
     Seit dem Quality Gate (2026-07-05) kommt praktisch jeder aktive Deal
-    ≥20% unter Ø90 ODER nahe ans (Proxy-)Tief — der Fallback am Ende stellt
-    sicher, dass JEDE Kachel ein Preishistorie-Urteil trägt.
+    ≥20% unter Ø90 — der Fallback am Ende stellt sicher, dass JEDE Kachel ein
+    Preishistorie-Urteil trägt, auch ohne belegtes Tief.
     """
     # avg90 || avg180 als bester verfügbarer Referenzpreis
     ref = avg90 or avg180
 
-    # Echter ATL nur wenn durch Deep-Sync bestätigt
-    if atl_confirmed and atl > 0 and current <= atl * 1.03:
+    # Absoluter Claim → nur gegen ein belegtes Tief und ohne Toleranz.
+    if atl_confirmed and atl > 0 and current <= atl * ATL_TOL:
         return "Allzeittiefpreis"
 
     # Konkretes Urteil aus echter Preishistorie — stärkstes Kaufargument
@@ -508,8 +591,10 @@ def determine_tag(
     if avg180 > 0 and current <= avg180 * 0.80:
         return "Historisch günstig"
 
-    # Nahe am Tief (unbestätigt = avg365-Proxy aus /deal)
-    if atl > 0 and current <= atl * 1.05:
+    # Nahe am belegten Tief. Früher lief dieser Zweig auch auf den avg365-Proxy
+    # aus /deal — „Historisch günstig", weil der Preis nahe am JAHRESDURCHSCHNITT
+    # lag, also bei völlig durchschnittlichem Preis. Nur noch mit belegtem Tief.
+    if atl_confirmed and atl > 0 and current <= atl * 1.05:
         return "Historisch günstig"
 
     # Deutlich unter Referenzpreis

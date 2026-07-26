@@ -33,11 +33,16 @@ export function discount(current, original) {
   return Math.round((1 - current / original) * 100)
 }
 
-/** Score → Chart-Status { text, color } */
+/** Score → Chart-Status { text, color }
+ *  ACHTUNG: `allTimeLow` muss ein BELEGTES Allzeittief sein (Backend:
+ *  products.atl_confirmed = true / scoring.resolve_atl). Der avg365-Proxy aus dem
+ *  Keepa-/deal-Endpoint darf hier nicht landen — sonst behauptet der Status
+ *  "Günstigster je" bei einem Preis nahe dem Jahresdurchschnitt. Toleranz 0 %:
+ *  die Aussage ist absolut und steht direkt am Chart. */
 export function chartStatus(prices, avgPrice, allTimeLow) {
   if (!prices || prices.length === 0) return null
   const current = prices[prices.length - 1]
-  if (allTimeLow && current <= allTimeLow * 1.02) return { text: '▼ Günstigster je',  color: '#1E7A3C' }
+  if (allTimeLow && current <= allTimeLow) return { text: '▼ Günstigster je',  color: '#1E7A3C' }
   if (avgPrice && current < avgPrice * 0.85)        return { text: '▼ Selten so tief',  color: '#E8500A' }
   if (avgPrice && current < avgPrice * 0.95)        return { text: '▼ Deutlich unter Ø', color: '#1E7A3C' }
   return                                                   { text: '▼ Leicht unter Ø',  color: '#888888' }

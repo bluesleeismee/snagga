@@ -74,6 +74,22 @@ MIGRATE_PRODUCTS = [
     # den Drilldown-Filter der Suche. Leer bei Alt-Stubs, füllt sich bei jeder
     # /product-Anreicherung (Seeding, Deep-Sync, /preis-Klick) von selbst.
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS sub_category TEXT DEFAULT ''",
+    # Ist `all_time_low` ein BELEGTES Allzeittief (Keepa stats.atl aus /product
+    # oder Minimum einer echten Preishistorie) — oder nur der avg365-Proxy, den
+    # der /deal-Endpoint liefert? Ohne diese Unterscheidung landeten beide Werte
+    # in derselben Spalte und der stündliche Preis-Check wusch den Proxy zum
+    # bestätigten Tief: "Allzeittiefpreis" bei einem Preis nahe dem
+    # Jahresdurchschnitt. Nur `true` erlaubt Tief-Claims (siehe scoring.resolve_atl).
+    "ALTER TABLE products ADD COLUMN IF NOT EXISTS atl_confirmed BOOLEAN DEFAULT false",
+]
+
+# Invariante, bei jedem Start erzwungen: ohne belegtes Tief (atl_confirmed) darf
+# keine Zeile den Badge "Allzeittiefpreis" tragen. Räumt zugleich die Altlast auf —
+# welche der bestehenden all_time_low-Werte echt sind, lässt sich rückwirkend nicht
+# feststellen, also starten alle als unbelegt. Der nächste Preis-Check/Deep-Sync
+# setzt belegte Werte und vergibt den Tag neu, wenn er zutrifft.
+REPAIR_ATL_CLAIMS = [
+    "UPDATE products SET tag='' WHERE tag='Allzeittiefpreis' AND atl_confirmed = false",
 ]
 
 CREATE_PRICE_HISTORY = """
@@ -147,4 +163,9 @@ async def init_db():
                 await conn.execute(stmt)
             except Exception:
                 pass  # Index existiert bereits
+        for stmt in REPAIR_ATL_CLAIMS:
+            try:
+                await conn.execute(stmt)
+            except Exception as e:
+                print(f"  ATL-Claim-Reparatur fehlgeschlagen: {e}")
     print("Datenbank initialisiert.")

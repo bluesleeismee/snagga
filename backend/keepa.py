@@ -386,7 +386,26 @@ def _parse_product(p: dict) -> dict | None:
     # komplett: bei Produkten, deren BuyBox meist unter Amazons/New-Preisen liegt
     # (Standardfall bei Drittanbieter-Deals), lag der ausgewiesene Ø90/Ø180 dadurch
     # weit über dem, was die BuyBox-basierte Chart-Linie tatsächlich zeigt.
-    all_time_low   = _first_pos(atl,    IDX_BUYBOX, IDX_AMAZON, IDX_NEW) or current_price
+    # ATL: KEIN Fallback auf current_price. Früher stand hier `or current_price` —
+    # fehlte Keepas stats.atl für BuyBox/Amazon/New, wurde der aktuelle Preis zum
+    # „Allzeittief" erklärt und downstream als bestätigtes Tief behandelt → jedes
+    # solche Produkt bekam den Badge "Allzeittiefpreis". 0.0 heisst jetzt ehrlich
+    # „unbekannt"; resolve_atl() in scoring.py entscheidet dann anhand der echten
+    # Preishistorie. Statt nur des ersten vorhandenen Preistyps das MINIMUM über
+    # BuyBox/Amazon/New nehmen: die Chart-Linie wählt die frischeste Serie, ein
+    # ATL aus einer anderen Serie kann sonst über dem sichtbaren Chart-Tief liegen.
+    _atl_candidates = [v for v in (_first_pos(atl, IDX_BUYBOX),
+                                   _first_pos(atl, IDX_AMAZON),
+                                   _first_pos(atl, IDX_NEW)) if v and v > 0]
+    all_time_low   = min(_atl_candidates) if _atl_candidates else 0.0
+    # Zusätzlich das Minimum der tatsächlich gelieferten History einbeziehen —
+    # dieselbe Serie, die auch den Chart zeichnet.
+    # Mindestens 3 Punkte (= ATL_MIN_HISTORY_POINTS in scoring.py): eine Serie mit
+    # nur einem Punkt ist der aktuelle Preis und würde sich selbst zum Tief erklären.
+    _hist_prices   = [p for p, _ in history if p and p > 0]
+    if len(_hist_prices) >= 3:
+        _hist_min = min(_hist_prices)
+        all_time_low = _hist_min if all_time_low <= 0 else min(all_time_low, _hist_min)
     avg_price      = _first_pos(avg90,  IDX_BUYBOX, IDX_AMAZON, IDX_NEW) or _first_pos(avg30, IDX_BUYBOX, IDX_AMAZON, IDX_NEW) or current_price
     avg90_price    = _first_pos(avg90,  IDX_BUYBOX, IDX_AMAZON, IDX_NEW) or current_price
     avg180_price   = _first_pos(avg180, IDX_BUYBOX, IDX_AMAZON, IDX_NEW) or current_price

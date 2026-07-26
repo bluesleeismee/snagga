@@ -26,6 +26,8 @@ from scoring import (
     calculate_deal_score,
     determine_tag,
     best_price_since_months,
+    resolve_atl,
+    atl_for_display,
 )
 
 AFFILIATE_TAG   = "snagga-21"  # Fallback-Tag für Kategorien ohne eigenen Tracking-Tag
@@ -417,7 +419,7 @@ async def hourly_keepa_price_check():
         # Tier-Staffelung: Top 100 (deal_score) stündlich, Rest alle 4h → ~60% Token-Einsparung
         active = await conn.fetch(
             "SELECT asin, name, brand, current_price, avg90_price, avg180_price, all_time_low, "
-            "category, rating, reviews, sales_rank FROM products "
+            "atl_confirmed, category, rating, reviews, sales_rank FROM products "
             "WHERE is_active=true AND ("
             "  last_checked IS NULL "
             "  OR (deal_score >= (SELECT PERCENTILE_CONT(0.8) WITHIN GROUP (ORDER BY deal_score) "
@@ -489,33 +491,38 @@ async def hourly_keepa_price_check():
                 kd   = enriched.get(asin) or {}
                 hist = kd.get("history") or []
                 months = best_price_since_months(hist, live_price)
-                # Bestätigtes Allzeittief — dieselbe Quelle wie der nächtliche Deep-Sync:
-                # enrich_with_keepa ruft /product, kd["all_time_low"] ist also der ECHTE
-                # ATL aus Keepas stats (nicht der avg365-Proxy aus /deal). Tiefer als der
-                # gespeicherte Wert ODER der aktuelle Preis kann es nie sein → min() der
-                # drei. Damit darf der stündliche Check "Allzeittiefpreis" vergeben, statt
-                # den vom Deep-Sync korrekt gesetzten Tag jede Stunde mit atl_confirmed=
-                # False zu überschreiben — der Bug, durch den echte Allzeittiefs binnen
-                # ~1h nach dem Sync verschwanden und nur "Historisch günstig" o.ä. blieb.
-                atl_now = min((v for v in (atl, kd.get("all_time_low") or 0.0, live_price) if v > 0),
-                              default=live_price)
+                # Allzeittief ausschliesslich über resolve_atl(). Vorher stand hier
+                # min(gespeichertes atl, keepa atl, live_price) mit fest
+                # atl_confirmed=True — zwei Fehler in einer Zeile: der aktuelle Preis
+                # war Kandidat (das Tief lag damit nie über ihm, der Claim konnte nicht
+                # mehr fehlschlagen) UND der gespeicherte Wert war womöglich der
+                # avg365-Proxy aus /deal, der so zum „bestätigten" Tief wurde.
+                # Ergebnis: 30,56 € wurde als Allzeittief beworben, obwohl der Chart
+                # daneben 22,59 € zeigte.
+                atl_now, atl_ok = resolve_atl(
+                    live_price,
+                    keepa_atl=kd.get("all_time_low") or 0.0,
+                    stored_atl=atl,
+                    stored_confirmed=bool(row["atl_confirmed"]),
+                    history_prices=[pr for pr, _ in hist if pr and pr > 0],
+                )
                 tag = determine_tag(live_price, atl_now, avg90, avg180,
-                                    atl_confirmed=True, months_since_lower=months)
+                                    atl_confirmed=atl_ok, months_since_lower=months)
                 # last_updated wird mit-refresht: bestätigt-gute Deals laufen nicht aus,
                 # auch wenn Keepa sie nicht mehr als "frischen" Deal im /deal-Stream meldet.
                 # (Volatilität steuert oben nur die weak_volatile-Deaktivierung; die
                 #  Prüf-Frequenz ergibt sich aus deal_score-Perzentil + last_checked.)
-                # all_time_low = atl_now (frisch aus /product, per min() nie über dem
-                # gespeicherten Tief oder dem aktuellen Preis) — hält den angezeigten
-                # "Allzeittief"-Wert konsistent zum oben berechneten Tag und verhindert
-                # den unmöglichen Zustand "aktueller Preis < Allzeittief" zwischen zwei
-                # Deep-Syncs.
+                # all_time_low/atl_confirmed aus derselben resolve_atl()-Momentaufnahme
+                # wie der Tag → angezeigte Zahl und Badge können nicht auseinanderlaufen.
+                # Ist das Tief unbelegt, bleibt der gespeicherte (Proxy-)Wert für die
+                # Score-Berechnung stehen, wird aber NICHT als belegt markiert.
                 await conn.execute(
                     "UPDATE products SET current_price=$2, deal_score=$3, tag=$4, "
                     "last_checked=$5, last_updated=$5, score_breakdown=$6, "
-                    "all_time_low = $7 "
+                    "all_time_low = CASE WHEN $8 THEN $7 ELSE all_time_low END, "
+                    "atl_confirmed = $8 "
                     "WHERE asin=$1",
-                    asin, live_price, score, tag, now, breakdown, atl_now,
+                    asin, live_price, score, tag, now, breakdown, atl_now, atl_ok,
                 )
 
                 # Kostenlose Keepa-History einspielen → Chart aktuell, Marke mitnehmen.
@@ -665,7 +672,12 @@ async def fetch_and_update_deals():
 
                 d["deal_score"]      = score
                 d["score_breakdown"] = breakdown
-                d["tag"]             = determine_tag(d["current_price"], d["atl"], d["avg90"], d["avg180"], atl_confirmed=False)
+                # d["atl"] ist der avg365-PROXY (der /deal-Endpoint liefert kein
+                # Allzeittief) → nie als Tief-Beleg durchreichen: atl=0/False.
+                # Der Tag kommt hier allein aus den Ø-Vergleichen; ein belegtes Tief
+                # liefert erst der Preis-Check/Deep-Sync via /product.
+                d["tag"]             = determine_tag(d["current_price"], 0.0, d["avg90"], d["avg180"],
+                                                     atl_confirmed=False)
                 # Durchgestrichener Preis = 180-Tage-Ø: deckt sich mit dem Rabatt-
                 # Tooltip ("Durchschnittspreis der letzten 6 Monate") UND mit dem
                 # Deep-Sync, der ebenfalls avg180 nutzt — sonst wechselt der
@@ -765,7 +777,14 @@ async def fetch_and_update_deals():
                         category        = EXCLUDED.category,
                         current_price   = EXCLUDED.current_price,
                         original_price  = EXCLUDED.original_price,
-                        all_time_low    = EXCLUDED.all_time_low,
+                        -- Der /deal-Endpoint liefert nur den avg365-Proxy. Ein bereits
+                        -- BELEGTES Tief (aus /product) darf er niemals überschreiben —
+                        -- genau das passierte vorher stündlich und machte aus einem
+                        -- echten Tief von 22,59 € den Proxy 30,43 €, den der nächste
+                        -- Preis-Check dann als „bestätigtes" Tief weiterverwendete.
+                        all_time_low    = CASE WHEN products.atl_confirmed
+                                               THEN products.all_time_low
+                                               ELSE EXCLUDED.all_time_low END,
                         avg_price       = EXCLUDED.avg_price,
                         avg90_price     = EXCLUDED.avg90_price,
                         avg180_price    = EXCLUDED.avg180_price,
@@ -779,11 +798,22 @@ async def fetch_and_update_deals():
                         is_top_pick     = EXCLUDED.is_top_pick,
                         is_fba          = EXCLUDED.is_fba,
                         sales_rank      = EXCLUDED.sales_rank,
-                        tag             = EXCLUDED.tag,
+                        -- Ein belegtes Allzeittief, das der neue Preis noch hält, darf
+                        -- der /deal-Run nicht mit seinem Ø-basierten Tag überschreiben
+                        -- (sonst verschwand ein echtes Tief kurz nach dem Deep-Sync).
+                        -- Hält der Preis es nicht mehr, gewinnt der neue Tag.
+                        tag             = CASE WHEN products.atl_confirmed
+                                                AND products.tag = 'Allzeittiefpreis'
+                                                AND products.all_time_low > 0
+                                                AND EXCLUDED.current_price <= products.all_time_low
+                                               THEN products.tag
+                                               ELSE EXCLUDED.tag END,
                         score_breakdown = EXCLUDED.score_breakdown
                 """,
                     asin, (p["title"] or "")[:200], p["brand"], p["image_url"], p["category"],
-                    p["current_price"], p["original_price"], p["atl"] or p["current_price"], p["avg_price"],
+                    # all_time_low bei Neuanlage: avg365-Proxy oder 0 (= unbekannt),
+                    # NIE der aktuelle Preis. atl_confirmed bleibt beim DEFAULT false.
+                    p["current_price"], p["original_price"], p["atl"] or 0.0, p["avg_price"],
                     p["avg90"] or 0.0, p["avg180"] or 0.0,
                     p["deal_score"], p["rating"], p["reviews"], True,
                     now, None,   # last_updated=now, last_checked=NULL: Discovery (/deal) liefert KEINE History.
@@ -981,18 +1011,21 @@ async def fetch_and_store_history(asin: str) -> bool:
 
     hist = kd.get("history") or []
     hist_prices = [pr for pr, _ in hist if pr and pr > 0]
-    atl_candidates = [v for v in (kd["all_time_low"], kd["current_price"],
-                                  (min(hist_prices) if hist_prices else None)) if v and v > 0]
-    atl = min(atl_candidates) if atl_candidates else kd["current_price"]
-
     # Tag MUSS aus derselben history/atl-Momentaufnahme berechnet werden, die
     # unten in price_history geschrieben wird — sonst kann der Badge-Text
     # (z.B. "Bester Preis seit über 1 Jahr") einen Preis behaupten, den der
-    # daneben gerenderte Chart widerlegt. Diese Funktion kam aus einem Deep-
-    # Sync-artigen /product-Call → atl_confirmed=True, wie in nightly_deep_sync.
+    # daneben gerenderte Chart widerlegt. Der aktuelle Preis ist dabei KEIN
+    # Tief-Kandidat mehr (vorher stand er in der min()-Liste, wodurch das „Tief"
+    # nie über ihm lag und der Claim immer durchging).
+    atl, atl_ok = resolve_atl(
+        kd["current_price"],
+        keepa_atl=kd.get("all_time_low") or 0.0,
+        history_prices=hist_prices,
+    )
     months = best_price_since_months(hist, kd["current_price"])
     tag = determine_tag(kd["current_price"], atl, kd["avg90_price"], kd["avg180_price"],
-                        atl_confirmed=True, months_since_lower=months)
+                        atl_confirmed=atl_ok, months_since_lower=months)
+    atl_stored = atl_for_display(atl, kd["current_price"]) if atl_ok else (kd["all_time_low"] or 0.0)
 
     async with db.acquire() as conn:
         await conn.execute("""
@@ -1003,13 +1036,14 @@ async def fetch_and_store_history(asin: str) -> bool:
                 image_url = CASE WHEN $11 != '' THEN $11 ELSE image_url END,
                 brand     = CASE WHEN $12 != '' THEN $12 ELSE brand END,
                 tag       = $13,
-                sub_category = CASE WHEN $14 != '' THEN $14 ELSE sub_category END
+                sub_category = CASE WHEN $14 != '' THEN $14 ELSE sub_category END,
+                atl_confirmed = $15
             WHERE asin = $1
         """,
-            asin, kd["current_price"], atl, kd["avg_price"],
+            asin, kd["current_price"], atl_stored, kd["avg_price"],
             kd["avg90_price"], kd["avg180_price"], kd["rating"], kd["reviews"],
             kd["sales_rank"], now, kd["image_url"], (kd.get("brand") or ""),
-            tag, kd.get("sub_category") or "",
+            tag, kd.get("sub_category") or "", atl_ok,
         )
         if hist:
             await conn.execute("DELETE FROM price_history WHERE asin=$1", asin)
@@ -1180,9 +1214,13 @@ async def seed_bestsellers(max_tokens: int = 6000, max_per_cat: int = 400,
                     aff_tag = _affiliate_tag_for(cls_cat)
                     hist = kd.get("history") or []
                     hist_prices = [pr for pr, _ in hist if pr and pr > 0]
-                    atl_candidates = [v for v in (kd["all_time_low"], kd["current_price"],
-                                                  (min(hist_prices) if hist_prices else None)) if v and v > 0]
-                    atl = min(atl_candidates) if atl_candidates else kd["current_price"]
+                    # Belegtes Tief oder 0 (= unbekannt) — nie der aktuelle Preis.
+                    atl_real, atl_ok = resolve_atl(
+                        kd["current_price"],
+                        keepa_atl=kd.get("all_time_low") or 0.0,
+                        history_prices=hist_prices,
+                    )
+                    atl = atl_for_display(atl_real, kd["current_price"]) if atl_ok else 0.0
 
                     # STUB-only: Name + Eckdaten speichern, KEINE Preishistorie
                     # (Schicht C). Der Chart wird erst on-demand beim ersten /preis-
@@ -1196,9 +1234,9 @@ async def seed_bestsellers(max_tokens: int = 6000, max_per_cat: int = 400,
                            last_updated, last_checked, affiliate_url,
                            is_active, is_backup, is_top_pick, is_fba,
                            sales_rank, tag, score_breakdown, first_seen, has_real_history,
-                           sub_category)
+                           sub_category, atl_confirmed)
                         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
-                                $16,$17,$18,false,false,false,$19,$20,'','',$16,false,$21)
+                                $16,$17,$18,false,false,false,$19,$20,'','',$16,false,$21,$22)
                         ON CONFLICT (asin) DO NOTHING
                     """,
                         asin, (title or "Produkt")[:200], kd.get("brand") or "",
@@ -1208,7 +1246,7 @@ async def seed_bestsellers(max_tokens: int = 6000, max_per_cat: int = 400,
                         0, kd["rating"], kd["reviews"], True,
                         now, now, f"https://www.amazon.de/dp/{asin}?tag={aff_tag}",
                         kd.get("is_fba") or False, kd["sales_rank"] or 0,
-                        kd.get("sub_category") or "",
+                        kd.get("sub_category") or "", atl_ok,
                     )
                     added += 1
 
@@ -1268,13 +1306,23 @@ async def nightly_deep_sync():
 
     async with db.acquire() as conn:
         for asin, kd in keepa_data.items():
-            # Echtes Allzeittief konsistent zur angezeigten Historie: min aus
-            # Keepa-ATL, tatsächlicher Preishistorie und aktuellem Preis. Verhindert
-            # "ATL > aktueller Preis" und dass ATL/Ø auf denselben Wert kollabieren.
+            # Echtes Allzeittief konsistent zur angezeigten Historie: Keepa-ATL und
+            # Minimum der tatsächlichen Preishistorie — der aktuelle Preis ist KEIN
+            # Kandidat (er war es früher, wodurch das Tief nie über ihm lag und
+            # "Allzeittiefpreis" immer zutraf).
             hist_prices = [pr for pr, _ in (kd.get("history") or []) if pr and pr > 0]
-            atl_candidates = [v for v in (kd["all_time_low"], kd["current_price"],
-                                          (min(hist_prices) if hist_prices else None)) if v and v > 0]
-            kd["all_time_low"] = min(atl_candidates) if atl_candidates else kd["current_price"]
+            atl_real, atl_ok = resolve_atl(
+                kd["current_price"],
+                keepa_atl=kd.get("all_time_low") or 0.0,
+                history_prices=hist_prices,
+            )
+            # In die DB/Anzeige geht der geklemmte Wert (Tief nie über aktuellem
+            # Preis); in die Tag-Entscheidung unten der unbeschnittene atl_real.
+            # Ohne Beleg bleibt der gespeicherte Wert unangetastet (SQL-CASE unten):
+            # `all_time_low` dient auch als Langfrist-Anker für passes_hard_filters()
+            # und darf dort nicht auf 0 fallen — nur `atl_confirmed` entscheidet,
+            # ob daraus ein Tief-CLAIM werden darf.
+            kd["all_time_low"] = atl_for_display(atl_real, kd["current_price"]) if atl_ok else 0.0
 
             cat_db, title_db = meta_by_asin.get(asin, ("Sonstiges", ""))
             score, breakdown = calculate_deal_score(
@@ -1284,18 +1332,21 @@ async def nightly_deep_sync():
                 price_updated=now,
                 title=title_db,
             )
-            # Deep-Sync hat echten ATL aus /product → atl_confirmed=True.
             # Echte History → konkretes Urteil "Bester Preis seit X Monaten".
+            # atl_confirmed kommt aus resolve_atl(), nicht mehr pauschal True:
+            # auch /product liefert nicht für jedes Produkt ein stats.atl, und
+            # ohne Beleg darf kein Tief-Claim entstehen.
             months = best_price_since_months(kd.get("history") or [], kd["current_price"])
-            tag = determine_tag(kd["current_price"], kd["all_time_low"],
+            tag = determine_tag(kd["current_price"], atl_real,
                                 kd["avg90_price"], kd["avg180_price"],
-                                atl_confirmed=True, months_since_lower=months)
+                                atl_confirmed=atl_ok, months_since_lower=months)
 
             await conn.execute("""
                 UPDATE products SET
                     current_price   = $2,
                     original_price  = $3,
-                    all_time_low    = $4,
+                    all_time_low    = CASE WHEN $19 THEN $4 ELSE all_time_low END,
+                    atl_confirmed   = $19,
                     avg_price       = $5,
                     avg90_price     = $6,
                     avg180_price    = $7,
@@ -1318,7 +1369,7 @@ async def nightly_deep_sync():
                 kd["avg_price"], kd["avg90_price"], kd["avg180_price"],
                 kd["rating"], kd["reviews"], kd["sales_rank"], kd["is_fba"],
                 score, tag, breakdown, now, kd["image_url"], (kd.get("brand") or ""),
-                kd.get("sub_category") or "",
+                kd.get("sub_category") or "", atl_ok,
             )
 
             # Echte Preishistorie IMMER frisch setzen: alte (evtl. simulierte)

@@ -28,7 +28,7 @@ from scraper import (
     fetch_and_update_deals, AFFILIATE_TAG, classify_category, _affiliate_tag_for,
     fetch_and_store_history, PRICE_FRESH_HOURS,
 )
-from scoring import is_catalog_quality
+from scoring import is_catalog_quality, resolve_atl, atl_for_display, ATL_TOL
 from scheduler import create_scheduler
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
@@ -724,7 +724,7 @@ async def deal_page(asin: str):
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             "SELECT asin, name, brand, image_url, current_price, original_price, tag, category, "
-            "all_time_low, avg_price, avg90_price, avg180_price, has_real_history, "
+            "all_time_low, atl_confirmed, avg_price, avg90_price, avg180_price, has_real_history, "
             "rating, reviews, affiliate_url, is_active, prime, last_checked, last_updated "
             "FROM products WHERE asin=$1",
             asin,
@@ -1041,15 +1041,21 @@ async def category_page(slug: str):
 </html>""")
 
 
-def _price_verdict(current: float, avg90: float, atl: float) -> tuple[str, str, str]:
+def _price_verdict(current: float, avg90: float, atl: float,
+                   atl_confirmed: bool = False) -> tuple[str, str, str]:
     """
     Urteil "Guter Preis?" — Ja / Warten / Nein, basierend auf aktuellem Preis
     vs. 90-Tage-Durchschnitt und Allzeittief. Spiegelt chartStatus() im Frontend,
     gibt aber eine klare Kaufempfehlung als (Label, Farbe, Begründung) zurück.
+
+    `atl` muss das BELEGTE Tief aus scoring.resolve_atl() sein (unbeschnitten, ohne
+    den aktuellen Preis als Kandidaten) und `atl_confirmed` dessen Flag. Sonst
+    entsteht dieselbe Lüge wie beim Badge: "Günstigster Preis seit Messbeginn",
+    während der Chart daneben einen tieferen Punkt zeigt.
     """
     if not current or current <= 0:
         return ("Unbekannt", "#7E7A75", "Für dieses Produkt liegt gerade kein aktueller Preis vor.")
-    if atl and current <= atl * 1.02:
+    if atl_confirmed and atl and current <= atl * ATL_TOL:
         return ("Ja", "#1E7A3C", "Günstigster Preis seit Messbeginn — besser wird es selten.")
     if avg90 and current <= avg90 * 0.85:
         return ("Ja", "#1E7A3C", "Selten so günstig — deutlich unter dem 90-Tage-Durchschnitt.")
@@ -1255,16 +1261,21 @@ def _compute_detail(row, hist_rows) -> dict:
     # Keepas fertiger 90-Tage-Stat nur noch als Fallback (siehe avg90 unten).
     avg90_keepa = row["avg90_price"] or row["avg_price"] or 0
     avg180  = row["avg180_price"] or 0
-    atl     = row["all_time_low"] or 0
-    # ATL konsistent zum angezeigten Chart: das echte Tief der gespeicherten
-    # Historie einbeziehen. Sonst behauptet das Urteil "günstigster Preis seit
-    # Messbeginn", obwohl der Chart sichtbar einen tieferen Punkt zeigt.
-    hist_min = min((p for p, _ in points), default=0)
-    if hist_min and (not atl or hist_min < atl):
-        atl = hist_min
-    # Anzeige-Sicherung: Ein Allzeittief kann logisch nie über dem aktuellen Preis liegen.
-    if atl and current and atl > current:
-        atl = current
+    # ATL über DIESELBE kanonische Funktion wie Tag und Badge (scoring.resolve_atl):
+    # belegte Quellen sind Keepas stats.atl (DB-Spalte, nur wenn atl_confirmed) und
+    # das Minimum der gespeicherten Historie, die auch den Chart zeichnet. Der
+    # aktuelle Preis ist kein Kandidat. Vorher rechnete diese Funktion ihr eigenes
+    # Tief aus — deshalb konnten Kachel-Badge (30,56 € = "Allzeittiefpreis") und
+    # Modal-Anzeige (22,59 € "Allzeittief") gleichzeitig verschiedene Zahlen zeigen.
+    atl_real, atl_ok = resolve_atl(
+        current,
+        stored_atl=row["all_time_low"] or 0,
+        stored_confirmed=bool(row["atl_confirmed"]) if "atl_confirmed" in row.keys() else False,
+        history_prices=[p for p, _ in points],
+    )
+    # Anzeigewert: geklemmt (Tief nie über aktuellem Preis). Das Urteil unten
+    # bekommt bewusst den UNGEKLEMMTEN Wert — sonst macht das Klemmen den Claim wahr.
+    atl = atl_for_display(atl_real, current) if atl_ok else 0
     # Ø 90 Tage / 1 Jahr / Gesamt ALLE aus derselben `points`-Reihe berechnen, die
     # auch den Chart zeichnet (zeitgewichtet, siehe _windowed_avg) — so passt die
     # angezeigte Ø-Zahl JEDES Fensters garantiert zur sichtbaren Chart-Linie
@@ -1279,7 +1290,7 @@ def _compute_detail(row, hist_rows) -> dict:
     avg90    = _windowed_avg(points, current, 90) or avg90_keepa
     avg365   = _windowed_avg(points, current, 365)
     avg_full = _windowed_avg(points, current, None)
-    verdict, vcolor, vreason = _price_verdict(current, avg90, atl)
+    verdict, vcolor, vreason = _price_verdict(current, avg90, atl_real, atl_ok)
     # Chart nur mit verifizierter Keepa-Historie — nie erfundene Kurven zeigen.
     # Drei Zeitfenster für den 90/365/Gesamt-Umschalter auf der Preisseite; jedes
     # bekommt seine eigene Ø-Linie (statt fix Ø90 in allen drei anzuzeigen).
@@ -1325,8 +1336,8 @@ async def api_product_detail(asin: str, request: Request):
     pool = await get_pool()
 
     _row_sql = ("SELECT asin, name, avg_price, avg90_price, avg180_price, all_time_low, "
-                "current_price, is_active, has_real_history, last_checked, last_updated "
-                "FROM products WHERE asin=$1")
+                "atl_confirmed, current_price, is_active, has_real_history, last_checked, "
+                "last_updated FROM products WHERE asin=$1")
     async with pool.acquire() as conn:
         row = await conn.fetchrow(_row_sql, asin)
     if not row:
@@ -1568,9 +1579,14 @@ async def preis_check(request: Request, q: str = Query(default="")):
         now  = datetime.utcnow()
         hist = kd.get("history") or []
         hist_prices    = [pr for pr, _ in hist if pr and pr > 0]
-        atl_candidates = [v for v in (kd["all_time_low"], kd["current_price"],
-                                      min(hist_prices) if hist_prices else None) if v and v > 0]
-        atl = min(atl_candidates) if atl_candidates else kd["current_price"]
+        # Belegtes Tief oder 0 (= unbekannt). Der aktuelle Preis ist kein Kandidat —
+        # sonst ist jedes neu aufgenommene Produkt per Definition auf Allzeittief.
+        atl_real, atl_ok = resolve_atl(
+            kd["current_price"],
+            keepa_atl=kd.get("all_time_low") or 0.0,
+            history_prices=hist_prices,
+        )
+        atl = atl_for_display(atl_real, kd["current_price"]) if atl_ok else 0.0
 
         async with pool.acquire() as conn:
             await conn.execute("""
@@ -1580,9 +1596,10 @@ async def preis_check(request: Request, q: str = Query(default="")):
                    avg90_price, avg180_price, deal_score, rating, reviews, prime,
                    last_updated, last_checked, affiliate_url,
                    is_active, is_backup, is_top_pick, is_fba,
-                   sales_rank, tag, score_breakdown, first_seen, sub_category)
+                   sales_rank, tag, score_breakdown, first_seen, sub_category,
+                   atl_confirmed)
                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
-                        $16,$17,$18,false,false,false,$19,$20,'','',$16,$21)
+                        $16,$17,$18,false,false,false,$19,$20,'','',$16,$21,$22)
                 ON CONFLICT (asin) DO NOTHING
             """,
                 asin, (kd["title"] or "Produkt")[:200], kd.get("brand") or "",
@@ -1592,7 +1609,7 @@ async def preis_check(request: Request, q: str = Query(default="")):
                 0, kd["rating"], kd["reviews"], True,
                 now, now, f"https://www.amazon.de/dp/{asin}?tag={aff_tag}",
                 kd["is_fba"], kd["sales_rank"] or 0,
-                kd.get("sub_category") or "",
+                kd.get("sub_category") or "", atl_ok,
             )
             if hist:
                 await conn.execute("DELETE FROM price_history WHERE asin=$1", asin)
@@ -2097,7 +2114,7 @@ async def price_page(request: Request, asin: str):
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             "SELECT asin, name, brand, image_url, current_price, original_price, "
-            "all_time_low, avg_price, avg90_price, avg180_price, category, "
+            "all_time_low, atl_confirmed, avg_price, avg90_price, avg180_price, category, "
             "affiliate_url, is_active, rating, reviews, tag, has_real_history, prime, "
             "last_checked, last_updated "
             "FROM products WHERE asin=$1",
@@ -2118,7 +2135,7 @@ async def price_page(request: Request, asin: str):
             async with pool.acquire() as conn:
                 row = await conn.fetchrow(
                     "SELECT asin, name, brand, image_url, current_price, original_price, "
-                    "all_time_low, avg_price, avg90_price, avg180_price, category, "
+                    "all_time_low, atl_confirmed, avg_price, avg90_price, avg180_price, category, "
                     "affiliate_url, is_active, rating, reviews, tag, has_real_history, prime, "
                     "last_checked, last_updated "
                     "FROM products WHERE asin=$1",
@@ -2161,9 +2178,12 @@ async def price_page(request: Request, asin: str):
 
     canonical = f"https://www.snagga.de/preis/{asin}"
     title = f"{name} — Preisverlauf & Preis-Check | snagga.de"
+    # Allzeittief nur nennen, wenn es belegt ist (atl > 0). Ohne Beleg stand hier
+    # "Allzeittief 0,00 €" bzw. der aktuelle Preis — beides irreführend.
+    _atl_part = f"Allzeittief {eur(atl)}, " if atl and atl > 0 else ""
     desc  = html.escape(
         f"Preisverlauf von {row['name'] or 'diesem Produkt'}: aktueller Preis {eur(current)}, "
-        f"Allzeittief {eur(atl)}, 90-Tage-Schnitt {eur(avg90)}. Lohnt sich der Kauf gerade? snagga sagt es dir."
+        f"{_atl_part}90-Tage-Schnitt {eur(avg90)}. Lohnt sich der Kauf gerade? snagga sagt es dir."
     )
 
     ld_json: dict = {
