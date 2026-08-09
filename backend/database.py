@@ -118,6 +118,45 @@ CREATE TABLE IF NOT EXISTS price_alerts (
 """
 
 
+# Beobachtungsprotokoll für die geplante Datenauswertung ("Wann kauft man was am
+# günstigsten?", siehe TODO.md).
+#
+# Warum eine eigene Tabelle: `products` enthält NUR Deals, die alle Filter
+# bestanden haben. Für jede Quotenaussage fehlt damit der Nenner — man kann nicht
+# sagen "bei X % der Angebote war der Preis zuletzt schon niedriger", wenn man nur
+# die guten kennt. Hier landet deshalb JEDER Keepa-Kandidat, auch die verworfenen,
+# mit dem Grund der Ablehnung.
+#
+# Methodische Grenze, die in jede Veröffentlichung gehört: Der Keepa-/deal-
+# Endpoint liefert bereits vorgefiltert nur Angebote mit mind. −15 % gegenüber
+# Keepas eigener Referenz. Die Grundgesamtheit ist also "als Rabatt beworbene
+# Angebote", NICHT "alle Amazon-Angebote". Aussagen entsprechend formulieren.
+#
+# Eine Zeile pro ASIN und Tag (UNIQUE): der Job läuft stündlich, tagesgenau reicht
+# für die Auswertung und hält die Tabelle klein (~450–1500 Zeilen/Tag statt 10.800).
+CREATE_DEAL_OBSERVATIONS = """
+CREATE TABLE IF NOT EXISTS deal_observations (
+    id            SERIAL PRIMARY KEY,
+    asin          TEXT NOT NULL,
+    observed_day  DATE NOT NULL,
+    observed_at   TIMESTAMP NOT NULL DEFAULT now(),
+    category      TEXT DEFAULT '',
+    current_price REAL NOT NULL,
+    avg30         REAL DEFAULT 0,
+    avg90         REAL DEFAULT 0,
+    avg180        REAL DEFAULT 0,
+    avg365        REAL DEFAULT 0,
+    list_price    REAL DEFAULT 0,
+    claimed_pct   INTEGER DEFAULT 0,
+    rating        REAL DEFAULT 0,
+    reviews       INTEGER DEFAULT 0,
+    accepted      BOOLEAN DEFAULT false,
+    reject_reason TEXT DEFAULT '',
+    UNIQUE (asin, observed_day)
+)
+"""
+
+
 async def create_pool() -> asyncpg.Pool:
     global pool
     pool = await asyncpg.create_pool(
@@ -145,6 +184,9 @@ CREATE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_price_history_asin ON price_history(asin)",
     "CREATE INDEX IF NOT EXISTS idx_alerts_pending ON price_alerts(asin) WHERE confirmed = true AND notified_at IS NULL",
     "CREATE INDEX IF NOT EXISTS idx_alerts_token ON price_alerts(token)",
+    # Auswertung läuft immer über Zeitraum, oft zusätzlich nach Kategorie gruppiert
+    "CREATE INDEX IF NOT EXISTS idx_obs_day ON deal_observations(observed_day)",
+    "CREATE INDEX IF NOT EXISTS idx_obs_day_cat ON deal_observations(observed_day, category)",
 ]
 
 async def init_db():
@@ -153,6 +195,7 @@ async def init_db():
         await conn.execute(CREATE_PRODUCTS)
         await conn.execute(CREATE_PRICE_HISTORY)
         await conn.execute(CREATE_PRICE_ALERTS)
+        await conn.execute(CREATE_DEAL_OBSERVATIONS)
         for stmt in MIGRATE_PRODUCTS:
             try:
                 await conn.execute(stmt)

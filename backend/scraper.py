@@ -629,6 +629,30 @@ async def fetch_and_update_deals():
         got_any = False
         seen_asins: set[str] = set()
 
+        # Beobachtungsprotokoll: JEDER Kandidat wird hier gesammelt — auch die
+        # gleich wieder verworfenen. `products` enthält nur die Gewinner, damit
+        # fehlt jeder Quotenaussage der Nenner (siehe CREATE_DEAL_OBSERVATIONS in
+        # database.py). Geschrieben wird gebündelt nach dem Durchlauf, damit die
+        # synchrone process()-Schleife nichts awaiten muss.
+        observations: list[tuple] = []
+        obs_seen: set[str] = set()
+
+        def observe(d, cat, accepted: bool, reason: str = ""):
+            if d["asin"] in obs_seen:
+                return
+            obs_seen.add(d["asin"])
+            observations.append((
+                d["asin"], cat or "", d["current_price"],
+                d.get("avg30") or 0.0, d.get("avg90") or 0.0, d.get("avg180") or 0.0,
+                # d["atl"] ist der avg365-Proxy aus dem /deal-Endpoint (KEIN belegtes
+                # Allzeittief) — hier deshalb ehrlich als avg365 abgelegt.
+                d.get("atl") or 0.0,
+                d.get("list_price") or 0.0,
+                int(d.get("delta_pct") or 0),
+                d.get("rating") or 0.0, int(d.get("reviews") or 0),
+                accepted, reason,
+            ))
+
         # ── 2. Hard Filters + Scoring (pro Seite, gemeinsam für beide Abfragen) ──
         def process(page_deals):
             nonlocal skipped_cat, skipped_price, skipped_filter, skipped_score
@@ -637,17 +661,20 @@ async def fetch_and_update_deals():
                     continue  # Dedup: Elektronik-Zusatzabfrage überschneidet sich mit Hauptabfrage
                 if d["current_price"] < MIN_PRICE:
                     skipped_price += 1
+                    observe(d, None, False, "preis_min")
                     continue
 
                 cat = classify_category(d["title"] or d["brand"], d.get("root_cat", 0))
                 if cat is None:
                     skipped_cat += 1
+                    observe(d, None, False, "kategorie_unbekannt")
                     continue
                 d["category"] = cat
 
                 cat_min = CATEGORY_MIN_PRICE.get(cat, MIN_PRICE)
                 if d["current_price"] < cat_min:
                     skipped_price += 1
+                    observe(d, cat, False, "preis_min_kategorie")
                     continue
 
                 if not passes_hard_filters(
@@ -657,6 +684,7 @@ async def fetch_and_update_deals():
                     brand=d.get("brand") or "",
                 ):
                     skipped_filter += 1
+                    observe(d, cat, False, "hard_filter")
                     continue
 
                 score, breakdown = calculate_deal_score(
@@ -668,7 +696,10 @@ async def fetch_and_update_deals():
                 )
                 if score < MIN_SCORE:
                     skipped_score += 1
+                    observe(d, cat, False, "score_zu_niedrig")
                     continue
+
+                observe(d, cat, True)
 
                 d["deal_score"]      = score
                 d["score_breakdown"] = breakdown
@@ -731,6 +762,27 @@ async def fetch_and_update_deals():
         # ── 3. DB schreiben ──────────────────────────────────────────────────
         db = await get_pool()
         async with db.acquire() as conn:
+
+            # Beobachtungsprotokoll zuerst und bewusst fehlertolerant: es ist reine
+            # Auswertungs-Nebenwirkung. Schlägt es fehl, darf der Deal-Job trotzdem
+            # durchlaufen — Deals auszuliefern ist wichtiger als die Statistik.
+            # ON CONFLICT DO NOTHING greift über UNIQUE(asin, observed_day): der Job
+            # läuft stündlich, gespeichert wird die erste Beobachtung des Tages.
+            if observations:
+                try:
+                    await conn.executemany(
+                        "INSERT INTO deal_observations "
+                        "(asin, observed_day, category, current_price, avg30, avg90, avg180, "
+                        " avg365, list_price, claimed_pct, rating, reviews, accepted, reject_reason) "
+                        "VALUES ($1, CURRENT_DATE, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) "
+                        "ON CONFLICT (asin, observed_day) DO NOTHING",
+                        observations,
+                    )
+                    _acc = sum(1 for o in observations if o[-2])
+                    print(f"  Beobachtungsprotokoll: {len(observations)} Kandidaten "
+                          f"({_acc} angenommen, {len(observations) - _acc} verworfen)")
+                except Exception as e:
+                    print(f"  Beobachtungsprotokoll fehlgeschlagen (unkritisch): {e}")
 
             await conn.execute("UPDATE products SET is_top_pick=false")
 

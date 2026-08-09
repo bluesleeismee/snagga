@@ -42,14 +42,32 @@ die Filter **bestanden** haben — für eine Quote fehlt der Nenner.
 **Positiv:** Snaggas eigene Rabattangaben sind dadurch sauber — verglichen wird
 gegen den echten 180-Tage-Schnitt, nicht gegen einen aufgeblasenen UVP.
 
-**Voraussetzung für den Report (noch zu bauen):**
+**Voraussetzung für den Report — ✅ GEBAUT 2026-08-09:**
 
-1. Neue Tabelle, die bei jedem stündlichen Discovery-Lauf **jeden** Keepa-
-   Kandidaten protokolliert — auch die verworfenen. Felder: beworbener Rabatt,
-   tatsächlicher Preis, Ø90, Ø180, belegtes Allzeittief, Zeitstempel.
-2. `LIST_PRICE` (csv[4]) mitschneiden — kommt gratis im Response mit.
+1. Tabelle `deal_observations` (`database.py`): protokolliert bei jedem
+   stündlichen Discovery-Lauf **jeden** Keepa-Kandidaten — auch die verworfenen,
+   mit `accepted` und `reject_reason`. Damit existiert der Nenner.
+   `UNIQUE (asin, observed_day)` + `ON CONFLICT DO NOTHING`: eine Zeile pro ASIN
+   und Tag statt 24, hält die Tabelle bei ~450–1.500 Zeilen/Tag.
+2. `LIST_PRICE` (Keepa csv-Index 4, neu `IDX_LIST`/`IDX_LIST_P` in `keepa.py`)
+   wird mitgeschnitten. Nur protokolliert, **nicht angezeigt** — Amazon weist
+   heute meist einen „typischen Preis" statt der UVP aus.
+3. Schreibpfad in `scraper.py::fetch_and_update_deals`: `observe()` sammelt
+   während der synchronen Filterschleife, ein gebündeltes `executemany` schreibt
+   danach. Bewusst fehlertolerant (try/except mit Log) — die Statistik darf den
+   Deal-Job nie blockieren.
 
-Ab Bau sammeln sich Daten; für eine belastbare Aussage braucht es ~2 Monate.
+Ab dem nächsten Deploy sammeln sich Daten. Für eine belastbare Aussage
+~2 Monate rechnen, also **auswertbar ab etwa Mitte Oktober**.
+
+**Beim Auswerten unbedingt beachten:**
+
+- Grundgesamtheit ist „von Keepa als Rabatt gemeldete Angebote" (der /deal-
+  Endpoint filtert bereits auf mind. −15 %, Elektronik-Zusatzabfrage −10 %),
+  **nicht** „alle Amazon-Angebote". Jede Quote entsprechend formulieren.
+- `avg365` in der Tabelle ist der Proxy aus dem /deal-Endpoint, **kein** belegtes
+  Allzeittief (vgl. `resolve_atl`). Nicht als „Tiefstpreis" auswerten.
+- Erst ab Deploy-Datum gefüllt; frühere Zeiträume gibt es nicht.
 
 **Formulierung des Ergebnisses** muss zur neuen Positionierung passen: nicht
 „X % der Rabatte sind Fake", sondern z. B. „Bei X % der Angebote war der Preis

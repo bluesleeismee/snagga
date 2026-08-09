@@ -19,6 +19,12 @@ KEEPA_EPOCH = 21_564_000
 IDX_AMAZON = 0
 IDX_NEW    = 1
 IDX_SALES  = 3
+# LIST_PRICE = Amazons hinterlegte UVP. Kommt gratis im Response mit und wurde
+# bisher weggeworfen. Wird NUR protokolliert (deal_observations), nicht angezeigt:
+# Amazon weist heute meist einen "typischen Preis" statt der UVP aus, LIST_PRICE
+# bildet den beworbenen Streichpreis daher nur teilweise ab. Als zweiter,
+# unabhängiger Vergleichsmaßstab für die Datenauswertung trotzdem wertvoll.
+IDX_LIST   = 4
 IDX_RATING = 16
 IDX_BUYBOX = 18
 
@@ -165,6 +171,7 @@ async def fetch_keepa_deals(
     # 16=RATING(×10), 17=COUNT_REVIEWS, 18=BUY_BOX_SHIPPING
     IDX_AMAZON   = 0
     IDX_SALES    = 3
+    IDX_LIST_P   = 4     # LIST_PRICE (UVP) — nur fürs Beobachtungsprotokoll
     IDX_NEW_FBA  = 10
     IDX_RATING   = 16
     IDX_REVIEWS  = 17
@@ -246,6 +253,9 @@ async def fetch_keepa_deals(
             "is_fba":        is_fba,
             "delta_pct":     dp,
             "root_cat":      d.get("rootCat", 0),
+            # Nur fürs Beobachtungsprotokoll (deal_observations), nicht für die
+            # Anzeige — siehe Kommentar bei IDX_LIST oben. 0.0 = keine UVP hinterlegt.
+            "list_price":    c2e(_cv(cur_arr, IDX_LIST_P)),
         })
 
     return results
