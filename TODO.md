@@ -1,5 +1,43 @@
 # snagga.de — Nächste Aufgaben (Stand: 2026-08-09)
 
+## Wachstumsplan — Reihenfolge (beschlossen 2026-08-09)
+
+Ausgangslage: GSC meldet 97 indexierte gegen 2.880 nicht indexierte Seiten.
+**Kernbefund: nicht die Seitenmenge ist das Problem, sondern fehlende
+Domain-Autorität.** Es gibt bereits ~1.450 `/preis`-Seiten — noch mehr
+Produktseiten zu bauen ändert daran nichts.
+
+| # | Maßnahme | Status |
+|---|---|---|
+| 1 | Sitemap entdoppelt, interne Links kanonisch | ✅ 50226fd |
+| 2 | Positionierung „richtiger Zeitpunkt" | ✅ 7bc81e2 |
+| 3 | `deal_observations` — Datenerfassung für die Story | ✅ 8b2f993 |
+| 4 | Deal-Nachschub: Hard-Filter messen und justieren | ⏳ läuft (c13cec3) |
+| 5 | Marken-Hubs `/marke/{brand}` | ⬜ als Nächstes |
+| 6 | Bestenlisten `/bestenliste/{kategorie}/{jahr-monat}` | ⬜ |
+| 7 | Pinterest-Automatisierung | ⬜ |
+| 8 | Datenstory + Presse-Pitches | ⬜ Oktober |
+
+**Zu 5 (Marken-Hubs) — vor dem Bau klären:** Wie sauber ist die `brand`-Spalte
+gefüllt? Laut Kommentar in `scoring.py` ist sie bei `/deal`-Daten oft leer
+(Backfill läuft). Mindestanzahl Produkte pro Marke festlegen, sonst entstehen
+genau die dünnen Seiten, die Google ohnehin nicht indexiert. Zweck der Hubs ist
+eine zweite Navigationsebene — aktuell hängen ~1.450 Produktseiten an nur 11
+Kategorieseiten, Googlebot kommt bei knappem Budget nicht in die Tiefe.
+
+**Bewusst NICHT:** bezahlte Werbung (24h-Amazon-Cookies rechnen sich nie),
+Reddit-/Foren-Posting (wird als Spam erkannt), gekaufte Backlinks.
+
+**Erwartung:** Vor Oktober wirkt nichts davon. Der Indikator ist nicht das
+Sinken der nicht-indexierten Seiten, sondern ob die **indexierten** über 97
+steigen. Bleibt die Zahl stehen, ist der Engpass Autorität — dann dort ansetzen.
+
+**Offener Nebenpunkt:** `deal_observations` wächst mit ~2.800 Zeilen/Tag
+(doppelt so viel wie geschätzt) → ~1 Mio. Zeilen und 150–250 MB pro Jahr,
+Supabase-Limit ist 500 MB. Aufbewahrungsregel einbauen, bevor es eng wird.
+
+---
+
 ## 2026-08-09: Deal-Nachschub — Hard-Filter sichtbar gemacht
 
 **Befund im Render-Log (15:05):** Von ~3.300 Kandidaten pro Lauf bleiben nur
