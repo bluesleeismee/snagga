@@ -22,6 +22,7 @@ from keepa import (
 from scoring import (
     CATEGORY_MAX_RANK,
     passes_hard_filters,
+    hard_filter_reason,
     is_catalog_quality,
     calculate_deal_score,
     determine_tag,
@@ -636,6 +637,9 @@ async def fetch_and_update_deals():
         # synchrone process()-Schleife nichts awaiten muss.
         observations: list[tuple] = []
         obs_seen: set[str] = set()
+        # Welche Hard-Filter-Bedingung wie oft greift — ohne das sagt das Log nur
+        # "N durch HardFilter aussortiert" und man justiert blind nach.
+        hf_breakdown: dict[str, int] = {}
 
         def observe(d, cat, accepted: bool, reason: str = ""):
             if d["asin"] in obs_seen:
@@ -677,14 +681,16 @@ async def fetch_and_update_deals():
                     observe(d, cat, False, "preis_min_kategorie")
                     continue
 
-                if not passes_hard_filters(
+                hf_reason = hard_filter_reason(
                     d["rating"], d["reviews"], d["sales_rank"], cat,
                     d["current_price"], d["avg90"], d["atl"], d["avg180"],
                     title=d["title"] or "",
                     brand=d.get("brand") or "",
-                ):
+                )
+                if hf_reason:
                     skipped_filter += 1
-                    observe(d, cat, False, "hard_filter")
+                    hf_breakdown[hf_reason] = hf_breakdown.get(hf_reason, 0) + 1
+                    observe(d, cat, False, f"hard_filter:{hf_reason}")
                     continue
 
                 score, breakdown = calculate_deal_score(
@@ -757,6 +763,10 @@ async def fetch_and_update_deals():
             f"  Gefiltert: {skipped_price} Preis<{MIN_PRICE}€ · "
             f"{skipped_cat} unbekannte Kat · {skipped_filter} HardFilter · {skipped_score} Score"
         )
+        if hf_breakdown:
+            _hf = " · ".join(f"{k}:{v}" for k, v in
+                             sorted(hf_breakdown.items(), key=lambda kv: -kv[1]))
+            print(f"  HardFilter im Detail: {_hf}")
         print(f"  {len(candidates)} qualifiziert · {len(active_pool)} aktiv · {len(backup_pool)} Backup")
 
         # ── 3. DB schreiben ──────────────────────────────────────────────────

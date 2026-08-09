@@ -3,8 +3,19 @@ Deal-Scoring, Hard-Filter und Tag-Logik für snagga.de
 """
 import math
 import json
+import os
 import re
 from datetime import datetime
+
+# Quality Gate (a): Wie weit muss der Preis unter dem Ø90 liegen, damit ein
+# Angebot ins Regal darf? 0.80 = mindestens 20 % darunter.
+#
+# Über Env verstellbar, weil das der wirksamste Regler für die ANGEBOTSMENGE ist:
+# Keepa liefert nur Kandidaten ab −15 % gegenüber der eigenen Referenz, dieses
+# Gate verlangt danach nochmals −20 % gegenüber Ø90 — die Kombination ist streng.
+# Zum Nachjustieren KEIN Deploy nötig, nur die Env-Variable in Render ändern.
+# Höher (z. B. 0.85) = mehr Deals, schwächerer Preisvorteil. Niedriger = strenger.
+QUALITY_DISCOUNT_FACTOR = float(os.getenv("QUALITY_DISCOUNT_FACTOR", "0.80"))
 
 # ---------------------------------------------------------------------------
 # Bekannte Marken (Quality Gate)
@@ -224,6 +235,85 @@ def is_excluded_condition(title: str) -> bool:
 # Hard Filters
 # ---------------------------------------------------------------------------
 
+def hard_filter_reason(
+    rating:     float,
+    reviews:    int,
+    sales_rank: int,
+    category:   str,
+    current:    float,
+    avg90:      float,
+    atl:        float,
+    avg180:     float = 0,
+    title:      str = "",
+    brand:      str = "",
+) -> str | None:
+    """
+    Wie passes_hard_filters(), gibt aber den GRUND der Ablehnung zurück
+    (None = bestanden). Existiert, weil "1.652 durch HardFilter aussortiert"
+    im Log nicht verrät, welche der acht Bedingungen der Engpass ist — ohne
+    diese Aufschlüsselung lässt sich das Deal-Angebot nur blind nachjustieren.
+
+    passes_hard_filters() ist ein dünner Wrapper darum, damit bestehende
+    Aufrufer unverändert weiterlaufen.
+    """
+    # Nur Neuware: gebrauchte / generalüberholte / B-Ware sofort aussortieren.
+    if is_excluded_condition(title):
+        return "zustand"
+
+    if rating < 4.0:
+        return "rating"
+
+    # Allgemein: mind. 100 Reviews; Auto & Motorrad: 500 (filtert Modell-Nischenteile)
+    min_reviews = 500 if category == "Auto & Motorrad" else 100
+    if reviews < min_reviews:
+        return "reviews"
+
+    max_rank = CATEGORY_MAX_RANK.get(category, 30_000)
+    if sales_rank > 0 and sales_rank > max_rank:
+        return "sales_rank"
+
+    if avg90 <= 0 and avg180 <= 0:
+        return "keine_referenz"
+
+    # Anti-Spike: current muss unter avg90 UND avg180 liegen
+    # Verhindert Fake-Deals durch kurze Preisspikes (normal €30 → spike €60 → zurück €30)
+    ref90  = avg90  if avg90  > 0 else None
+    ref180 = avg180 if avg180 > 0 else None
+
+    below90  = ref90  is None or current <= ref90  * 0.92
+    below180 = ref180 is None or current <= ref180 * 0.92
+
+    if not (below90 and below180):
+        return "anti_spike"
+
+    # avg365 als langfristiger Anker (atl aus /deal = avg365):
+    # Wenn avg180 deutlich über avg365 liegt, war avg180 durch einen länger andauernden
+    # Spike inflated. Dann muss current auch unter avg365 liegen.
+    if atl > 0 and avg180 > 0 and atl < avg180 * 0.80:
+        if current > atl * 0.95:
+            return "avg365_anker"
+
+    # ── Quality Gate (2026-07-05): Glaubwürdigkeit vor Menge ────────────────
+    # snagga verspricht, dass jeder gezeigte Preis gegen die echte Historie
+    # geprüft ist — das Regal muss diesen Anspruch einlösen.
+    # (a) Der Preisvorteil muss substanziell sein: ≥20% unter Ø90 (Fallback Ø180)
+    #     ODER nahe am Allzeittief (aus /deal ist atl der avg365-Proxy —
+    #     auch das ist ein starkes "historisch günstig"-Signal).
+    ref = avg90 if avg90 > 0 else avg180
+    real_discount = ref > 0 and current <= ref * QUALITY_DISCOUNT_FACTOR
+    near_atl      = atl > 0 and current <= atl * 1.05
+    if not (real_discount or near_atl):
+        return "rabatt_zu_klein"
+
+    # (b) Vertrauens-Signal: bekannte Marke ODER sehr solide Review-Basis.
+    #     Das Marken-Feld ist bei /deal-Daten oft leer (Backfill läuft) —
+    #     Rating + Review-Anzahl ist daher das primäre Signal, Marke der Bonus.
+    if not is_known_brand(brand, title) and not (rating >= 4.3 and reviews >= 500):
+        return "kein_vertrauenssignal"
+
+    return None
+
+
 def passes_hard_filters(
     rating:     float,
     reviews:    int,
@@ -237,61 +327,10 @@ def passes_hard_filters(
     brand:      str = "",
 ) -> bool:
     """Gibt True zurück wenn das Produkt alle Mindestanforderungen erfüllt."""
-    # Nur Neuware: gebrauchte / generalüberholte / B-Ware sofort aussortieren.
-    if is_excluded_condition(title):
-        return False
-
-    if rating < 4.0:
-        return False
-
-    # Allgemein: mind. 100 Reviews; Auto & Motorrad: 500 (filtert Modell-Nischenteile)
-    min_reviews = 500 if category == "Auto & Motorrad" else 100
-    if reviews < min_reviews:
-        return False
-
-    max_rank = CATEGORY_MAX_RANK.get(category, 30_000)
-    if sales_rank > 0 and sales_rank > max_rank:
-        return False
-
-    if avg90 <= 0 and avg180 <= 0:
-        return False
-
-    # Anti-Spike: current muss unter avg90 UND avg180 liegen
-    # Verhindert Fake-Deals durch kurze Preisspikes (normal €30 → spike €60 → zurück €30)
-    ref90  = avg90  if avg90  > 0 else None
-    ref180 = avg180 if avg180 > 0 else None
-
-    below90  = ref90  is None or current <= ref90  * 0.92
-    below180 = ref180 is None or current <= ref180 * 0.92
-
-    if not (below90 and below180):
-        return False
-
-    # avg365 als langfristiger Anker (atl aus /deal = avg365):
-    # Wenn avg180 deutlich über avg365 liegt, war avg180 durch einen länger andauernden
-    # Spike inflated. Dann muss current auch unter avg365 liegen.
-    if atl > 0 and avg180 > 0 and atl < avg180 * 0.80:
-        if current > atl * 0.95:
-            return False
-
-    # ── Quality Gate (2026-07-05): Glaubwürdigkeit vor Menge ────────────────
-    # snagga wirbt mit "keine Fake-Rabatte" — das Regal muss den Claim beweisen.
-    # (a) Der Rabatt muss substanziell sein: ≥20% unter Ø90 (Fallback Ø180)
-    #     ODER nahe am Allzeittief (aus /deal ist atl der avg365-Proxy —
-    #     auch das ist ein starkes "historisch günstig"-Signal).
-    ref = avg90 if avg90 > 0 else avg180
-    real_discount = ref > 0 and current <= ref * 0.80
-    near_atl      = atl > 0 and current <= atl * 1.05
-    if not (real_discount or near_atl):
-        return False
-
-    # (b) Vertrauens-Signal: bekannte Marke ODER sehr solide Review-Basis.
-    #     Das Marken-Feld ist bei /deal-Daten oft leer (Backfill läuft) —
-    #     Rating + Review-Anzahl ist daher das primäre Signal, Marke der Bonus.
-    if not is_known_brand(brand, title) and not (rating >= 4.3 and reviews >= 500):
-        return False
-
-    return True
+    return hard_filter_reason(
+        rating, reviews, sales_rank, category, current, avg90, atl,
+        avg180, title, brand,
+    ) is None
 
 
 def is_catalog_quality(

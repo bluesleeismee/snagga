@@ -1,5 +1,42 @@
 # snagga.de — Nächste Aufgaben (Stand: 2026-08-09)
 
+## 2026-08-09: Deal-Nachschub — Hard-Filter sichtbar gemacht
+
+**Befund im Render-Log (15:05):** Von ~3.300 Kandidaten pro Lauf bleiben nur
+**24 aktive Deals** übrig, bei `MAX_ACTIVE = 500`. Aufschlüsselung des Logs:
+1.462 unter der 20-Euro-Grenze, 160 unbekannte Kategorie, **1.652 am Hard-Filter**,
+0 am Score. Wenig Ware heisst wenig Klicks und wenig Affiliate-Umsatz.
+
+Welche der acht Hard-Filter-Bedingungen der Engpass ist, sagte das Log nicht —
+also erst messen, dann justieren.
+
+**Gebaut:**
+
+- `scoring.py::hard_filter_reason()` — gleiche Logik wie `passes_hard_filters()`,
+  gibt aber den Ablehnungsgrund zurück (`zustand`, `rating`, `reviews`,
+  `sales_rank`, `keine_referenz`, `anti_spike`, `avg365_anker`,
+  `rabatt_zu_klein`, `kein_vertrauenssignal`). `passes_hard_filters()` ist jetzt
+  ein dünner Wrapper darum — **Verhalten unverändert**, in 40.000 Zufallsfällen
+  gegen den Wrapper geprüft.
+- `scraper.py`: zählt die Gründe pro Lauf und loggt sie als Zeile
+  `HardFilter im Detail: rabatt_zu_klein:812 · reviews:340 · …`. Zusätzlich
+  landet der Grund feingranular in `deal_observations.reject_reason`
+  (`hard_filter:rabatt_zu_klein` statt nur `hard_filter`).
+- `scoring.py::QUALITY_DISCOUNT_FACTOR` — Quality Gate (a) ist jetzt über die
+  Env-Variable `QUALITY_DISCOUNT_FACTOR` verstellbar (Default 0.80 = mind. 20 %
+  unter Ø90). **Nachjustieren ohne Deploy**, nur Env in Render ändern.
+  Höher (0.85) = mehr Deals bei schwächerem Preisvorteil.
+
+**Verdacht (noch unbestätigt):** Keepa liefert Kandidaten ab −15 % gegenüber der
+eigenen Referenz, Quality Gate (a) verlangt danach nochmals −20 % gegenüber Ø90.
+Diese Kombination dürfte der Hauptengpass sein. Die neue Log-Zeile beweist es
+oder widerlegt es.
+
+**Nächster Schritt:** Nach dem Deploy die Zeile `HardFilter im Detail:` im
+Render-Log ansehen und danach entscheiden — nicht vorher an Schwellwerten drehen.
+
+---
+
 ## 2026-08-09: Positionierung — „richtiger Zeitpunkt" statt „Fake-Rabatte" (Commit 7bc81e2)
 
 **Entscheidung David:** snagga positioniert sich künftig über den **richtigen
