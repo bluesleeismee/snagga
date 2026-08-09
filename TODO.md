@@ -1,4 +1,57 @@
-# snagga.de — Nächste Aufgaben (Stand: 2026-07-05)
+# snagga.de — Nächste Aufgaben (Stand: 2026-08-09)
+
+## 2026-08-09: Doppelte Produkt-URLs in der Sitemap — ✅ UMGESETZT (noch nicht gepusht)
+
+**Auslöser:** Google-Mail „Neue Gründe dafür, dass Seiten nicht indexiert
+werden". Search Console meldete **97 indexiert gegen 2.880 nicht indexiert**,
+davon 2.580 „Gefunden – zurzeit nicht indexiert" und 118 „Gecrawlt – zurzeit
+nicht indexiert".
+
+**Ursache:** Die Sitemap führte jedes Produkt **doppelt** — `/deal/{asin}` und
+`/preis/{asin}`. Da `/deal` seinen Canonical auf `/preis` setzt (bewusst so,
+gegen Duplicate Content zwischen zwei identisch aussehenden Seiten), war rund
+die Hälfte aller angemeldeten URLs prinzipiell nicht indexierbar. Bei einer
+jungen Domain mit knappem Crawl-Budget hat das die kanonischen `/preis`-Seiten
+ausgebremst, bevor Google sie überhaupt erreicht hat. Verstärkt dadurch, dass
+auch der komplette interne Linkgraph (Deal-Karten, Kategorie-JSON-LD, RSS) auf
+`/deal` zeigte — Googlebot musste pro Produkt zweimal crawlen.
+
+**Geändert in `backend/main.py`:**
+
+| Stelle | Vorher | Nachher |
+|---|---|---|
+| `sitemap()` | `/deal` **und** `/preis` je Produkt | nur `/preis` — halbiert die Sitemap |
+| `sitemap()` Priorität | alle `/preis` gleich (0.5, weekly) | aktive Deals 0.7/daily, ruhende Katalogseiten 0.4/weekly |
+| `_deal_card_html()` | `href="/deal/{asin}"` | `href="/preis/{asin}"` |
+| `category_page()` JSON-LD | `"url": "/deal/{asin}"` | `"url": "/preis/{asin}"` |
+| `rss_feed()` | `<link>/deal/{asin}` | `<link>/preis/{asin}` (Deal-Titel bleibt im `<title>`) |
+
+**Bewusst unangetastet:** `/deal/{asin}` bleibt vollständig funktionsfähig
+inklusive der „Deal ist abgelaufen"-Seite mit ähnlichen Deals — kein 301,
+damit Share-Titel (Preis + Rabatt) und die Sackgassen-Vermeidung erhalten
+bleiben. Social-Poster nutzen ohnehin `/share/{asin}`. Preisalarm-Mails in
+`alerts.py` behalten `/deal/` (E-Mails werden nicht gecrawlt).
+
+**Regel ab jetzt:** `/preis/{asin}` ist die einzige kanonische Produkt-URL.
+`/deal/` gehört nie in Sitemap, interne Links, strukturierte Daten oder Feeds.
+
+**Nicht anfassen — die noindex-Fälle sind alle gewollt:** abgelaufene
+`/deal`-Seiten, leere Kategorieseiten, `/preis` ohne `is_catalog_quality`
+(Thin-Content-Schutz), `/preis-check`-Antwortseiten, 404-Seiten. Die 404-Seite
+liefert bewusst echten 404-Status statt Redirect (Soft-404 wäre schlechter);
+410 ist nicht nötig.
+
+**Offen — nach dem Deploy zu prüfen:**
+
+1. `https://www.snagga.de/sitemap.xml` aufrufen, verifizieren dass keine
+   `/deal/`-Einträge mehr enthalten sind.
+2. Sitemap in der Search Console neu einreichen (stößt Neubewertung an).
+3. Über 4–8 Wochen beobachten. Der relevante Indikator ist **nicht** das Sinken
+   der nicht-indexierten Seiten, sondern ob die **indexierten** über 97 steigen.
+4. Bleibt die Zahl stehen, ist der Flaschenhals Domain-Autorität (Backlinks) —
+   dann dort ansetzen, nicht weiter an der Technik.
+
+---
 
 ## Offen (David, 2026-07-06 abends): Ad-hoc-Fetch — kurze Schon-Frist
 

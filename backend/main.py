@@ -594,7 +594,12 @@ def _deal_card_html(row) -> str:
     brand = html.escape(row["brand"]) if "brand" in row.keys() and row["brand"] else (rating_label or "&nbsp;")
 
     return (
-        f'<a class="card" href="https://www.snagga.de/deal/{row["asin"]}">'
+        # Interner Link zeigt auf die KANONISCHE URL (/preis), nicht auf /deal.
+        # /deal setzt seinen Canonical auf /preis — verlinkte man intern auf /deal,
+        # müsste Googlebot pro Produkt zweimal crawlen (erst /deal, dann dem
+        # Canonical folgend /preis) und der Linkwert der Kategorieseiten liefe
+        # über einen Umweg. Beide Routen rendern ohnehin dasselbe Layout.
+        f'<a class="card" href="https://www.snagga.de/preis/{row["asin"]}">'
         f'<div class="card-img">{disc_html}<img src="{image}" alt="{name}" loading="lazy"></div>'
         f'{tag_html}'
         f'<div class="card-body">'
@@ -912,7 +917,10 @@ async def rss_feed():
         title = html.escape(
             f"{r['name'] or 'Deal'} für {price_txt}" + (f" (-{disc}%)" if disc > 0 else "")
         )
-        link = f"https://www.snagga.de/deal/{r['asin']}"
+        # Kanonische URL: der Feed wird von Crawlern und Aggregatoren gelesen,
+        # /deal würde auch hier den doppelten Crawl-Pfad erzeugen. Der Deal-Titel
+        # (mit Preis und Rabatt) bleibt davon unberührt — er steht im <title>.
+        link = f"https://www.snagga.de/preis/{r['asin']}"
         desc = html.escape(
             (r["tag"] or r["category"] or "Deal") + f" — {price_txt} auf snagga.de"
         )
@@ -982,7 +990,11 @@ async def category_page(slug: str):
                 {
                     "@type":    "ListItem",
                     "position": i + 1,
-                    "url":      f"https://www.snagga.de/deal/{r['asin']}",
+                    # Kanonische URL (/preis), analog zu den Karten-Links oben:
+                    # strukturierte Daten sollen nie auf eine Nicht-Canonical-URL
+                    # zeigen, sonst meldet Google "Alternative Seite mit richtigem
+                    # kanonischen Tag" statt die Seite zu indexieren.
+                    "url":      f"https://www.snagga.de/preis/{r['asin']}",
                     "name":     r["name"] or "Deal",
                 }
                 for i, r in enumerate(rows)
@@ -2485,12 +2497,19 @@ nur, was wirklich günstiger ist.</p>
 
 @app.api_route("/sitemap.xml", methods=["GET", "HEAD"])
 async def sitemap():
-    """Dynamische Sitemap — jeder aktive Deal bekommt eine eigene, crawlbare URL."""
+    """
+    Dynamische Sitemap — enthält AUSSCHLIESSLICH kanonische URLs.
+
+    Bewusst NICHT enthalten: /deal/{asin}. Diese Route setzt ihren Canonical auf
+    /preis/{asin} (siehe deal_page) und kann deshalb per Definition nie indexiert
+    werden. Früher stand jedes Produkt doppelt in der Sitemap (/deal UND /preis) —
+    das hat bei einer jungen Domain die Hälfte des Crawl-Budgets für URLs
+    verbrannt, die ohnehin nur weiterreichen, und liess die kanonischen
+    /preis-Seiten in "Gefunden – zurzeit nicht indexiert" hängen (GSC 08/2026:
+    2.580 Seiten). /deal bleibt erreichbar und teilbar, nur eben nicht angemeldet.
+    """
     pool = await get_pool()
     async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            "SELECT asin, last_updated FROM products WHERE is_active=true ORDER BY deal_score DESC"
-        )
         active_cats = {
             r["category"] for r in
             await conn.fetch("SELECT DISTINCT category FROM products WHERE is_active=true")
@@ -2521,17 +2540,18 @@ async def sitemap():
                 f"  <url><loc>https://www.snagga.de/kategorie/{slug}</loc>"
                 f"<changefreq>daily</changefreq><priority>0.7</priority></url>"
             )
-    for row in rows:
-        lastmod = f"<lastmod>{row['last_updated'].date().isoformat()}</lastmod>" if row["last_updated"] else ""
-        urls.append(
-            f"  <url><loc>https://www.snagga.de/deal/{row['asin']}</loc>{lastmod}"
-            f"<changefreq>daily</changefreq><priority>0.6</priority></url>"
-        )
+    # /preis ist jetzt die einzige angemeldete Produkt-URL. Damit Googlebot sein
+    # knappes Budget zuerst auf die lohnenden Seiten legt, werden aktive Deals
+    # höher priorisiert als ruhende Katalogseiten (die sich selten ändern).
     for row in all_products:
         lastmod = f"<lastmod>{row['last_updated'].date().isoformat()}</lastmod>" if row["last_updated"] else ""
+        if row["is_active"]:
+            freq, prio = "daily", "0.7"
+        else:
+            freq, prio = "weekly", "0.4"
         urls.append(
             f"  <url><loc>https://www.snagga.de/preis/{row['asin']}</loc>{lastmod}"
-            f"<changefreq>weekly</changefreq><priority>0.5</priority></url>"
+            f"<changefreq>{freq}</changefreq><priority>{prio}</priority></url>"
         )
 
     xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
