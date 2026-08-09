@@ -2364,8 +2364,14 @@ async def prime_day_page():
     """
     Dauerhafte Prime-Day-Landingpage. Die URL bleibt jedes Jahr gleich und
     baut so über die Jahre Ranking auf "Prime Day Deals" auf — vor dem Event
-    Ratgeber-Inhalt (Fake-Rabatte erkennen), während des Events Live-Deals.
-    Positionierung: snagga prüft jeden Rabatt gegen die echte Preishistorie.
+    Ratgeber-Inhalt (guten Kaufzeitpunkt erkennen), während des Events Live-Deals.
+
+    Tonalität (David, 09.08.2026): snagga positioniert sich über den richtigen
+    KAUFZEITPUNKT, nicht gegen Amazon. Kein "Fake-Rabatt", kein "Betrug", keine
+    Unterstellung. Grund ist nicht nur der Ton: snagga verdient über Amazon
+    PartnerNet — eine Marke, die sich gegen ihren eigenen Vertragspartner
+    positioniert, ist publizistisch und vertraglich angreifbar. Formulierungen
+    daher immer aus Nutzersicht ("lohnt sich Warten?"), nie als Vorwurf.
     """
     canonical = "https://www.snagga.de/prime-day"
 
@@ -2377,9 +2383,9 @@ async def prime_day_page():
             "ORDER BY deal_score DESC LIMIT 24"
         )
 
-    title = "Prime Day 2026: Nur echte Deals — geprüft gegen die Preishistorie | snagga.de"
-    desc  = ("Nicht jeder Prime-Day-Rabatt ist echt. snagga prüft jedes Angebot gegen "
-             "die tatsächliche Preishistorie: Allzeittief, 90-Tage-Durchschnitt, echter Rabatt.")
+    title = "Prime Day 2026: Ist der Preis wirklich gut? Preis-Check mit Historie | snagga.de"
+    desc  = ("Lohnt sich der Kauf am Prime Day — oder lohnt sich Warten? snagga zeigt zu jedem "
+             "Angebot die echte Preishistorie: Allzeittief, 90-Tage-Durchschnitt, klares Urteil.")
 
     deals_html = f'<div class="grid">{"".join(_deal_card_html(r) for r in rows)}</div>' if rows else ""
 
@@ -2389,13 +2395,14 @@ async def prime_day_page():
         "mainEntity": [
             {
                 "@type": "Question",
-                "name":  "Wie erkenne ich Fake-Rabatte am Prime Day?",
+                "name":  "Woran erkenne ich am Prime Day einen wirklich guten Preis?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text":  "Vergleiche den Angebotspreis mit der Preishistorie der letzten Monate, "
-                             "nicht mit dem Streichpreis. Viele 'Rabatte' beziehen sich auf eine UVP, "
-                             "die so nie verlangt wurde. snagga prüft jeden Deal automatisch gegen "
-                             "Allzeittief und 90-Tage-Durchschnitt.",
+                    "text":  "Der aussagekräftigste Vergleich ist die Preishistorie der letzten Monate: "
+                             "Was hat das Produkt zuletzt tatsächlich gekostet? Ein Streichpreis bezieht "
+                             "sich oft auf eine UVP und sagt wenig über den üblichen Marktpreis. snagga "
+                             "vergleicht jedes Angebot automatisch mit Allzeittief und 90-Tage-Durchschnitt "
+                             "und zeigt dir, ob sich der Kauf jetzt lohnt.",
                 },
             },
             {
@@ -2413,9 +2420,10 @@ async def prime_day_page():
                 "name":  "Sind Prime-Day-Preise wirklich die günstigsten des Jahres?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text":  "Nicht immer. Manche Produkte sind am Prime Day auf Allzeittief, andere "
-                             "waren wenige Wochen vorher günstiger. Entscheidend ist der Vergleich mit "
-                             "der echten Preishistorie statt mit dem Streichpreis.",
+                    "text":  "Nicht immer. Manche Produkte erreichen am Prime Day ihr Allzeittief, andere "
+                             "waren wenige Wochen vorher schon einmal günstiger. Ein Blick in die "
+                             "Preishistorie zeigt, in welche der beiden Gruppen ein Angebot fällt — und "
+                             "ob es sich lohnt, auf den nächsten Tiefpunkt zu warten.",
                 },
             },
         ],
@@ -2463,29 +2471,30 @@ async def prime_day_page():
 <body>
 {_SITE_HEADER_HTML}
 <main>
-<h1>Prime Day 2026: Nur echte Deals</h1>
-<p class="lead">Am Prime Day glänzen viele Rabatte nur auf dem Papier: Der „−40%"-Streichpreis
-wurde oft so nie verlangt. snagga prüft jedes Angebot automatisch gegen die <strong>echte
-Preishistorie</strong> — Allzeittief, 90-Tage-Durchschnitt, tatsächliche Ersparnis. Hier landet
-nur, was wirklich günstiger ist.</p>
+<h1>Prime Day 2026: Ist der Preis wirklich gut?</h1>
+<p class="lead">Am Prime Day ist die wichtigste Frage nicht „wie viel Prozent?", sondern
+<strong>„lohnt sich der Kauf gerade — oder lohnt sich Warten?"</strong> snagga vergleicht jedes
+Angebot automatisch mit seiner <strong>echten Preishistorie</strong>: Allzeittief,
+90-Tage-Durchschnitt, klares Urteil. Hier landet nur, was gegenüber dem üblichen Preis
+tatsächlich günstiger ist.</p>
 
-<h2>So erkennst du Fake-Rabatte</h2>
+<h2>So erkennst du einen wirklich guten Preis</h2>
 <div class="tips">
-  <div class="tip"><h3>📉 Preishistorie statt Streichpreis</h3>
-  <p>Der Streichpreis ist meist die UVP — nicht der Preis, der zuletzt galt. Entscheidend ist,
-  was das Produkt in den letzten 90 Tagen wirklich gekostet hat.</p></div>
+  <div class="tip"><h3>📉 Die Preishistorie sagt mehr</h3>
+  <p>Ein Streichpreis ist häufig die UVP und nicht der Preis, der zuletzt galt. Aussagekräftiger
+  ist, was das Produkt in den letzten 90 Tagen tatsächlich gekostet hat.</p></div>
   <div class="tip"><h3>🏆 Auf das Allzeittief achten</h3>
-  <p>Ein Deal ist stark, wenn der Preis nahe am tiefsten je gemessenen Preis liegt — nicht,
-  wenn die Prozentzahl gross ist.</p></div>
-  <div class="tip"><h3>⏰ Nicht vom Countdown hetzen lassen</h3>
-  <p>Künstliche Verknappung („nur noch 2 Stunden!") ist ein Verkaufstrick. Gute Preise kommen
-  wieder — die Preishistorie zeigt, wie oft.</p></div>
-  <div class="tip"><h3>⭐ Bewertungen ernst nehmen</h3>
-  <p>Ein billiges Produkt mit 3 Sternen ist kein Deal. snagga listet nur Produkte mit
-  mindestens 4 Sternen und 50+ Bewertungen.</p></div>
+  <p>Ein Preis ist stark, wenn er nahe am tiefsten je gemessenen Wert liegt — nicht, wenn die
+  Prozentzahl gross ist.</p></div>
+  <div class="tip"><h3>⏰ In Ruhe entscheiden</h3>
+  <p>Gute Preise kommen wieder, und die Preishistorie zeigt, wie oft. Wer den üblichen Rhythmus
+  eines Produkts kennt, muss sich von keinem Countdown treiben lassen.</p></div>
+  <div class="tip"><h3>⭐ Bewertungen mitdenken</h3>
+  <p>Ein günstiges Produkt mit 3 Sternen ist selten ein guter Kauf. snagga listet nur Produkte
+  mit mindestens 4 Sternen und 50+ Bewertungen.</p></div>
 </div>
 
-<h2>Aktuelle Top-Deals — gegen die Preishistorie geprüft</h2>
+<h2>Aktuelle Top-Deals — mit Blick auf die Preishistorie</h2>
 {deals_html}
 
 <nav class="catnav">{cat_nav}</nav>

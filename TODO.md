@@ -1,5 +1,64 @@
 # snagga.de — Nächste Aufgaben (Stand: 2026-08-09)
 
+## 2026-08-09: Positionierung — „richtiger Zeitpunkt" statt „Fake-Rabatte"
+
+**Entscheidung David:** snagga positioniert sich künftig über den **richtigen
+Kaufzeitpunkt**, nicht als Gegner von Amazon. Die Leitfrage ist „lohnt sich der
+Kauf jetzt — oder lohnt sich Warten?". Begriffe wie „Fake-Rabatt", „Betrug",
+„Verkaufstrick" oder „nie verlangt" kommen in Nutzertexten nicht mehr vor.
+
+**Warum, über den Ton hinaus:** snagga verdient über Amazon PartnerNet. Eine
+Marke, die sich gegen ihren eigenen Vertragspartner positioniert, ist
+publizistisch und vertraglich angreifbar. Formulierungen deshalb immer aus
+Nutzersicht, nie als Vorwurf an Amazon.
+
+**Umgestellt:**
+
+- `frontend/index.html` — Meta-Description, JSON-LD-Description, og:description,
+  twitter:description, statischer Fallback-Text, Prime-Day-Linktext
+- `backend/main.py::prime_day_page` — Title, Description, H1, Lead, Tipp-Block
+  („So erkennst du einen wirklich guten Preis"), zwei FAQ-Antworten im JSON-LD
+- Tonalitätsregel als Docstring in `prime_day_page` hinterlegt
+
+**Noch offen:** `MARKETING_STRATEGIE_2026.html` beschreibt weiter die alte
+Positionierung „Fake-Rabatt-Detektor" — beim nächsten Anfassen mitziehen.
+
+---
+
+## 2026-08-09: Presse-/Datenstory — Datengrundlage fehlt noch
+
+**Befund vor dem Bau gestoppt:** Der geplante Auswertungs-Report über beworbene
+Rabatte lässt sich mit den aktuellen Daten **nicht** belegen.
+
+`keepa.py` Zeile 412: `original_price = avg180_price` — der „Streichpreis" ist
+der eigene 180-Tage-Durchschnitt (Fallback `max(history)` bzw. `current × 1.25`),
+**nicht** Amazons beworbener Referenzpreis. Keepas `LIST_PRICE` (csv-Index 4)
+wird nirgends ausgelesen, in den `IDX_*`-Konstanten fehlt er.
+
+Eine Aussage über beworbene Rabatte wäre damit zirkulär: eigener Durchschnitt
+gegen eigenen Durchschnitt. Zweites Problem: gespeichert werden nur Deals, die
+die Filter **bestanden** haben — für eine Quote fehlt der Nenner.
+
+**Positiv:** Snaggas eigene Rabattangaben sind dadurch sauber — verglichen wird
+gegen den echten 180-Tage-Schnitt, nicht gegen einen aufgeblasenen UVP.
+
+**Voraussetzung für den Report (noch zu bauen):**
+
+1. Neue Tabelle, die bei jedem stündlichen Discovery-Lauf **jeden** Keepa-
+   Kandidaten protokolliert — auch die verworfenen. Felder: beworbener Rabatt,
+   tatsächlicher Preis, Ø90, Ø180, belegtes Allzeittief, Zeitstempel.
+2. `LIST_PRICE` (csv[4]) mitschneiden — kommt gratis im Response mit.
+
+Ab Bau sammeln sich Daten; für eine belastbare Aussage braucht es ~2 Monate.
+
+**Formulierung des Ergebnisses** muss zur neuen Positionierung passen: nicht
+„X % der Rabatte sind Fake", sondern z. B. „Bei X % der Angebote war der Preis
+in den letzten 90 Tagen schon einmal niedriger — ein Blick in die Historie
+lohnt sich." Einschränkung, die in den Report gehört: Amazon zeigt heute meist
+„typischer Preis" statt UVP, Keepas `LIST_PRICE` bildet das nur teilweise ab.
+
+---
+
 ## 2026-08-09: Doppelte Produkt-URLs in der Sitemap — ✅ UMGESETZT (noch nicht gepusht)
 
 **Auslöser:** Google-Mail „Neue Gründe dafür, dass Seiten nicht indexiert
