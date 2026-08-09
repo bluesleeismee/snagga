@@ -1,6 +1,6 @@
 # snagga.de — Nächste Aufgaben (Stand: 2026-08-09)
 
-## 2026-08-09: Positionierung — „richtiger Zeitpunkt" statt „Fake-Rabatte"
+## 2026-08-09: Positionierung — „richtiger Zeitpunkt" statt „Fake-Rabatte" (Commit 7bc81e2)
 
 **Entscheidung David:** snagga positioniert sich künftig über den **richtigen
 Kaufzeitpunkt**, nicht als Gegner von Amazon. Die Leitfrage ist „lohnt sich der
@@ -25,7 +25,7 @@ Positionierung „Fake-Rabatt-Detektor" — beim nächsten Anfassen mitziehen.
 
 ---
 
-## 2026-08-09: Presse-/Datenstory — Datengrundlage fehlt noch
+## 2026-08-09: Presse-/Datenstory — Datenerfassung gebaut (Commit 8b2f993)
 
 **Befund vor dem Bau gestoppt:** Der geplante Auswertungs-Report über beworbene
 Rabatte lässt sich mit den aktuellen Daten **nicht** belegen.
@@ -77,7 +77,7 @@ lohnt sich." Einschränkung, die in den Report gehört: Amazon zeigt heute meist
 
 ---
 
-## 2026-08-09: Doppelte Produkt-URLs in der Sitemap — ✅ UMGESETZT (noch nicht gepusht)
+## 2026-08-09: Doppelte Produkt-URLs in der Sitemap — ✅ ERLEDIGT (Commit 50226fd, deployt)
 
 **Auslöser:** Google-Mail „Neue Gründe dafür, dass Seiten nicht indexiert
 werden". Search Console meldete **97 indexiert gegen 2.880 nicht indexiert**,
