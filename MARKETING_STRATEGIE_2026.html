@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>snagga.de — Wachstumsstrategie 2026</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; line-height: 1.7; padding: 48px 24px 80px; }
+  .container { max-width: 900px; margin: 0 auto; }
+  .breadcrumb { font-size: 12px; color: #64748b; margin-bottom: 20px; }
+  .breadcrumb a { color: #64748b; }
+  .header { border-left: 4px solid #e05c3a; padding-left: 20px; margin-bottom: 32px; }
+  .header h1 { font-size: 32px; font-weight: 800; color: #fff; letter-spacing: -0.5px; }
+  .header .subtitle { font-size: 13px; color: #64748b; margin-top: 4px; }
+
+  .laien-box { background: #10233b; border: 1px solid #1e3a5f; border-left: 4px solid #3b82f6; padding: 20px 24px; margin-bottom: 48px; font-size: 15px; }
+  .laien-box .kicker { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #60a5fa; margin-bottom: 8px; }
+  .laien-box p { color: #cbd5e1; margin-bottom: 8px; }
+  .laien-box p:last-child { margin-bottom: 0; }
+
+  section { margin-bottom: 52px; }
+  h2 { font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #2d3748; display: flex; align-items: center; gap: 10px; }
+  h2 .num { background: #e05c3a; color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 2px; }
+  h3 { font-size: 14px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin: 24px 0 12px; }
+  p { color: #94a3b8; font-size: 14px; margin-bottom: 12px; }
+  strong { color: #e2e8f0; }
+  li { color: #94a3b8; font-size: 14px; margin-bottom: 8px; }
+  ul, ol { margin: 0 0 16px 22px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-bottom: 16px; }
+  thead tr { background: #1a1f2e; }
+  thead th { text-align: left; padding: 10px 14px; color: #64748b; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; border-bottom: 1px solid #2d3748; }
+  tbody tr { border-bottom: 1px solid #1e2330; transition: background 0.15s; }
+  tbody tr:hover { background: #1a1f2e; }
+  tbody td { padding: 10px 14px; color: #cbd5e1; vertical-align: top; }
+  tbody td:first-child { color: #e2e8f0; font-weight: 500; }
+
+  code { background: #1a1f2e; padding: 2px 6px; font-size: 12px; color: #e05c3a; font-family: monospace; }
+
+  .status { display: inline-block; padding: 2px 9px; border-radius: 3px; font-size: 11px; font-weight: 700; }
+  .status-live { background: #14532d; color: #4ade80; }
+  .status-teil { background: #713f12; color: #fbbf24; }
+  .status-plan { background: #1f2937; color: #9ca3af; }
+  .status-nein { background: #4c1d1d; color: #f87171; }
+
+  .diag-card { background: #1a1f2e; border: 1px solid #2d3748; border-left: 4px solid #f87171; padding: 16px 20px; margin-bottom: 12px; }
+  .diag-card h4 { font-size: 14px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+  .diag-card p { font-size: 13px; margin: 0; }
+
+  .phase { background: #1a1f2e; border: 1px solid #2d3748; padding: 20px 24px; margin-bottom: 16px; }
+  .phase .phase-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+  .phase .phase-num { font-size: 22px; font-weight: 800; color: #e05c3a; }
+  .phase h4 { font-size: 15px; font-weight: 700; color: #fff; }
+  .phase .zeitraum { font-size: 12px; color: #64748b; margin-left: auto; }
+
+  .excluded-item { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-bottom: 1px solid #1e2330; font-size: 13.5px; }
+  .excluded-item:last-child { border-bottom: none; }
+  .x-icon { color: #475569; font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+  .excl-name { color: #e2e8f0; font-weight: 600; }
+  .excl-reason { color: #64748b; }
+
+  .warn-box { background: #2d1f12; border: 1px solid #713f12; border-left: 4px solid #fbbf24; padding: 14px 18px; margin: 12px 0 20px; font-size: 13.5px; color: #fbbf24; }
+
+  .footer { margin-top: 60px; padding-top: 24px; border-top: 1px solid #2d3748; font-size: 12px; color: #334155; text-align: center; }
+  .footer a { color: #64748b; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="breadcrumb"><a href="INDEX.html">← Projekt-Referenz</a></div>
+  <div class="header">
+    <h1>snagga.de — Wachstumsstrategie 2026</h1>
+    <div class="subtitle">Stand: 03. Juli 2026 · Intern · Nicht veröffentlichen</div>
+  </div>
+
+  <div class="laien-box">
+    <div class="kicker">📖 Kurz gesagt</div>
+    <p>snagga hat ein Besucher-Problem, kein Technik-Problem. Drei Ursachen: kein erkennbarer Grund, snagga statt mydealz zu besuchen; die Deal-Seiten sterben, bevor Google sie rankt; und wer einmal da war, kommt nicht wieder. Die Strategie dagegen: snagga positioniert sich über den <strong>richtigen Kaufzeitpunkt</strong> (die Keepa-Preishistorie ist das Alleinstellungsmerkmal, das mydealz nicht hat), baut <strong>dauerhafte Seiten</strong> statt sterbender Deal-Seiten, und holt Besucher per <strong>Preisalarm</strong> immer wieder zurück. Höhepunkt: eine Presse-Story im Herbst aus den eigenen Preisdaten. Kosten: praktisch null — nur Zeit.</p>
+  </div>
+
+  <section>
+    <h2><span class="num">01</span> Diagnose — warum niemand kommt</h2>
+    <div class="diag-card">
+      <h4>Kein Grund, snagga statt mydealz zu besuchen</h4>
+      <p>„Gute Amazon-Deals" ist ein Massenmarkt mit übermächtigem Platzhirsch. Eine generische Deal-Seite beantwortet die Frage „warum hier?" nicht.</p>
+    </div>
+    <div class="diag-card">
+      <h4>Die SEO-Seiten sterben</h4>
+      <p>Deal-Seiten laufen ab (noindex), bevor Google sie richtig rankt — Sandburgen bei Flut. Die 11 Kategorie-Seiten sind ein Anfang, aber zu wenig Masse.</p>
+    </div>
+    <div class="diag-card">
+      <h4>Kein Kreislauf</h4>
+      <p>Besucher kaufen (oder nicht) und sind weg. Nichts bringt sie zurück — keine E-Mail-Liste, kein Alarm, kein Abo.</p>
+    </div>
+    <h3>Das ungenutzte Asset</h3>
+    <p>Die <strong>Keepa-Preishistorie</strong> (Preisverlauf, Allzeittief, 90/180-Tage-Durchschnitt für jedes Produkt) ist bereits bezahlt und wird kaum ausgespielt. Genau das hat mydealz nicht — und CamelCamelCamel macht es auf Deutsch schlecht.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">02</span> Positionierung — „Der richtige Kaufzeitpunkt"</h2>
+    <p>Nicht „noch eine Deal-Seite", sondern: <strong>snagga zeigt dir, ob der Moment gerade gut ist.</strong> Die Leitfrage ist „lohnt sich der Kauf jetzt — oder lohnt sich Warten?". snagga hat die Daten, um sie zu beantworten: „Dieser Preis ist der tiefste seit 18 Monaten" oder eben „lag in den letzten 90 Tagen schon dreimal tiefer". Eine Story, die Menschen teilen und über die Journalisten schreiben, besonders zu Prime Day und Black Friday.</p>
+    <div class="warn-box">⚠️ <strong>Tonalitätsregel (Entscheidung 09.08.2026):</strong> Begriffe wie „Fake-Rabatt", „Betrug", „Verkaufstrick" oder „nie verlangt" kommen in Nutzertexten nicht mehr vor. Grund über den Ton hinaus: snagga verdient über Amazon PartnerNet — eine Marke, die sich gegen ihren eigenen Vertragspartner positioniert, ist publizistisch und vertraglich angreifbar. Formulierungen immer aus Nutzersicht, nie als Vorwurf an Amazon.</div>
+  </section>
+
+  <section>
+    <h2><span class="num">03</span> Fahrplan</h2>
+
+    <div class="phase">
+      <div class="phase-head"><span class="phase-num">0</span><h4>Sofort — Prime Day ist Mitte Juli</h4><span class="zeitraum">Anfang Juli</span></div>
+      <table>
+        <thead><tr><th>Massnahme</th><th>Status</th><th>Kurz</th></tr></thead>
+        <tbody>
+          <tr><td>Prime-Day-Landingpage <code>/prime-day</code></td><td><span class="status status-live">GEBAUT</span></td><td>Dauerhafte URL (rankt über Jahre), Ratgeber „einen wirklich guten Preis erkennen" + Live-Top-Deals, FAQ-JSON-LD, in Sitemap</td></tr>
+          <tr><td>Bluesky-Bot</td><td><span class="status status-live">GEBAUT</span></td><td><code>backend/bluesky.py</code>, AT Protocol, 3 Posts/Tag (10/15/20 Uhr, versetzt zu Mastodon), rotierende Hashtags. Braucht Account + App-Password (Env: <code>BLUESKY_HANDLE</code>, <code>BLUESKY_APP_PASSWORD</code>)</td></tr>
+          <tr><td>WhatsApp-Kanal</td><td><span class="status status-teil">MANUELL</span></td><td>Am Handy anlegen (WhatsApp → Aktuelles → Kanal erstellen). Vorerst manuell 1–3 Top-Deals/Tag posten, Link zur snagga-Deal-Seite. In DE weit verbreiteter als Telegram</td></tr>
+          <tr><td>RSS-Feed anmelden</td><td><span class="status status-teil">MANUELL</span></td><td><code>/feed.xml</code> existiert — bei Feed-Verzeichnissen/Aggregatoren eintragen (~30 Min. Aufwand)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head"><span class="phase-num">1</span><h4>Die zwei strukturellen Fixes</h4><span class="zeitraum">Juli</span></div>
+      <p><strong>Dauerhafte Produktseiten <code>/preis/{asin}</code></strong> — wichtigster Hebel der ganzen Strategie. Permanente Seite pro Produkt mit Preisverlauf-Chart, ATL, Ø-Preis und Urteil „Guter Preis? Ja/Nein/Warten". Lebt weiter, wenn der Deal abläuft („aktuell kein Deal — Preisalarm setzen"). Dreht die SEO-Ökonomie um: wachsender Bestand statt sterbender Seiten, rankt auf „{Produkt} Preisverlauf / günstigster Preis" — Suchanfragen mit maximaler Kaufabsicht. Zweite Verwertung der bereits bezahlten Keepa-Daten.</p>
+      <p><strong>Preisalarm / Wunschpreis</strong> — der Retention-Fix. E-Mail + Wunschpreis, der stündliche Preis-Check (läuft schon) löst die Mail aus. Jede Alarm-Mail = Besucher mit maximaler Kaufabsicht, nebenbei wächst eine E-Mail-Liste.</p>
+      <div class="warn-box">⚠️ Amazon PartnerNet verbietet Affiliate-Links in E-Mails — Alarm-Mails verlinken deshalb immer auf die snagga-Deal-Seite, nie direkt auf Amazon (wie bei Telegram bereits korrekt gelöst).</div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head"><span class="phase-num">2</span><h4>Reichweite verbreitern</h4><span class="zeitraum">August–September</span></div>
+      <ul>
+        <li><strong>Pinterest:</strong> ideal für Küche/Haushalt/Wohnen, Produkt-Pins mit Link zur Deal-Seite, per API automatisierbar, Pins ranken monatelang. Im Deal-Bereich macht das fast niemand ernsthaft.</li>
+        <li><strong>Wöchentlicher Newsletter</strong> („Die 10 echten Deals der Woche") an die Preisalarm-Liste — Brevo o.ä. bis 300 Mails/Tag kostenlos.</li>
+        <li><strong>Ratgeber-Inhalte</strong> (4–6 Stück): „Wann ist [Kategorie] am günstigsten?" — aus eigenen Daten beantwortbar, saisonale Evergreens.</li>
+        <li><strong>Facebook-Schnäppchen-Gruppen:</strong> manuell, sparsam, nur echte Top-Deals, als Mensch (mydealz-Lektion!). Gruppenregeln zu Affiliate-Links vorher prüfen, im Zweifel auf snagga-Seite verlinken.</li>
+      </ul>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head"><span class="phase-num">3</span><h4>Der Black-Friday-PR-Coup</h4><span class="zeitraum">Oktober–November</span></div>
+      <p><strong>Datenjournalismus aus eigenen Zahlen:</strong> Seit 09.08.2026 protokolliert <code>deal_observations</code> jeden Keepa-Kandidaten inklusive der verworfenen — damit existiert erstmals auch der Nenner. Die Story ist ein <strong>Service-Stück</strong>, kein Enthüllungsstück: <em>„Wann kauft man was am günstigsten?"</em>, aus Preisverläufen je Kategorie und Monat. Als Blogpost plus kurze Pitches an heise, t3n, Golem, Chip, Verbraucherzentralen-Blogs. Journalisten suchen im November genau diese Story und haben die Daten nicht. Ein Artikel bringt mehr Backlinks und Vertrauen als ein Jahr Social-Posting. Kosten: null, Aufwand ~2–3 Stunden einmalig.</p>
+      <div class="warn-box">⚠️ <strong>Zwei methodische Grenzen, die in die Veröffentlichung gehören.</strong> Erstens: <code>original_price</code> ist snaggas eigener 180-Tage-Schnitt, <em>nicht</em> Amazons beworbener Streichpreis (Keepas <code>LIST_PRICE</code> wird nicht ausgelesen) — eine Aussage über beworbene Rabatte wäre zirkulär. Zweitens: Keepas <code>/deal</code>-Endpoint liefert bereits vorgefiltert nur Angebote ab −15 % gegenüber Keepas eigener Referenz. Die Grundgesamtheit ist „als Rabatt beworbene Angebote", nicht „alle Amazon-Angebote".</div>
+      <p><strong>Preis-Check-Tool <code>/preis-check</code>:</strong> Amazon-URL einwerfen → Urteil „kaufen oder warten". Teilbar, verlinkbar, das Anschauungsobjekt für die Presse-Story. <span class="status status-live">GEBAUT</span></p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">04</span> Bewusst NICHT machen</h2>
+    <div class="excluded-item"><span class="x-icon">✕</span><div><span class="excl-name">Bezahlte Werbung</span> — <span class="excl-reason">bei 24h-Amazon-Cookies und den Margen reines Geldverbrennen</span></div></div>
+    <div class="excluded-item"><span class="x-icon">✕</span><div><span class="excl-name">mydealz</span> — <span class="excl-reason">in jeder Form ausgeschlossen (Affiliate-Links kategorisch verboten, auch manuell — siehe Recherche 02.07.)</span></div></div>
+    <div class="excluded-item"><span class="x-icon">✕</span><div><span class="excl-name">Reddit-Selbstpromo</span> — <span class="excl-reason">Sperr-Risiko wie bei Mastodon; nur echte Teilnahme als Mensch, falls überhaupt</span></div></div>
+    <div class="excluded-item"><span class="x-icon">✕</span><div><span class="excl-name">TikTok/YouTube-Automatisierung</span> — <span class="excl-reason">Aufwand/Qualitätsrisiko, evtl. später</span></div></div>
+    <div class="excluded-item"><span class="x-icon">✕</span><div><span class="excl-name">Weitere Social-Bot-Kanäle</span> — <span class="excl-reason">Reichweite kommt aus Suche + Retention, Social ist nur Zubringer</span></div></div>
+  </section>
+
+  <section>
+    <h2><span class="num">05</span> Erfolgsmessung (Funnel-Reihenfolge)</h2>
+    <table>
+      <thead><tr><th>Stufe</th><th>Metrik</th><th>Wo</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Impressionen → Klicks</td><td>Google Search Console</td></tr>
+        <tr><td>2</td><td>Besucher</td><td>Umami Analytics</td></tr>
+        <tr><td>3</td><td>Preisalarm-Anmeldungen</td><td>eigene DB (ab Phase 1)</td></tr>
+        <tr><td>4</td><td>Amazon-Klicks pro Kategorie</td><td>PartnerNet (Kategorie-Tags)</td></tr>
+        <tr><td>5</td><td>Käufe / Einnahmen</td><td>PartnerNet-Dashboard</td></tr>
+      </tbody>
+    </table>
+    <p>Realistische Erwartung: SEO-Effekt der Produktseiten ab ~6–8 Wochen, erster Schub zu Prime Day, der grosse Test ist Black Friday.</p>
+  </section>
+
+  <div class="footer"><a href="INDEX.html">← zurück zur Projekt-Referenz</a></div>
+</div>
+</body>
+</html>

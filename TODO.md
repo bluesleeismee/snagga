@@ -1,4 +1,52 @@
-# snagga.de — Nächste Aufgaben (Stand: 2026-08-09)
+# snagga.de — Nächste Aufgaben (Stand: 2026-08-11)
+
+## 2026-08-11: Aufbewahrung, Messbarkeit, Positionierungs-Nachzug
+
+**Gemessen (live, ohne Deploy):** `/deals` liefert aktuell **92 aktive Deals**
+statt der 24 vom 09.08. Die Lockerung wirkt also, `MAX_ACTIVE = 500` ist aber
+weiter weit weg. In diesen 92 ist `brand` bei **35 (38 %) leer** — das ist der
+Backfill-Stand für die Marken-Hubs, aber nur die Stichprobe der aktiven Deals,
+nicht der ~1.450 Produkte mit `/preis`-Seite.
+
+**Gebaut:**
+
+- `retention.py` — verdichtet `deal_observations` täglich um 04:30 nach
+  `deal_observation_daily` (Tag × Kategorie × Ablehnungsgrund, mit Anzahl,
+  Ø/Median-Preisvorteil gegen Ø90, Median-Preis, Rating, Reviews) und löscht
+  erst danach Rohzeilen älter als `OBSERVATION_RETENTION_DAYS` (Default 120).
+  **Reihenfolge ist die halbe Miete:** verdichten, prüfen, dann löschen — es
+  wird nur gelöscht, was nachweislich eine Tageszeile hat. `0` = nie löschen.
+  Damit fällt das Wachstum von ~2.800 auf ~100–200 Zeilen/Tag; die Langzeitreihe
+  für die Datenstory bleibt vollständig, verloren geht nur die ASIN-Ebene.
+- `/debug/observation-stats?token=…&days=7` — Ablehnungsgründe aus der DB statt
+  aus dem Render-Log (das rotiert). Beantwortet „welcher Hard-Filter ist der
+  Engpass?" über mehrere Tage statt nur für den letzten Lauf.
+- `/debug/brand-coverage?token=…&min_products=5` — Entscheidungsgrundlage für
+  die Marken-Hubs: wie viel Prozent der Produkte haben eine Marke, und wie viele
+  Marken erreichen die Mindestanzahl. Gruppiert case-insensitiv und getrimmt,
+  sonst würden „ANKER"/„Anker"/„anker " drei dünne Hubs ergeben.
+
+**Positionierung nachgezogen** (offener Punkt vom 09.08.):
+`MARKETING_STRATEGIE_2026.html` und `INDEX.html` beschreiben nicht mehr den
+„Fake-Rabatt-Detektor", sondern den richtigen Kaufzeitpunkt; Tonalitätsregel und
+die beiden methodischen Grenzen der Datenstory stehen jetzt im Dokument selbst.
+
+**Nicht möglich ohne dich:**
+
+- `/debug/*` verlangt `ADMIN_TOKEN` — die Zahlen kann nur jemand mit dem Token
+  abrufen. Nach dem Deploy beide URLs einmal aufrufen (oder mir den Token geben).
+- Render-Log und Supabase sind von hier aus nicht erreichbar, deshalb der Umweg
+  über die Endpoints statt einer direkten Auswertung.
+- Ungetestet gegen echtes Postgres: im Sandbox gibt es keine DB. Python
+  kompiliert, das SQL ist Postgres-spezifisch (`PERCENTILE_CONT`, `FILTER`) und
+  beim ersten Lauf zu beobachten. Fehler sind gekapselt — schlägt die Verdichtung
+  fehl, wird nichts gelöscht und der Deal-Job läuft weiter.
+- `frontend/dist/index.html` enthält noch den alten „Fake-Rabatte"-Text. Live ist
+  der neue (geprüft), es ist nur ein veraltetes Build-Artefakt im Repo.
+
+---
+
+## Stand 2026-08-09
 
 ## Wachstumsplan — Reihenfolge (beschlossen 2026-08-09)
 

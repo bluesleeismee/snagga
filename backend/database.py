@@ -156,6 +156,37 @@ CREATE TABLE IF NOT EXISTS deal_observations (
 )
 """
 
+# Verdichtung von deal_observations — Grund siehe retention.py.
+#
+# Warum überhaupt: deal_observations wächst mit ~2.800 Zeilen/Tag (gemessen,
+# doppelt so viel wie beim Bau geschätzt) → ~1 Mio. Zeilen und 150–250 MB pro
+# Jahr bei 500 MB Supabase-Limit. Rohzeilen einfach zu löschen würde aber genau
+# die Langzeitreihe zerstören, für die die Tabelle gebaut wurde.
+#
+# Deshalb: erst verdichten, dann löschen. Eine Zeile pro Tag × Kategorie ×
+# Ablehnungsgrund statt einer pro ASIN — das sind ~100–200 Zeilen/Tag statt
+# 2.800 und beantwortet alle Fragen der Datenstory (Wie viele Angebote pro Tag?
+# Welcher Anteil bestanden? Woran scheitern sie? Wie hoch war der Preisvorteil?).
+# Verloren geht nur die ASIN-Ebene — die braucht die Auswertung nicht.
+CREATE_OBSERVATION_DAILY = """
+CREATE TABLE IF NOT EXISTS deal_observation_daily (
+    observed_day   DATE NOT NULL,
+    category       TEXT NOT NULL DEFAULT '',
+    reject_reason  TEXT NOT NULL DEFAULT '',
+    accepted       BOOLEAN NOT NULL DEFAULT false,
+    n              INTEGER NOT NULL,
+    -- Preisvorteil gegenüber dem 90-Tage-Schnitt, in Prozent (negativ = günstiger).
+    -- Nur über Zeilen mit avg90 > 0 gebildet, n_disc sagt über wie viele.
+    n_disc         INTEGER NOT NULL DEFAULT 0,
+    disc_avg       REAL    NOT NULL DEFAULT 0,
+    disc_median    REAL    NOT NULL DEFAULT 0,
+    price_median   REAL    NOT NULL DEFAULT 0,
+    rating_avg     REAL    NOT NULL DEFAULT 0,
+    reviews_median REAL    NOT NULL DEFAULT 0,
+    PRIMARY KEY (observed_day, category, reject_reason, accepted)
+)
+"""
+
 
 async def create_pool() -> asyncpg.Pool:
     global pool
@@ -196,6 +227,7 @@ async def init_db():
         await conn.execute(CREATE_PRICE_HISTORY)
         await conn.execute(CREATE_PRICE_ALERTS)
         await conn.execute(CREATE_DEAL_OBSERVATIONS)
+        await conn.execute(CREATE_OBSERVATION_DAILY)
         for stmt in MIGRATE_PRODUCTS:
             try:
                 await conn.execute(stmt)

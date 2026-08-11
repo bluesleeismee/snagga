@@ -2913,6 +2913,126 @@ async def test_mastodon(token: str = Query(default="")):
         return {"ok": False, "exception": str(e)}
 
 
+@app.get("/debug/observation-stats")
+async def debug_observation_stats(token: str = Query(default=""), days: int = Query(default=7)):
+    """
+    Ablehnungsgründe aus dem Beobachtungsprotokoll — dieselbe Information wie
+    die Log-Zeile `HardFilter im Detail:`, aber über mehrere Tage und ohne im
+    Render-Log zu suchen (das nach kurzer Zeit rotiert).
+
+    Beantwortet die offene Frage aus dem Wachstumsplan: welcher der acht
+    Hard-Filter ist der Engpass, der aus ~3.300 Kandidaten nur wenige Dutzend
+    aktive Deals macht? Erst messen, dann an Schwellwerten drehen — vor allem
+    an `QUALITY_DISCOUNT_FACTOR`.
+
+    Liest bewusst aus BEIDEN Tabellen: den Rohzeilen und, für ältere Tage, aus
+    der Verdichtung (siehe retention.py). Read-only, keine Keepa-Tokens.
+    """
+    _check_admin(token)
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        raw = await conn.fetch(
+            "SELECT COALESCE(reject_reason,'(angenommen)') AS grund, COUNT(*) AS n, "
+            "       COUNT(DISTINCT observed_day) AS tage "
+            "FROM deal_observations WHERE observed_day >= CURRENT_DATE - $1::int "
+            "GROUP BY 1 ORDER BY 2 DESC",
+            days,
+        )
+        per_day = await conn.fetch(
+            "SELECT observed_day, COUNT(*) AS n, "
+            "       COUNT(*) FILTER (WHERE accepted) AS angenommen "
+            "FROM deal_observations WHERE observed_day >= CURRENT_DATE - $1::int "
+            "GROUP BY 1 ORDER BY 1 DESC",
+            days,
+        )
+        roh   = await conn.fetchval("SELECT COUNT(*) FROM deal_observations") or 0
+        verd  = await conn.fetchval(
+            "SELECT COUNT(*) FROM deal_observation_daily") or 0
+        spanne = await conn.fetchrow(
+            "SELECT MIN(observed_day) AS von, MAX(observed_day) AS bis "
+            "FROM deal_observations")
+
+    gesamt = sum(r["n"] for r in raw) or 1
+    return {
+        "zeitraum_tage":   days,
+        "rohzeilen_gesamt": roh,
+        "verdichtete_zeilen": verd,
+        "erfasst_von":     str(spanne["von"]) if spanne and spanne["von"] else None,
+        "erfasst_bis":     str(spanne["bis"]) if spanne and spanne["bis"] else None,
+        "gruende": [
+            {"grund": r["grund"], "n": r["n"],
+             "anteil_pct": round(100.0 * r["n"] / gesamt, 1), "tage": r["tage"]}
+            for r in raw
+        ],
+        "pro_tag": [
+            {"tag": str(r["observed_day"]), "kandidaten": r["n"],
+             "angenommen": r["angenommen"]}
+            for r in per_day
+        ],
+    }
+
+
+@app.get("/debug/brand-coverage")
+async def debug_brand_coverage(token: str = Query(default=""), min_products: int = Query(default=5)):
+    """
+    Entscheidungsgrundlage für die Marken-Hubs `/marke/{brand}` — VOR dem Bau.
+
+    Zwei Fragen, die ohne Zahlen nicht zu beantworten sind:
+    1. Wie sauber ist `brand` überhaupt gefüllt? Keepas /deal-Endpoint liefert
+       keine Marke (keepa.py:243), nur /product tut das — gefüllt wird also erst
+       nach und nach über Deep-Sync und Preis-Check.
+    2. Wie viele Marken erreichen genug Produkte für eine Seite, die Google
+       nicht als dünn einstuft? Hubs mit zwei Produkten schaden mehr als sie
+       nützen — sie sind genau die Sorte Seite, die aktuell in den 2.880
+       nicht-indexierten steckt.
+
+    Read-only, keine Keepa-Tokens.
+    """
+    _check_admin(token)
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        total    = await conn.fetchval("SELECT COUNT(*) FROM products") or 0
+        # Nur diese Produkte haben eine crawlbare /preis-Seite und kämen für
+        # einen Hub überhaupt infrage.
+        with_hist = await conn.fetchval(
+            "SELECT COUNT(*) FROM products WHERE current_price > 0") or 0
+        filled   = await conn.fetchval(
+            "SELECT COUNT(*) FROM products WHERE COALESCE(brand,'') <> ''") or 0
+        filled_active = await conn.fetchval(
+            "SELECT COUNT(*) FROM products WHERE is_active=true "
+            "AND COALESCE(brand,'') <> ''") or 0
+        active   = await conn.fetchval(
+            "SELECT COUNT(*) FROM products WHERE is_active=true") or 0
+
+        # Gruppiert wird case-insensitiv und getrimmt: "ANKER", "Anker" und
+        # "anker " sind dieselbe Marke, würden sonst drei dünne Hubs ergeben.
+        rows = await conn.fetch(
+            "SELECT LOWER(TRIM(brand)) AS b, COUNT(*) AS n, "
+            "       COUNT(*) FILTER (WHERE is_active) AS n_active, "
+            "       MIN(brand) AS label "
+            "FROM products WHERE COALESCE(brand,'') <> '' AND current_price > 0 "
+            "GROUP BY LOWER(TRIM(brand)) "
+            "HAVING COUNT(*) >= $1 "
+            "ORDER BY COUNT(*) DESC LIMIT 300",
+            min_products,
+        )
+
+    brands = [{"brand": r["label"], "key": r["b"], "products": r["n"],
+               "active": r["n_active"]} for r in rows]
+    return {
+        "produkte_gesamt":        total,
+        "produkte_mit_preis":     with_hist,
+        "brand_gefuellt":         filled,
+        "brand_gefuellt_pct":     round(100.0 * filled / total, 1) if total else 0,
+        "aktive_deals":           active,
+        "brand_gefuellt_aktiv":   filled_active,
+        "schwelle_min_produkte":  min_products,
+        "marken_ueber_schwelle":  len(brands),
+        "produkte_in_diesen_marken": sum(b["products"] for b in brands),
+        "marken":                 brands,
+    }
+
+
 @app.api_route("/health", methods=["GET", "HEAD"])
 async def health():
     pool = await get_pool()

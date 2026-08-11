@@ -13,6 +13,7 @@ from scraper import (
     post_next_mastodon_deal, post_next_bluesky_deal, check_and_send_price_alerts,
     seed_bestsellers, evict_stale_charts,
 )
+from retention import rollup_and_prune
 
 # Brache Keepa-Tokens nutzen, um den Such-Katalog aufzubauen (Stubs, keine
 # Historie). Halbiert 2026-07-06 (David: Budget war "regelmässig sehr dünn",
@@ -115,6 +116,18 @@ def create_scheduler() -> AsyncIOScheduler:
         evict_stale_charts,
         CronTrigger(hour=(DEEP_SYNC_HOUR + 1) % 24, minute=0),
         id="evict_stale_charts",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+
+    # Beobachtungsprotokoll verdichten und Rohzeilen ausdünnen (04:30, also nach
+    # Deep-Sync und Chart-Eviction, vor dem ersten nennenswerten Traffic).
+    # Grund: deal_observations wächst mit ~2.800 Zeilen/Tag gegen ein
+    # Supabase-Limit von 500 MB — siehe retention.py.
+    scheduler.add_job(
+        rollup_and_prune,
+        CronTrigger(hour=(DEEP_SYNC_HOUR + 1) % 24, minute=30),
+        id="observation_rollup",
         replace_existing=True,
         misfire_grace_time=3600,
     )
