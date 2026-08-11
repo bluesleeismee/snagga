@@ -33,7 +33,7 @@ from PIL import Image, ImageDraw, ImageFont
 W, H = 1000, 1500
 
 # snagga-Farben (identisch zur Website, theme-color aus index.html)
-NAVY      = (21, 61, 104)
+NAVY      = (21, 61, 104)     # #153D68 — Markenblau, identisch zur Website
 NAVY_DARK = (13, 40, 70)
 WHITE     = (255, 255, 255)
 MUTED     = (150, 168, 190)
@@ -42,19 +42,49 @@ CARD      = (255, 255, 255)
 INK       = (24, 34, 48)
 INK_SOFT  = (98, 112, 130)
 LINE      = (222, 228, 236)
+# Das Orange der Wortmarke. Auf dunklem Grund gilt der Dark-Theme-Wert #D4694A
+# (index.css), nicht der hellere #C85E43 — auf Marineblau hat er mehr Kontrast.
+ACCENT    = (212, 105, 74)
 
 _FONT_DIR = Path(__file__).parent / "assets" / "fonts"
 
+# Plus Jakarta Sans ist die Schrift der Website (frontend/public/fonts/pjs-*.woff2).
+# Hier liegt sie als TTF, weil Pillow kein WOFF2 lesen kann; erzeugt mit fontTools
+# aus genau diesen Dateien, damit Pin und Website dieselbe Schrift zeigen.
+# Beide Schriften stehen unter freien Lizenzen (SIL OFL bzw. Bitstream Vera).
+_FACES = {
+    (False, False): "PlusJakartaSans-Regular.ttf",
+    (True,  False): "PlusJakartaSans-Bold.ttf",
+    (False, True):  "PlusJakartaSans-SemiBold.ttf",
+}
 
-def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
+
+def _font(size: int, bold: bool = False, semi: bool = False) -> ImageFont.FreeTypeFont:
     """
-    Mitgelieferte Schrift statt Systemschrift: Render-Container bringen keine
+    Schrift aus dem Repo statt aus dem System: Render-Container bringen keine
     garantierten Fonts mit, und `ImageFont.load_default()` wäre eine
-    Bitmap-Schrift — auf 1000 px Breite unbrauchbar. DejaVu liegt unter einer
-    freien Lizenz im Repo (assets/fonts/DejaVu-LICENSE.txt).
+    Bitmap-Schrift — auf 1000 px Breite unbrauchbar.
+
+    Fällt auf DejaVu zurück, falls eine Datei fehlt: ein Pin in der falschen
+    Schrift ist immer noch besser als ein Absturz im Scheduler.
     """
-    name = "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf"
-    return ImageFont.truetype(str(_FONT_DIR / name), size)
+    name = _FACES[(bold and not semi, semi)]
+    try:
+        return ImageFont.truetype(str(_FONT_DIR / name), size)
+    except OSError:
+        return ImageFont.truetype(
+            str(_FONT_DIR / ("DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf")), size)
+
+
+def _wordmark(draw: ImageDraw.ImageDraw, x: int, y: int, size: int):
+    """
+    Offizielle Wortmarke: „snagga" weiss, „.de" im Akzent-Orange — dieselbe
+    Zweiteilung wie im Seitenkopf (DealsPage.jsx) und in den SSR-Seiten
+    (main.py, Klasse .accent).
+    """
+    f = _font(size, bold=True)
+    draw.text((x, y), "snagga", font=f, fill=WHITE)
+    draw.text((x + draw.textlength("snagga", font=f), y), ".de", font=f, fill=ACCENT)
 
 
 def _eur(v: float) -> str:
@@ -150,8 +180,8 @@ def render_pin(
 
     # ── Kopf ────────────────────────────────────────────────────────────────
     draw.rectangle([0, 0, W, 210], fill=NAVY_DARK)
-    draw.text((70, 74), "snagga", font=_font(64, bold=True), fill=WHITE)
-    draw.text((70, 148), "AMAZON PREIS-CHECK", font=_font(26), fill=MUTED)
+    _wordmark(draw, 70, 66, 64)
+    draw.text((70, 150), "AMAZON PREIS-CHECK", font=_font(26), fill=MUTED)
     if category:
         cf = _font(24)
         tw = draw.textlength(category.upper(), font=cf)
@@ -199,8 +229,10 @@ def render_pin(
         draw.text((100, ny), line, font=name_font, fill=INK_SOFT)
 
     # ── Fuss ────────────────────────────────────────────────────────────────
-    draw.text((70, H - 140), "Jeden Amazon-Preis prüfen: snagga.de",
-              font=_font(34, bold=True), fill=WHITE)
+    ff = _font(34, bold=True)
+    lead = "Jeden Amazon-Preis prüfen: "
+    draw.text((70, H - 140), lead, font=ff, fill=WHITE)
+    _wordmark(draw, 70 + int(draw.textlength(lead, font=ff)), H - 140, 34)
     draw.text((70, H - 88), "Preisverlauf · Allzeittief · 90-Tage-Schnitt",
               font=_font(26), fill=MUTED)
 

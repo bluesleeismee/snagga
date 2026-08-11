@@ -775,6 +775,14 @@ async def pin_image(asin: str):
         hist = await conn.fetch(
             "SELECT price FROM price_history WHERE asin=$1 ORDER BY id DESC LIMIT 120", asin)
 
+    prices = [r["price"] for r in reversed(hist) if r["price"] and r["price"] > 0]
+    # Ohne Kurve ist der Pin sinnlos: die Grafik besteht zur Hälfte aus dem
+    # Preisverlauf, ohne ihn bliebe eine leere weisse Fläche. Lieber 404 als ein
+    # kaputtes Bild — der Posting-Job filtert ohnehin auf has_real_history, aber
+    # diese Route ist öffentlich und kann mit jeder ASIN aufgerufen werden.
+    if len(prices) < 2:
+        raise HTTPException(status_code=404, detail="Keine Preishistorie")
+
     from pin_image import render_pin
     png = render_pin(
         name=row["name"] or "Produkt",
@@ -782,7 +790,7 @@ async def pin_image(asin: str):
         reference=row["original_price"] or 0.0,
         tag=row["tag"] or "",
         category=row["category"] or "",
-        prices=list(reversed([r["price"] for r in hist])),
+        prices=prices,
     )
     # Kurzer Cache: Pinterest holt das Bild einmal ab und speichert es selbst,
     # aber Vorschau-Aufrufe während der Einrichtung sollen den frischen Preis zeigen.
