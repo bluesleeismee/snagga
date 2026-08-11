@@ -118,19 +118,35 @@ def render_pin(
     """
     Baut die Pin-Grafik und gibt PNG-Bytes zurück.
 
-    `reference` ist der Ø-180-Tage-Preis (products.original_price) — NICHT
-    Amazons Streichpreis. Deshalb steht auf dem Pin „Ø 6 Monate" und nicht
-    „statt", sonst behauptet die Grafik einen beworbenen Rabatt, den die Daten
-    nicht hergeben (siehe TODO.md, Eintrag vom 09.08.2026).
+    Warum kein Tagespreis auf dem Bild (Entscheidung David, 11.08.2026)
+    -------------------------------------------------------------------
+    Pinterest zeigt einen Pin über Monate, oft am stärksten lange nach dem
+    Anlegen. Ein Pin, der „39,99 €" behauptet, ist dann schlicht falsch — und
+    zwar bei einer Marke, deren ganzes Versprechen „wir prüfen Preise ehrlich"
+    lautet. Deshalb wirbt der Pin für die DIENSTLEISTUNG, nicht für einen
+    einzelnen Deal: Überschrift ist die Frage „Kaufen oder warten?", Beweis ist
+    die Preiskurve, und der Tagespreis steht dort, wo er hingehört — auf der
+    Zielseite, wo er stündlich aktualisiert wird.
+
+    Was auf dem Bild bleibt, altert langsam: die Form der Kurve und die
+    Preisspanne des gezeigten Zeitraums. Beides ist auch in einem Jahr noch eine
+    ehrliche Aussage über das Produkt.
+
+    `reference` (Ø-180-Tage-Preis) und `current` fliessen nur noch in die
+    Spannen-Berechnung ein, nicht mehr als beworbene Zahl.
     """
     img  = Image.new("RGB", (W, H), NAVY)
     draw = ImageDraw.Draw(img)
 
-    # Titelzeilen vorab umbrechen: die Kartenhöhe hängt davon ab, und die Karte
-    # muss vor ihrem Inhalt gezeichnet werden. Ohne diesen Vorlauf klaffte bei
-    # kurzen Produktnamen unten eine leere weisse Fläche.
-    title_font  = _font(40, bold=True)
-    title_lines = _wrap(draw, name, title_font, W - 200, 3)
+    # Produktname klein und zweizeilig: er ist das Beispiel, nicht die Botschaft.
+    # Die Kartenhöhe hängt davon ab und die Karte wird vor ihrem Inhalt
+    # gezeichnet, deshalb der Umbruch vorab.
+    name_font  = _font(30)
+    name_lines = _wrap(draw, name, name_font, W - 200, 2)
+
+    hist = [p for p in (prices or []) if p and p > 0]
+    lo   = min(hist) if hist else 0.0
+    hi   = max(hist) if hist else 0.0
 
     # ── Kopf ────────────────────────────────────────────────────────────────
     draw.rectangle([0, 0, W, 210], fill=NAVY_DARK)
@@ -143,51 +159,49 @@ def render_pin(
         draw.text((W - 90 - tw, 110), category.upper(), font=cf, fill=WHITE)
 
     # ── Karte ───────────────────────────────────────────────────────────────
-    # Höhe aus dem Inhalt: Titel + Preisblock + Chart + Urteil + Innenabstand.
-    # Der Inhalt endet beim Urteils-Chip; darunter nur noch Innenabstand.
-    # Rechnung: Titel (card_top+60 + 56 je Zeile) + 30 Abstand = Preis-Basis y,
-    # Chart-Block liegt bei y+200, der Chip endet bei y+662.
     card_top = 270
-    y_price  = card_top + 60 + len(title_lines) * 56 + 30
-    card_bot = min(y_price + 662 + 50, H - 190)
+    # +940 statt +902: der Beispielname wird nach unten gezeichnet, bei zwei
+    # Zeilen stiess er sonst über die Kartenkante hinaus.
+    card_bot = min(card_top + 940 + len(name_lines) * 34, H - 190)
     draw.rounded_rectangle([60, card_top, W - 60, card_bot], 36, fill=CARD)
 
-    y = card_top + 60
-    for line in title_lines:
-        draw.text((100, y), line, font=title_font, fill=INK)
-        y += 56
-
-    y = y + 30
-    draw.text((100, y), _eur(current), font=_font(96, bold=True), fill=NAVY)
-
-    if reference and reference > current:
-        pct = round((1 - current / reference) * 100)
-        pf  = _font(34, bold=True)
-        label = f"−{pct} %"
-        tw = draw.textlength(label, font=pf)
-        bx = 100 + draw.textlength(_eur(current), font=_font(96, bold=True)) + 40
-        draw.rounded_rectangle([bx, y + 26, bx + tw + 44, y + 92], 33, fill=GREEN)
-        draw.text((bx + 22, y + 40), label, font=pf, fill=WHITE)
-        draw.text((100, y + 118), f"Ø 6 Monate: {_eur(reference)}",
-                  font=_font(30), fill=INK_SOFT)
+    # Die Frage ist die Botschaft. Sie ist der Grund, warum jemand klickt, und
+    # sie stimmt in einem Jahr genauso wie heute.
+    y = card_top + 58
+    draw.text((100, y), "Kaufen oder", font=_font(74, bold=True), fill=INK)
+    draw.text((100, y + 84), "warten?", font=_font(74, bold=True), fill=NAVY)
+    draw.text((100, y + 190), "Der Preisverlauf verrät es.",
+              font=_font(34), fill=INK_SOFT)
 
     # ── Preisverlauf ────────────────────────────────────────────────────────
-    cy = y + 200
-    draw.text((100, cy), "PREISVERLAUF", font=_font(24, bold=True), fill=INK_SOFT)
-    _sparkline(draw, [p for p in (prices or []) if p and p > 0], (100, cy + 50, W - 100, cy + 330))
-    draw.line([(100, cy + 336), (W - 100, cy + 336)], fill=LINE, width=3)
+    cy = y + 262
+    _sparkline(draw, hist, (100, cy, W - 100, cy + 290))
+    draw.line([(100, cy + 296), (W - 100, cy + 296)], fill=LINE, width=3)
 
-    # ── Urteil ──────────────────────────────────────────────────────────────
-    if tag:
-        tf = _font(36, bold=True)
-        tw = draw.textlength(tag, font=tf)
-        draw.rounded_rectangle([100, cy + 386, 100 + tw + 60, cy + 462], 38, fill=(232, 240, 250))
-        draw.text((130, cy + 404), tag, font=tf, fill=NAVY)
+    # Spanne statt Tagespreis: eine Zahl, die den Pin überlebt.
+    if lo > 0 and hi > lo:
+        draw.text((100, cy + 336), "PREISSPANNE IM GEZEIGTEN ZEITRAUM",
+                  font=_font(22, bold=True), fill=INK_SOFT)
+        draw.text((100, cy + 376), f"{_eur(lo)}  –  {_eur(hi)}",
+                  font=_font(46, bold=True), fill=NAVY)
+        spread = round((1 - lo / hi) * 100)
+        if spread >= 5:
+            sf, label = _font(28, bold=True), f"{spread} % Unterschied"
+            tw = draw.textlength(label, font=sf)
+            draw.rounded_rectangle([100, cy + 448, 100 + tw + 44, cy + 504], 28, fill=GREEN)
+            draw.text((122, cy + 461), label, font=sf, fill=WHITE)
+
+    # Das Produkt ist das Beispiel, nicht die Werbung — entsprechend klein.
+    ny = cy + 546
+    draw.text((100, ny), "BEISPIEL", font=_font(20, bold=True), fill=MUTED)
+    for line in name_lines:
+        ny += 34
+        draw.text((100, ny), line, font=name_font, fill=INK_SOFT)
 
     # ── Fuss ────────────────────────────────────────────────────────────────
-    draw.text((70, H - 140), "Preisverlauf ansehen auf snagga.de",
+    draw.text((70, H - 140), "Jeden Amazon-Preis prüfen: snagga.de",
               font=_font(34, bold=True), fill=WHITE)
-    draw.text((70, H - 88), "Allzeittief · 90-Tage-Schnitt · kaufen oder warten?",
+    draw.text((70, H - 88), "Preisverlauf · Allzeittief · 90-Tage-Schnitt",
               font=_font(26), fill=MUTED)
 
     buf = io.BytesIO()

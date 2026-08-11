@@ -16,6 +16,25 @@ Heisst: Schritt 1–5 kannst du sofort machen, Traffic gibt es erst nach Schritt
 
 ---
 
+## Vorher: der 15-Minuten-Test, der die Frage beantwortet
+
+Die Trial-Beschränkung gilt nur für Pins, die **über die API** entstehen. Pins,
+die du von Hand hochlädst, sind ganz normal öffentlich — ohne Entwickler-App,
+ohne Prüfung, ohne Video. Damit lässt sich vorab klären, ob Pinterest für snagga
+überhaupt etwas bringt, bevor du Zeit in die Einrichtung steckst:
+
+1. Business-Konto anlegen (Schritt 1), ein Board (Schritt 2).
+2. Fünf Grafiken im Browser aufrufen und speichern:
+   `https://www.snagga.de/pin/{ASIN}.png`
+3. Von Hand hochladen, Ziel-Link jeweils `https://www.snagga.de/preis/{ASIN}`.
+4. Zwei bis drei Wochen nichts tun, dann in Analytics nach Verweisen von
+   `pinterest.de` schauen.
+
+Kommt nichts, sparst du dir Schritt 3–6 komplett. Der gebaute Code kostet
+nichts, solange er nicht eingeschaltet ist.
+
+---
+
 ## Schritt 1 — Business-Konto anlegen
 
 Auf <https://www.pinterest.com/business/create/> ein Business-Konto erstellen
@@ -89,8 +108,10 @@ Dann in Render eine dieser Variablen ergänzen:
   {"Küche, Haushalt & Wohnen":"111","Computer & Zubehör":"222","Baumarkt":"333"}
   ```
 
-Optional: `PINTEREST_MIN_SCORE` (Default 55) steuert, ab welchem Deal-Score
-gepinnt wird. Höher = weniger, aber bessere Pins.
+Einen Mindest-Score gibt es bewusst nicht: die Pins werben für den Preis-Check,
+nicht für ein Tagesangebot. Ausgewählt wird nach echter Preiskurve und
+Nachfrage — dieselbe Prüfung, die auch über die Aufnahme in die Sitemap
+entscheidet.
 
 ## Schritt 6 — Standard Access beantragen
 
@@ -116,10 +137,18 @@ oder die Datenschutzseite lädt nicht. Beides vorher prüfen.
 - Jeder Pin verlinkt auf `snagga.de/preis/{asin}` — **nie** direkt auf Amazon.
   Damit enthält der Pin keinen Affiliate-Link, und der Klick landet erst im
   eigenen Bestand.
-- Das Pin-Bild wird live erzeugt und zeigt Preis, Ø-6-Monats-Preis, Urteil und
-  die Preiskurve. Kein Amazon-Produktfoto: die darf man laut
-  Associates-Bedingungen nur über die PA API einbinden, und die Preiskurve ist
-  ohnehin das, was snagga von jeder anderen Deal-Seite unterscheidet.
+- Das Pin-Bild trägt **keinen Tagespreis**. Überschrift ist „Kaufen oder
+  warten?", darunter die Preiskurve und die Preisspanne des gezeigten Zeitraums.
+  Grund: Pinterest spielt einen Pin oft erst Monate nach dem Anlegen stark aus —
+  ein Preis darauf wäre dann falsch, ausgerechnet bei einer Marke, die mit
+  ehrlichen Preisen wirbt. Der aktuelle Preis steht auf der Zielseite, wo er
+  stündlich aktualisiert wird.
+- Kein Amazon-Produktfoto: die darf man laut Associates-Bedingungen nur über die
+  PA API einbinden, und die Preiskurve ist ohnehin das, was snagga von jeder
+  anderen Deal-Seite unterscheidet.
+- Gepinnt wird aus dem **gesamten dauerhaften Katalog** (~9.500 Produkte mit
+  Preisseite), nicht nur aus den rund 80 aktiven Deals — sonst wären die
+  Kandidaten in sechs Wochen aufgebraucht.
 - Kein Deal wird zweimal gepinnt (`products.pinterest_posted`).
 
 ## Vorschau ohne Pinterest

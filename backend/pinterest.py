@@ -48,7 +48,9 @@ SEED_REFRESH = os.getenv("PINTEREST_REFRESH_TOKEN", "")
 # JSON: {"Küche, Haushalt & Wohnen": "boardid", …}. Kategorien exakt wie in der DB.
 BOARDS_RAW   = os.getenv("PINTEREST_BOARDS", "{}")
 DEFAULT_BOARD = os.getenv("PINTEREST_DEFAULT_BOARD", "")
-MIN_SCORE     = int(os.getenv("PINTEREST_MIN_SCORE", "55"))
+# Kein Mindest-Score mehr: seit die Pins für den Preis-Check werben statt für
+# ein Tagesangebot, ist nicht der Rabatt das Kriterium, sondern ob das Produkt
+# eine echte Preiskurve und genug Nachfrage hat. Das prüft is_catalog_quality().
 SITE          = os.getenv("PUBLIC_SITE_URL", "https://www.snagga.de")
 
 _SETTING_KEY = "pinterest_refresh_token"
@@ -188,18 +190,30 @@ async def list_boards() -> list[dict]:
     return [{"id": b.get("id"), "name": b.get("name")} for b in r.json().get("items", [])]
 
 
+def _title(row) -> str:
+    """
+    Die Dienstleistung zuerst, das Produkt als Suchanker dahinter. Pinterest
+    durchsucht Titel — ohne Produktnamen findet niemand den Pin, ohne die Frage
+    davor klickt niemand darauf.
+    """
+    return f"Kaufen oder warten? Preisverlauf: {row['name']}"[:100]
+
+
 def _description(row) -> str:
     """
-    Pinterest-Beschreibungen werden durchsucht — deshalb ausgeschriebene Begriffe
-    statt Hashtag-Wüste. Bewusst ohne Preisangabe im Text: Pins leben Monate,
-    ein Preis im Text wäre in zwei Wochen falsch. Die Grafik trägt den
-    Tagespreis, der Text die dauerhafte Aussage.
+    Ausgeschriebene Begriffe statt Hashtag-Wüste, weil Pinterest den Text
+    durchsucht. **Ohne jede Preisangabe** — ein Pin wird oft erst Monate nach
+    dem Anlegen stark ausgespielt, ein Preis im Text wäre dann falsch. Bei einer
+    Marke, deren Versprechen „wir prüfen Preise ehrlich" lautet, kostet ein
+    veralteter Preis mehr als er einbringt.
     """
     cat = (row["category"] or "").split(",")[0].strip()
     return (
-        f"{row['name'][:120]} — Preisverlauf, Allzeittief und 90-Tage-Schnitt auf einen Blick. "
-        f"Lohnt sich der Kauf gerade oder lohnt sich Warten? snagga prüft jeden Amazon-Preis "
-        f"gegen die echte Preishistorie. {cat} Angebote, täglich aktualisiert."
+        f"Lohnt sich {row['name'][:90]} gerade — oder lohnt sich Warten? "
+        "snagga zeigt den kompletten Preisverlauf: Allzeittief, 90-Tage-Schnitt "
+        "und ein klares Urteil zum aktuellen Preis. So erkennst du, ob der "
+        f"Moment gut ist, statt dich auf einen Rabattaufkleber zu verlassen. "
+        f"{cat} bei Amazon, Preise täglich geprüft."
     )
 
 
@@ -212,18 +226,38 @@ async def post_next_pin() -> bool:
     if not enabled():
         return False
 
+    from scoring import is_catalog_quality
+
     boards = _boards()
     pool = await get_pool()
     async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT asin, name, category, current_price, original_price, tag, deal_score "
-            "FROM products WHERE is_active=true AND pinterest_posted IS NULL "
-            "  AND has_real_history=true AND deal_score >= $1 "
-            "ORDER BY deal_score DESC LIMIT 1",
-            MIN_SCORE,
+        # Nicht nur aktive Deals: der Pin wirbt für den Preis-Check, nicht für ein
+        # Tagesangebot, und die `/preis`-Seite läuft nie ab. Damit steht der
+        # gesamte dauerhafte Katalog zur Verfügung (~9.500 crawlbare Produkte)
+        # statt nur der rund 80 aktiven Deals — sonst wären die Kandidaten in
+        # sechs Wochen aufgebraucht.
+        #
+        # Bedingung bleibt `has_real_history`: ohne echte Kurve gibt es nichts zu
+        # zeigen, und eine erfundene wäre genau der Etikettenschwindel, den das
+        # ganze Projekt vermeidet.
+        rows = await conn.fetch(
+            "SELECT asin, name, brand, category, current_price, original_price, tag, "
+            "       rating, reviews, deal_score, is_active "
+            "FROM products WHERE pinterest_posted IS NULL AND has_real_history=true "
+            "  AND current_price > 0 AND (is_active OR reviews >= 100) "
+            "ORDER BY is_active DESC, deal_score DESC LIMIT 60"
         )
+
+    # Katalog-Gate in Python statt in SQL: dieselbe Funktion wie Sitemap und
+    # /preis-Indexierung, damit die Kriterien nicht an zwei Orten auseinanderlaufen.
+    row = next(
+        (r for r in rows
+         if r["is_active"] or is_catalog_quality(
+             r["rating"] or 0, r["reviews"] or 0, r["brand"] or "", r["name"] or "")),
+        None,
+    )
     if not row:
-        print("[pinterest] Kein passender Deal offen.")
+        print("[pinterest] Kein passendes Produkt offen.")
         return False
 
     board_id = boards.get(row["category"] or "") or DEFAULT_BOARD
@@ -238,7 +272,7 @@ async def post_next_pin() -> bool:
     asin = row["asin"]
     payload = {
         "board_id": board_id,
-        "title": (row["name"] or "Deal")[:100],
+        "title": _title(row),
         "description": _description(row)[:800],
         # Zielseite ist die dauerhafte /preis-Seite, nicht /deal: der Pin lebt
         # Monate, die Deal-Seite läuft ab. Siehe price_page() in main.py.
