@@ -3093,6 +3093,65 @@ async def debug_observation_stats(token: str = Query(default=""), days: int = Qu
     }
 
 
+@app.get("/debug/subcategories")
+async def debug_subcategories(token: str = Query(default=""), min_n: int = Query(default=3)):
+    """
+    Verteilung der Unterkategorien je Oberkategorie — Grundlage für die
+    Kernsortiment-Frage.
+
+    Hintergrund (David, 11.08.2026): In „Computer & Zubehör" stehen fast nur
+    Rucksäcke, Tintenpatronen und Kabel statt PCs, Laptops, Monitore; in „Küche,
+    Haushalt & Wohnen" Bürostuhlrollen und Gewürzgläser statt Küchengeräten,
+    Messern, Staubsaugern. Ursache ist strukturell: die Oberkategorie kommt aus
+    Keepas oberster Ebene, in der Zubehör millionenfach häufiger vorkommt,
+    häufiger rabattiert wird und bessere Verkaufsränge hat.
+
+    Die zweite Keepa-Ebene liegt bereits ungenutzt in `products.sub_category`
+    (befüllt aus /product, nicht aus /deal). Diese Auswertung zeigt, ob sie
+    trennscharf genug ist, um daraus ein Kernsortiment zu definieren — statt
+    weiter Stichwörter zu sperren wie in specificity_penalty().
+
+    Zeigt je Oberkategorie: Unterkategorien mit Anzahl aktiver Deals, Anzahl im
+    Katalog und Median-Preis. Der Preis ist der beste Hinweis darauf, ob eine
+    Unterkategorie Kernsortiment oder Kleinteil ist.
+    """
+    _check_admin(token)
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT category, COALESCE(NULLIF(TRIM(sub_category),''),'(ohne)') AS sub, "
+            "       COUNT(*) AS n, "
+            "       COUNT(*) FILTER (WHERE is_active) AS n_aktiv, "
+            "       PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY current_price) AS preis_median, "
+            "       MAX(current_price) AS preis_max "
+            "FROM products WHERE current_price > 0 "
+            "GROUP BY 1, 2 HAVING COUNT(*) >= $1 "
+            "ORDER BY category, COUNT(*) FILTER (WHERE is_active) DESC, COUNT(*) DESC",
+            min_n,
+        )
+        ohne_sub = await conn.fetchval(
+            "SELECT COUNT(*) FROM products WHERE COALESCE(TRIM(sub_category),'')='' "
+            "AND is_active=true") or 0
+        aktiv = await conn.fetchval(
+            "SELECT COUNT(*) FROM products WHERE is_active=true") or 0
+
+    out: dict = {}
+    for r in rows:
+        out.setdefault(r["category"] or "(ohne)", []).append({
+            "unterkategorie": r["sub"],
+            "aktiv":          r["n_aktiv"],
+            "katalog":        r["n"],
+            "preis_median":   round(r["preis_median"] or 0, 2),
+            "preis_max":      round(r["preis_max"] or 0, 2),
+        })
+    return {
+        "aktive_deals":                aktiv,
+        "aktive_ohne_unterkategorie":  ohne_sub,
+        "schwelle_min_produkte":       min_n,
+        "kategorien":                  out,
+    }
+
+
 @app.get("/debug/brand-coverage")
 async def debug_brand_coverage(token: str = Query(default=""), min_products: int = Query(default=5)):
     """
