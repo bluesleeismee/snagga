@@ -2989,47 +2989,72 @@ async def debug_brand_coverage(token: str = Query(default=""), min_products: int
     Read-only, keine Keepa-Tokens.
     """
     _check_admin(token)
+    from scoring import is_catalog_quality, is_known_brand
+
     pool = await get_pool()
     async with pool.acquire() as conn:
-        total    = await conn.fetchval("SELECT COUNT(*) FROM products") or 0
-        # Nur diese Produkte haben eine crawlbare /preis-Seite und kämen für
-        # einen Hub überhaupt infrage.
-        with_hist = await conn.fetchval(
-            "SELECT COUNT(*) FROM products WHERE current_price > 0") or 0
-        filled   = await conn.fetchval(
-            "SELECT COUNT(*) FROM products WHERE COALESCE(brand,'') <> ''") or 0
-        filled_active = await conn.fetchval(
-            "SELECT COUNT(*) FROM products WHERE is_active=true "
-            "AND COALESCE(brand,'') <> ''") or 0
-        active   = await conn.fetchval(
-            "SELECT COUNT(*) FROM products WHERE is_active=true") or 0
-
-        # Gruppiert wird case-insensitiv und getrimmt: "ANKER", "Anker" und
-        # "anker " sind dieselbe Marke, würden sonst drei dünne Hubs ergeben.
+        # Eine Abfrage statt vieler Aggregate: das Katalog-Gate hängt an
+        # rating/reviews/brand/name zusammen und lässt sich in SQL nur
+        # verdoppelt (und damit driftend) nachbauen. 20k Zeilen sind billig.
         rows = await conn.fetch(
-            "SELECT LOWER(TRIM(brand)) AS b, COUNT(*) AS n, "
-            "       COUNT(*) FILTER (WHERE is_active) AS n_active, "
-            "       MIN(brand) AS label "
-            "FROM products WHERE COALESCE(brand,'') <> '' AND current_price > 0 "
-            "GROUP BY LOWER(TRIM(brand)) "
-            "HAVING COUNT(*) >= $1 "
-            "ORDER BY COUNT(*) DESC LIMIT 300",
-            min_products,
-        )
+            "SELECT brand, name, rating, reviews, is_active FROM products")
 
-    brands = [{"brand": r["label"], "key": r["b"], "products": r["n"],
-               "active": r["n_active"]} for r in rows]
+    total = len(rows)
+    filled = filled_active = active = 0
+    sitemap_faehig = 0
+    # key -> [label, produkte, katalogfaehig, aktiv]
+    agg: dict[str, list] = {}
+
+    for r in rows:
+        brand = (r["brand"] or "").strip()
+        if r["is_active"]:
+            active += 1
+        if brand:
+            filled += 1
+            if r["is_active"]:
+                filled_active += 1
+
+        # Nur wer aktiv ist oder das Katalog-Gate besteht, hat überhaupt eine
+        # crawlbare /preis-Seite (siehe sitemap) — alles andere in einem Hub zu
+        # verlinken würde auf Seiten zeigen, die gar nicht in der Sitemap stehen.
+        crawlbar = bool(r["is_active"]) or is_catalog_quality(
+            r["rating"] or 0, r["reviews"] or 0, brand, r["name"] or "")
+        if crawlbar:
+            sitemap_faehig += 1
+
+        if not brand:
+            continue
+        # Case-insensitiv und getrimmt gruppieren: "ANKER", "Anker" und "anker "
+        # sind dieselbe Marke, würden sonst drei dünne Hubs ergeben.
+        key = brand.lower()
+        slot = agg.setdefault(key, [brand, 0, 0, 0])
+        slot[1] += 1
+        if crawlbar:
+            slot[2] += 1
+        if r["is_active"]:
+            slot[3] += 1
+
+    # Sortiert nach den crawlbaren Produkten, denn nur die tragen einen Hub.
+    brands = [
+        {"brand": v[0], "key": k, "produkte": v[1], "crawlbar": v[2],
+         "aktiv": v[3], "bekannte_marke": is_known_brand(v[0], "")}
+        for k, v in agg.items() if v[2] >= min_products
+    ]
+    brands.sort(key=lambda b: -b["crawlbar"])
+    bekannt = [b for b in brands if b["bekannte_marke"]]
+
     return {
-        "produkte_gesamt":        total,
-        "produkte_mit_preis":     with_hist,
-        "brand_gefuellt":         filled,
-        "brand_gefuellt_pct":     round(100.0 * filled / total, 1) if total else 0,
-        "aktive_deals":           active,
-        "brand_gefuellt_aktiv":   filled_active,
-        "schwelle_min_produkte":  min_products,
-        "marken_ueber_schwelle":  len(brands),
-        "produkte_in_diesen_marken": sum(b["products"] for b in brands),
-        "marken":                 brands,
+        "produkte_gesamt":       total,
+        "sitemap_faehig":        sitemap_faehig,
+        "aktive_deals":          active,
+        "brand_gefuellt":        filled,
+        "brand_gefuellt_pct":    round(100.0 * filled / total, 1) if total else 0,
+        "brand_gefuellt_aktiv":  filled_active,
+        "schwelle_min_crawlbar": min_products,
+        "marken_ueber_schwelle": len(brands),
+        "davon_bekannte_marken": len(bekannt),
+        "crawlbare_in_bekannten_marken": sum(b["crawlbar"] for b in bekannt),
+        "marken":                brands[:400],
     }
 
 

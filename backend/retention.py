@@ -4,10 +4,11 @@ Aufbewahrung für deal_observations: erst verdichten, dann Rohzeilen löschen.
 Warum es das gibt
 -----------------
 `deal_observations` protokolliert jeden Keepa-Kandidaten inkl. der verworfenen
-(eine Zeile pro ASIN und Tag). Gemessen wächst die Tabelle mit ~2.800 Zeilen/Tag
-— doppelt so viel wie beim Bau geschätzt. Hochgerechnet sind das ~1 Mio. Zeilen
-und 150–250 MB im Jahr, bei einem Supabase-Limit von 500 MB. Ohne Regel läuft
-die Datenbank irgendwann im Frühjahr 2027 voll, und zwar an der Stelle, an der
+(eine Zeile pro ASIN und Tag). Gemessen am 11.08.2026: 105.561 Zeilen in den
+ersten drei Tagen, also **~35.000/Tag** — nicht 2.800 wie beim Bau geschätzt und
+auch nicht die 2.800, von denen der Wachstumsplan noch ausging. Das sind grob
+10 MB/Tag, ~3,5 GB im Jahr, bei einem Supabase-Limit von 500 MB. Ohne Regel wäre
+die Datenbank in ungefähr sieben Wochen voll — und zwar an der Stelle, an der
 auch die Produktdaten liegen.
 
 Warum nicht einfach löschen
@@ -33,12 +34,20 @@ from datetime import timedelta
 
 from database import get_pool
 
-# Wie lange die ASIN-genauen Rohzeilen bleiben. 120 Tage decken die Datenstory
-# im Oktober (Erfassung startete am 09.08.2026) mit Reserve ab und halten die
-# Rohtabelle bei ~340.000 Zeilen / ~50 MB statt unbegrenzt zu wachsen.
-# Über Env verstellbar, damit sich vor einer Auswertung ohne Deploy verlängern
-# lässt. 0 = Rohdaten nie löschen (nur verdichten).
-OBSERVATION_RETENTION_DAYS = int(os.getenv("OBSERVATION_RETENTION_DAYS", "120"))
+# Wie lange die ASIN-genauen Rohzeilen bleiben.
+#
+# 14 Tage, nicht mehr. Gemessen am 11.08.2026 über die ersten drei Tage:
+# 105.561 Rohzeilen, also ~35.000/Tag — nicht die ursprünglich geschätzten
+# 2.800. Bei grob 250–300 Byte pro Zeile inkl. Index sind das ~10 MB/Tag.
+# 120 Tage Rohdaten wären über 1 GB gewesen, das Doppelte des Supabase-Limits;
+# selbst 30 Tage lägen bei ~300 MB und damit gefährlich nah dran.
+#
+# Der kurze Zeitraum kostet nichts, weil die Verdichtung vorher läuft: alles,
+# was die Datenstory braucht, steht dauerhaft in deal_observation_daily. Die
+# Rohzeilen sind nur für Stichproben auf ASIN-Ebene da, und dafür reichen zwei
+# Wochen. Über Env verstellbar — vor einer Auswertung, die tiefer graben soll,
+# rechtzeitig hochsetzen. 0 = Rohdaten nie löschen (nur verdichten).
+OBSERVATION_RETENTION_DAYS = int(os.getenv("OBSERVATION_RETENTION_DAYS", "14"))
 
 # Verdichtet wird immer nur bis einschliesslich gestern: der laufende Tag ist
 # unvollständig (der Job läuft stündlich), eine Verdichtung davon wäre falsch

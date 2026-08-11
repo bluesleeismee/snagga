@@ -1,5 +1,51 @@
 # snagga.de — Nächste Aufgaben (Stand: 2026-08-11)
 
+## 2026-08-11 (abends): Erste echte Messwerte — zwei Annahmen widerlegt
+
+**1. Der vermutete Engpass war nicht der Engpass.** Der Verdacht vom 09.08.
+lautete, Quality Gate (a) (`QUALITY_DISCOUNT_FACTOR`) sei die Bremse. Gemessen
+über drei Tage, 105.561 Kandidaten:
+
+| Grund | Anteil |
+|---|---|
+| `preis_min` (< 20 €) | 34,2 % |
+| `hard_filter:reviews` | 26,4 % |
+| `kategorie_unbekannt` | 11,2 % |
+| `hard_filter:sales_rank` | 11,1 % |
+| `hard_filter:anti_spike` | 7,6 % |
+| `preis_min_kategorie` | 6,0 % |
+| `hard_filter:kein_vertrauenssignal` | 0,9 % |
+| **`hard_filter:rabatt_zu_klein`** | **0,0 % (5 Zeilen)** |
+
+`QUALITY_DISCOUNT_FACTOR` ist also **kein Regler** — daran zu drehen hätte
+nichts gebracht. Die drei realen Hebel, in dieser Reihenfolge:
+Preisuntergrenze (20 €), Review-Mindestzahl (100 / 500 bei Auto) und die
+Kategorie-Zuordnung, die jeden neunten Kandidaten mangels Zuordnung verwirft.
+
+**2. Der Hard-Filter ist gar nicht der Grund für nur 92 aktive Deals.**
+Angenommen wurden 194 / 787 / 223 ASINs an den drei Tagen — ein Vielfaches der
+92, die aktiv sind, bei `MAX_ACTIVE = 500`. Zwischen „qualifiziert" und „aktiv"
+geht also der Grossteil verloren, und zwar **nach** dem Filter: Deaktivierung
+älter 4 h, der stündliche Preis-Check oder das Überschreiben des Pools. Das ist
+die Stelle, an der der nächste Schritt ansetzen muss — nicht an Schwellwerten.
+
+**3. Aufbewahrung war zu knapp bemessen.** Gemessen ~35.000 Rohzeilen/Tag statt
+der geschätzten 2.800, also ~10 MB/Tag. Bei 500 MB Supabase-Limit wäre die
+Datenbank in ~7 Wochen voll gewesen; die zuerst gesetzten 120 Tage Rohdaten
+wären über 1 GB geworden. Default deshalb auf **14 Tage** gesenkt — die
+Verdichtung läuft ja vorher, die Langzeitreihe bleibt vollständig.
+
+**4. Marken-Hubs: Datenlage besser als gedacht, aber die erste Messung war
+irreführend.** Der Katalog hat **20.586 Produkte** (nicht ~1.450), `brand` ist
+zu **79,6 %** gefüllt, über 300 Marken haben ≥ 5 Produkte. Aber: die Liste wird
+von No-Name-Marktplatzmarken angeführt (Risareyi 287, WTHYGB 68, Home-Vision
+113) — Hubs dafür wären genau die dünnen Seiten, die vermieden werden sollen.
+`/debug/brand-coverage` zählt deshalb jetzt nur noch **crawlbare** Produkte
+(aktiv oder `is_catalog_quality`) und markiert bekannte Marken. Erst diese Zahl
+ist die Entscheidungsgrundlage. **Braucht einen weiteren Deploy.**
+
+---
+
 ## 2026-08-11: Aufbewahrung, Messbarkeit, Positionierungs-Nachzug
 
 **Gemessen (live, ohne Deploy):** `/deals` liefert aktuell **92 aktive Deals**

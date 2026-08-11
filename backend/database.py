@@ -158,14 +158,15 @@ CREATE TABLE IF NOT EXISTS deal_observations (
 
 # Verdichtung von deal_observations — Grund siehe retention.py.
 #
-# Warum überhaupt: deal_observations wächst mit ~2.800 Zeilen/Tag (gemessen,
-# doppelt so viel wie beim Bau geschätzt) → ~1 Mio. Zeilen und 150–250 MB pro
-# Jahr bei 500 MB Supabase-Limit. Rohzeilen einfach zu löschen würde aber genau
-# die Langzeitreihe zerstören, für die die Tabelle gebaut wurde.
+# Warum überhaupt: deal_observations wächst mit ~35.000 Zeilen/Tag (gemessen
+# 11.08.2026 über drei Tage, nicht die geschätzten 2.800) → ~10 MB/Tag bei
+# 500 MB Supabase-Limit, also volle Datenbank in ~7 Wochen. Rohzeilen einfach zu
+# löschen würde aber genau die Langzeitreihe zerstören, für die die Tabelle
+# gebaut wurde.
 #
 # Deshalb: erst verdichten, dann löschen. Eine Zeile pro Tag × Kategorie ×
 # Ablehnungsgrund statt einer pro ASIN — das sind ~100–200 Zeilen/Tag statt
-# 2.800 und beantwortet alle Fragen der Datenstory (Wie viele Angebote pro Tag?
+# 35.000 und beantwortet alle Fragen der Datenstory (Wie viele Angebote pro Tag?
 # Welcher Anteil bestanden? Woran scheitern sie? Wie hoch war der Preisvorteil?).
 # Verloren geht nur die ASIN-Ebene — die braucht die Auswertung nicht.
 CREATE_OBSERVATION_DAILY = """
