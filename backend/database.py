@@ -63,6 +63,7 @@ MIGRATE_PRODUCTS = [
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS first_seen    TIMESTAMP",
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS mastodon_posted TIMESTAMP",
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS bluesky_posted  TIMESTAMP",
+    "ALTER TABLE products ADD COLUMN IF NOT EXISTS pinterest_posted TIMESTAMP",
     # Nur true, wenn echte Keepa-Preishistorie importiert wurde. Der Preisverlauf-
     # Chart wird ausschließlich für solche Produkte gezeigt (nie erfundene Daten).
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS has_real_history BOOLEAN DEFAULT false",
@@ -189,6 +190,19 @@ CREATE TABLE IF NOT EXISTS deal_observation_daily (
 """
 
 
+# Kleiner Schlüssel-Wert-Speicher für Dinge, die sich zur Laufzeit ändern und
+# eine Env-Variable deshalb nicht abbilden kann. Erster Fall: Pinterests
+# Refresh-Token rotiert bei jedem Refresh — stünde er nur in der Env, wäre der
+# Zugang nach spätestens 60 Tagen unwiderruflich weg (siehe pinterest.py).
+CREATE_APP_SETTINGS = """
+CREATE TABLE IF NOT EXISTS app_settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT now()
+)
+"""
+
+
 async def create_pool() -> asyncpg.Pool:
     global pool
     pool = await asyncpg.create_pool(
@@ -229,6 +243,7 @@ async def init_db():
         await conn.execute(CREATE_PRICE_ALERTS)
         await conn.execute(CREATE_DEAL_OBSERVATIONS)
         await conn.execute(CREATE_OBSERVATION_DAILY)
+        await conn.execute(CREATE_APP_SETTINGS)
         for stmt in MIGRATE_PRODUCTS:
             try:
                 await conn.execute(stmt)

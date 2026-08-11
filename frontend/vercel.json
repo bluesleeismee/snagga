@@ -9,6 +9,8 @@
     { "source": "/alarm/:path*", "destination": "https://snagga.onrender.com/alarm/:path*" },
     { "source": "/sitemap.xml", "destination": "https://snagga.onrender.com/sitemap.xml" },
     { "source": "/feed.xml", "destination": "https://snagga.onrender.com/feed.xml" },
+    { "source": "/pin/:file", "destination": "https://snagga.onrender.com/pin/:file" },
+    { "source": "/pinterest/:path*", "destination": "https://snagga.onrender.com/pinterest/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

@@ -14,6 +14,7 @@ from scraper import (
     seed_bestsellers, evict_stale_charts,
 )
 from retention import rollup_and_prune
+from pinterest import post_next_pin
 
 # Brache Keepa-Tokens nutzen, um den Such-Katalog aufzubauen (Stubs, keine
 # Historie). Halbiert 2026-07-06 (David: Budget war "regelmässig sehr dünn",
@@ -154,6 +155,19 @@ def create_scheduler() -> AsyncIOScheduler:
             id=f"bluesky_post_{hour}",
             replace_existing=True,
             misfire_grace_time=1800,
+        )
+
+    # Pinterest: 2 Pins/Tag zu festen Zeiten, versetzt zu Mastodon und Bluesky.
+    # Bewusst selten: Pins leben Monate, Menge bringt hier nichts, auffällige
+    # Frequenzmuster dagegen Ärger (siehe Mastodon-Sperre oben). Der Job prüft
+    # selbst, ob Pinterest konfiguriert ist — ohne Zugangsdaten passiert nichts.
+    for hour in (11, 17):
+        scheduler.add_job(
+            post_next_pin,
+            CronTrigger(hour=hour, minute=25),
+            id=f"pinterest_pin_{hour}",
+            replace_existing=True,
+            misfire_grace_time=3600,
         )
 
     return scheduler

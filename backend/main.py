@@ -713,6 +713,83 @@ def _not_found_page(message: str) -> HTMLResponse:
 </html>""")
 
 
+PINTEREST_REDIRECT = "https://www.snagga.de/pinterest/callback"
+
+
+@app.get("/pinterest/connect")
+async def pinterest_connect(token: str = Query(default="")):
+    """
+    Startet die einmalige Pinterest-Verbindung. Aufruf mit dem Admin-Token, dann
+    leitet die Route zu Pinterest weiter; der Rückweg landet in /pinterest/callback.
+
+    Bewusst als Browser-Weg statt curl-Anleitung: die Einrichtung soll ein
+    Klick sein, nicht eine Kommandozeile unter Windows.
+    """
+    _check_admin(token)
+    from pinterest import authorize_url, APP_ID
+    if not APP_ID:
+        return JSONResponse({"error": "PINTEREST_APP_ID fehlt in den Env-Variablen."},
+                            status_code=400)
+    # state trägt das Admin-Token zurück — sonst könnte ein Fremder den Callback
+    # mit einem eigenen Code aufrufen und snagga an sein Pinterest-Konto hängen.
+    return RedirectResponse(authorize_url(PINTEREST_REDIRECT, token), status_code=302)
+
+
+@app.get("/pinterest/callback")
+async def pinterest_callback(code: str = Query(default=""), state: str = Query(default="")):
+    """Rückweg von Pinterest: Code gegen Tokens tauschen und dauerhaft ablegen."""
+    _check_admin(state)
+    from pinterest import exchange_code, list_boards
+    ok, msg = await exchange_code(code, PINTEREST_REDIRECT)
+    if not ok:
+        return JSONResponse({"ok": False, "fehler": msg}, status_code=400)
+    boards = await list_boards()
+    return JSONResponse({
+        "ok": True,
+        "hinweis": "Verbunden. Trage die passenden Board-IDs als PINTEREST_BOARDS "
+                   "(JSON: Kategorie → Board-ID) oder PINTEREST_DEFAULT_BOARD in Render ein.",
+        "deine_boards": boards,
+    })
+
+
+@app.get("/pin/{asin}.png")
+async def pin_image(asin: str):
+    """
+    Pin-Grafik als PNG. Öffentlich, weil Pinterest das Bild selbst von dieser
+    URL abholt (media_source.source_type = image_url) — ein Upload entfällt und
+    die Grafik entsteht immer aus dem aktuellen Datenstand.
+
+    Zeigt bewusst kein Amazon-Produktfoto, sondern eigene Daten: Preis, Ø-Preis,
+    Urteil und die Preiskurve. Begründung siehe pin_image.py.
+    """
+    if not _ASIN_RE.match(asin):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT name, category, current_price, original_price, tag "
+            "FROM products WHERE asin=$1", asin)
+        if not row:
+            raise HTTPException(status_code=404, detail="Not found")
+        hist = await conn.fetch(
+            "SELECT price FROM price_history WHERE asin=$1 ORDER BY id DESC LIMIT 120", asin)
+
+    from pin_image import render_pin
+    png = render_pin(
+        name=row["name"] or "Produkt",
+        current=row["current_price"] or 0.0,
+        reference=row["original_price"] or 0.0,
+        tag=row["tag"] or "",
+        category=row["category"] or "",
+        prices=list(reversed([r["price"] for r in hist])),
+    )
+    # Kurzer Cache: Pinterest holt das Bild einmal ab und speichert es selbst,
+    # aber Vorschau-Aufrufe während der Einrichtung sollen den frischen Preis zeigen.
+    return Response(content=png, media_type="image/png",
+                    headers={"Cache-Control": "public, max-age=1800"})
+
+
 async def _needs_history_refresh(request: Request, row) -> bool:
     """
     Holt fehlende Preishistorie live nach. Gibt True zurück, wenn etwas geholt
