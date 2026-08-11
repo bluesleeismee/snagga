@@ -17,6 +17,11 @@ from datetime import datetime
 # Höher (z. B. 0.85) = mehr Deals, schwächerer Preisvorteil. Niedriger = strenger.
 QUALITY_DISCOUNT_FACTOR = float(os.getenv("QUALITY_DISCOUNT_FACTOR", "0.80"))
 
+# Mindest-Bewertungszahl, wenn Keepa keinen Sales-Rank liefert. Ohne Rang ist die
+# Bewertungsbasis der einzige verbleibende Nachfragebeleg — siehe
+# hard_filter_reason(). Über Env verstellbar, um die Wirkung zu messen.
+RANKLESS_MIN_REVIEWS = int(os.getenv("RANKLESS_MIN_REVIEWS", "500"))
+
 # ---------------------------------------------------------------------------
 # Bekannte Marken (Quality Gate)
 # ---------------------------------------------------------------------------
@@ -271,6 +276,16 @@ def hard_filter_reason(
     max_rank = CATEGORY_MAX_RANK.get(category, 30_000)
     if sales_rank > 0 and sales_rank > max_rank:
         return "sales_rank"
+
+    # Fehlender Sales-Rank hiess bisher: Nachfrage-Prüfung entfällt komplett.
+    # Gemessen am 11.08.2026 kamen so 17 von 92 aktiven Deals ganz ohne
+    # Nachfragebeleg ins Schaufenster, darunter ein Laptop für 4.276 € mit 100
+    # Bewertungen. Der Rang fehlt oft aus technischen Gründen und nicht, weil
+    # niemand das Produkt kauft — deshalb keine pauschale Ablehnung, sondern der
+    # zweite echte Nachfragebeleg: eine solide Bewertungsbasis. (Entscheidung
+    # David, 11.08.2026.)
+    if sales_rank <= 0 and reviews < RANKLESS_MIN_REVIEWS:
+        return "kein_rang_kein_beleg"
 
     if avg90 <= 0 and avg180 <= 0:
         return "keine_referenz"

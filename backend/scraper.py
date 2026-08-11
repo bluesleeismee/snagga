@@ -47,6 +47,10 @@ def _affiliate_tag_for(category: str) -> str:
 
 
 MAX_ACTIVE      = 500
+# Karenzzeit, bis ein Deal ohne echte Preishistorie aus der Liste fliegt. Der
+# stündliche Preis-Check versucht in dieser Zeit mehrfach, Historie zu holen —
+# klappt es nicht, kann der Deal das Chart-Versprechen nicht einlösen.
+CHART_GRACE_HOURS = int(os.getenv("CHART_GRACE_HOURS", "3"))
 MAX_BACKUP      = 150
 TOP_PICKS_COUNT = 10
 MIN_SCORE       = 30
@@ -557,6 +561,34 @@ async def hourly_keepa_price_check():
                         await conn.execute(
                             "UPDATE products SET has_real_history=true WHERE asin=$1", asin
                         )
+
+        # ── Invariante: kein aktiver Deal ohne Chart ────────────────────────
+        # Gemessen am 11.08.2026: 23 von 92 aktiven Deals hatten kein belegtes
+        # Tief und keine echte Historie. Ursache ist die Zeile `if live_price is
+        # None: continue` weiter oben — Produkte, für die Keepas /product nichts
+        # Brauchbares liefert, werden stillschweigend übersprungen. Sie bekommen
+        # nie ein last_checked, laufen deshalb jede Stunde erneut in dieselbe
+        # Lücke und bleiben dauerhaft aktiv: chartlos, mit einem Tag, der nur auf
+        # den /deal-Durchschnitten beruht.
+        #
+        # snagga wirbt damit, dass jeder Preis gegen die echte Historie geprüft
+        # ist. Ein Deal ohne Chart kann dieses Versprechen nicht einlösen, also
+        # gehört er nicht ins Schaufenster. Nach der Karenzzeit (der stündliche
+        # Check hat dann mehrfach vergeblich versucht, Historie zu holen) wird er
+        # deaktiviert; die Seite bleibt erreichbar, der Deal verschwindet nur aus
+        # der Liste. Nachrücken übernehmen die Backups.
+        chartless = await conn.fetch(
+            "UPDATE products SET is_active=false, is_top_pick=false "
+            "WHERE is_active=true AND has_real_history=false "
+            "  AND COALESCE(first_seen, last_updated) < NOW() - make_interval(hours => $1) "
+            "RETURNING asin",
+            CHART_GRACE_HOURS,
+        )
+        if chartless:
+            deactivated += len(chartless)
+            print(f"  Ohne Chart nach {CHART_GRACE_HOURS}h deaktiviert: {len(chartless)} "
+                  f"({', '.join(r['asin'] for r in chartless[:8])}"
+                  f"{' …' if len(chartless) > 8 else ''})")
 
     if deactivated > 0:
         await _promote_backups_simple(deactivated)

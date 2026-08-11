@@ -1,5 +1,76 @@
 # snagga.de — Nächste Aufgaben (Stand: 2026-08-11)
 
+## 2026-08-11: Logik-Review — Qualität und Relevanz der Deals
+
+### Befund 1: Der Quality Gate lässt Durchschnittspreise durch
+
+`scoring.py`, Quality Gate (a):
+
+```python
+near_atl = atl > 0 and current <= atl * 1.05
+```
+
+Bei Deals aus Keepas `/deal`-Endpoint ist `atl` **nicht das Allzeittief, sondern
+der 365-Tage-Durchschnitt**. Ein Preis innerhalb von 5 % des Jahresdurchschnitts
+gilt damit als „historisch günstig" — ein völlig durchschnittlicher Preis besteht
+die Qualitätsprüfung. Das ist derselbe Proxy-Fehler wie beim „Allzeittiefpreis"
+im Juli; in `determine_tag()` wurde er behoben, im Quality Gate übersehen.
+
+Wirkung, gemessen an den 92 aktiven Deals: nur **12 (13 %)** liegen ≥ 20 % unter
+dem 180-Tage-Schnitt, Median-Rabatt **12,8 %**, und **55 von 92** tragen den
+schwächsten Tag „Preis gefallen". Das erklärt auch, warum `rabatt_zu_klein` nur
+5 von 105.561 Kandidaten aussortierte: der `near_atl`-Zweig rettet fast alles am
+Rabatt-Kriterium vorbei.
+
+**Entscheidung David:** erst die Datenbasis, dann schärfen (siehe Befund 2 — das
+schliesst die Lücke zum grossen Teil von selbst, weil `atl` nur dann ein Proxy
+ist, wenn keine echte Historie existiert).
+
+### Befund 2: Deals ohne Chart bleiben dauerhaft im Schaufenster
+
+23 von 92 aktiven Deals hatten kein belegtes Tief und keine echte Historie.
+Ursache ist **nicht** eine Verzögerung bis zum nächtlichen Deep-Sync (der
+stündliche Preis-Check holt die Historie bereits um :30), sondern diese Zeile in
+`hourly_keepa_price_check`:
+
+```python
+live_price = current_prices.get(asin)
+if live_price is None:
+    continue
+```
+
+Produkte, für die Keepas `/product` nichts Brauchbares liefert, werden
+übersprungen. Sie bekommen dadurch **nie** ein `last_checked`, laufen jede Stunde
+in dieselbe Lücke und bleiben unbegrenzt aktiv — chartlos, mit einem Tag, der nur
+auf `/deal`-Durchschnitten beruht.
+
+**Gebaut:** Invariante „kein aktiver Deal ohne Chart". Nach dem stündlichen Check
+wird deaktiviert, was nach `CHART_GRACE_HOURS` (Default 3) noch immer keine echte
+Historie hat. Die `/preis`-Seite bleibt erreichbar, der Deal verschwindet nur aus
+der Liste; Backups rücken nach. Erwartete Wirkung beim ersten Lauf: aktive Deals
+fallen von 92 auf grob 70.
+
+### Befund 3: Fehlender Sales-Rank hebelte die Nachfrage-Prüfung aus
+
+`if sales_rank > 0 and sales_rank > max_rank` — fehlt der Rang, entfiel die
+Prüfung ersatzlos. 17 von 92 aktiven Deals kamen so ganz ohne Nachfragebeleg
+durch, darunter ein Acer-Laptop für 4.276 € mit 100 Bewertungen.
+
+**Gebaut** (Entscheidung David): ohne Rang sind `RANKLESS_MIN_REVIEWS` (Default
+500) Bewertungen nötig — der zweite echte Nachfragebeleg. Neuer Ablehnungsgrund
+`kein_rang_kein_beleg`, taucht ab sofort in `/debug/observation-stats` auf. Von
+den 17 aktuellen Fällen blieben 13 drin.
+
+### Danach zu prüfen (nach 24 h Laufzeit)
+
+1. `/debug/observation-stats` — wie oft greift `kein_rang_kein_beleg`?
+2. Wie viele aktive Deals bleiben, und wie viele haben jetzt einen Chart?
+3. Erst dann über `near_atl` entscheiden: mit garantierter Historie ist `atl`
+   ein belegtes Tief, der Zweig also ehrlich. Bleibt der Median-Rabatt trotzdem
+   niedrig, ist `QUALITY_DISCOUNT_FACTOR` der richtige Regler — dann erstmals
+   tatsächlich einer.
+
+
 ## 2026-08-11: Zwei Anzeigefehler auf Deal-Seiten (gemeldet von David)
 
 **Fall 1 — aktive Deals ohne Chart** (Beispiel `B09TL9VJHC`, Tefal-Topfset).
