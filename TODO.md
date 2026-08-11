@@ -1,5 +1,54 @@
 # snagga.de — Nächste Aufgaben (Stand: 2026-08-11)
 
+## 2026-08-11: Sortiment — warum in „Computer" nur Kabel lagen
+
+**Davids Befund:** In „Küche, Haushalt & Wohnen" stehen Bürostuhlrollen und
+Gewürzgläser statt Küchengeräten, Messern, Staubsaugern; in „Computer & Zubehör"
+Rucksäcke, Tintenpatronen und USB-Kabel statt PCs, Laptops, Monitoren.
+
+**Ursache 1 — strukturell.** Die Oberkategorie kommt aus Keepas oberster Ebene,
+in der ein Laptop im selben Topf liegt wie ein USB-Kabel. Zubehör ist dort
+millionenfach häufiger, wird häufiger rabattiert und hat bessere Verkaufsränge.
+Dagegen hilft keine weitere Stichwortliste in `specificity_penalty()` — für jedes
+gesperrte Wort kommt ein neues Kleinteil nach.
+
+**Ursache 2 — ein vergessenes Feld.** Keepas zweite Kategorieebene stand längst
+in `products.sub_category`, aber **95 von 114 aktiven Deals hatten sie nicht**.
+Grund: der `/deal`-Endpoint liefert keine Ebene 2, und der stündliche Preis-Check
+— der einzige Pfad, den ein frisch entdeckter Deal durchläuft — hatte die
+Unterkategorie in `kd` in der Hand und schrieb sie nicht in die Datenbank. Der
+Katalog (aus `seed_bestsellers`) hatte sie sauber gefüllt, das Schaufenster nicht.
+Behoben: eine Zeile im UPDATE des Preis-Checks.
+
+**Gebaut: `sortiment.py` — Kernsortiment statt Wortverbote.**
+Pro Oberkategorie sind die Unterkategorien in Kern und Zubehör eingeteilt
+(Namen aus der Messung, nicht geraten). Darauf eine Quote: Zubehör darf
+höchstens 40 % der aktiven Deals einer Kategorie stellen (Baumarkt 50 %).
+Überzähliges Zubehör wird nach dem stündlichen Preis-Check deaktiviert, das mit
+dem niedrigsten Score zuerst; Backups rücken nach, die `/preis`-Seite bleibt
+erreichbar.
+
+Drei bewusste Entscheidungen:
+
+- **Quote statt Verbot** — korrigiert sich selbst. Kommt an einem Tag kein guter
+  Laptop-Deal, bleibt der Platz knapper besetzt, statt mit dem nächsten Kabel
+  gefüllt zu werden.
+- **Unbekanntes zählt als Kern** — eine Lücke in der Pflege darf nie gute
+  Produkte aussperren, sie darf nur weniger gut aufräumen.
+- **Deaktivieren statt nach hinten sortieren** — die Kachelreihenfolge entsteht
+  im Frontend nach Score; ein nach hinten gerutschtes Kleinteil wäre auf der
+  Kategorieseite trotzdem sichtbar, und genau das war der Kritikpunkt.
+
+Notausschalter ohne Deploy: Env `SORTIMENT_QUOTA_AKTIV=0`.
+
+**Noch offen — der Katalog ist genauso schief.** Die Messung zeigt unter
+„Computer & Zubehör" 694 Produkte in „Computer-Zubehör" gegen 10 Laptops und
+13 Desktop-PCs; unter „Küche, Haushalt & Wohnen" 679 in „Wohnaccessoires & Deko"
+gegen 107 in „Elektrische Küchengeräte". Die Quote räumt das Schaufenster auf,
+aber `seed_bestsellers` sammelt weiter überwiegend Kleinteile ein. Nächster
+Schritt: Seed-Knoten auf die Kern-Unterkategorien ausrichten.
+
+
 ## 2026-08-11: Logik-Review — Qualität und Relevanz der Deals
 
 ### Befund 1: Der Quality Gate lässt Durchschnittspreise durch

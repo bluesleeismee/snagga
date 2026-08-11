@@ -521,13 +521,22 @@ async def hourly_keepa_price_check():
                 # wie der Tag → angezeigte Zahl und Badge können nicht auseinanderlaufen.
                 # Ist das Tief unbelegt, bleibt der gespeicherte (Proxy-)Wert für die
                 # Score-Berechnung stehen, wird aber NICHT als belegt markiert.
+                # sub_category wird hier mitgeschrieben (Fund 11.08.2026): der
+                # /deal-Endpoint liefert keine Kategorieebene 2, und dieser
+                # Preis-Check war der einzige Pfad, den ein frisch entdeckter
+                # Deal durchläuft — er hatte `kd` mit der Unterkategorie in der
+                # Hand und verwarf sie. Ergebnis: 95 von 114 aktiven Deals ohne
+                # Unterkategorie, während der Katalog sie sauber gefüllt hatte.
+                # Ohne dieses Feld ist keine Sortiments-Steuerung möglich.
                 await conn.execute(
                     "UPDATE products SET current_price=$2, deal_score=$3, tag=$4, "
                     "last_checked=$5, last_updated=$5, score_breakdown=$6, "
                     "all_time_low = CASE WHEN $8 THEN $7 ELSE all_time_low END, "
-                    "atl_confirmed = $8 "
+                    "atl_confirmed = $8, "
+                    "sub_category = CASE WHEN $9 != '' THEN $9 ELSE sub_category END "
                     "WHERE asin=$1",
                     asin, live_price, score, tag, now, breakdown, atl_now, atl_ok,
+                    (kd.get("sub_category") or "") if kd else "",
                 )
 
                 # Kostenlose Keepa-History einspielen → Chart aktuell, Marke mitnehmen.
@@ -590,12 +599,66 @@ async def hourly_keepa_price_check():
                   f"({', '.join(r['asin'] for r in chartless[:8])}"
                   f"{' …' if len(chartless) > 8 else ''})")
 
+        deactivated += await _sortiment_quote_durchsetzen(conn)
+
     if deactivated > 0:
         await _promote_backups_simple(deactivated)
 
     await _recalculate_top_picks()
     print(f"  Keepa Preis-Check fertig: {deactivated} deaktiviert "
           f"({volatile_cnt} volatil), {len(current_prices)} geprüft.")
+
+
+async def _sortiment_quote_durchsetzen(conn) -> int:
+    """
+    Sorgt dafür, dass eine Kategorie zeigt, was ihr Name verspricht: Zubehör
+    darf höchstens den in `sortiment.MAX_ZUBEHOER_ANTEIL` erlaubten Anteil der
+    aktiven Deals stellen. Überzähliges Zubehör wird deaktiviert, das mit dem
+    niedrigsten Score zuerst.
+
+    Warum hier und nicht bei der Entdeckung: die Unterkategorie kommt aus Keepas
+    `/product` und ist im `/deal`-Stream noch unbekannt. Erst nach dem
+    Preis-Check oben steht sie zur Verfügung.
+
+    Warum deaktivieren statt umsortieren: die Kachelreihenfolge entsteht im
+    Frontend nach Score. Ein Kleinteil, das nur nach hinten rutscht, ist auf der
+    Kategorieseite trotzdem sichtbar — David hat genau das bemängelt. Die
+    `/preis`-Seite bleibt selbstverständlich erreichbar, das Produkt verschwindet
+    nur aus dem Schaufenster, und Backups rücken nach.
+    """
+    import sortiment
+
+    if not (sortiment.QUOTA_AKTIV and sortiment.ist_konfiguriert()):
+        return 0
+
+    rows = await conn.fetch(
+        "SELECT asin, category, COALESCE(sub_category,'') AS sub, deal_score "
+        "FROM products WHERE is_active=true"
+    )
+
+    nach_kategorie: dict[str, list] = {}
+    for r in rows:
+        nach_kategorie.setdefault(r["category"] or "", []).append(r)
+
+    raus: list[str] = []
+    for cat, items in nach_kategorie.items():
+        zubehoer = [r for r in items if sortiment.rolle(cat, r["sub"]) == sortiment.ZUBEHOER]
+        ueber = sortiment.zuviel_zubehoer(cat, len(zubehoer), len(items))
+        if ueber <= 0:
+            continue
+        zubehoer.sort(key=lambda r: r["deal_score"] or 0)
+        weg = [r["asin"] for r in zubehoer[:ueber]]
+        raus.extend(weg)
+        print(f"  Sortiment {cat}: {len(zubehoer)}/{len(items)} Zubehör → "
+              f"{len(weg)} deaktiviert")
+
+    if not raus:
+        return 0
+
+    await conn.execute(
+        "UPDATE products SET is_active=false, is_top_pick=false "
+        "WHERE asin = ANY($1::text[])", raus)
+    return len(raus)
 
 
 async def _count_price_moves(asins: list[str], window: int = 12, threshold: float = 0.03) -> dict[str, int]:
