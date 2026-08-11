@@ -1,5 +1,35 @@
 # snagga.de — Nächste Aufgaben (Stand: 2026-08-11)
 
+## 2026-08-11: Zwei Anzeigefehler auf Deal-Seiten (gemeldet von David)
+
+**Fall 1 — aktive Deals ohne Chart** (Beispiel `B09TL9VJHC`, Tefal-Topfset).
+Ursache: Das Nachladen fehlender Historie stand nur in `/preis/{asin}`.
+`/deal/{asin}` rendert dasselbe Layout aus derselben Tabelle, las die Historie
+aber roh aus der DB. Deals aus Keepas `/deal`-Endpoint bringen jedoch **keine**
+Historie mit — nur `/product` liefert sie —, und bis der nächtliche Deep-Sync
+nachzieht, vergeht bis zu ein Tag. Frisch entdeckte Deals waren auf `/deal`
+deshalb chartlos: ausgerechnet die URL, die aus Feed, Mastodon und Bluesky
+verlinkt ist. Behoben über den gemeinsamen Helper `_needs_history_refresh()`,
+rate-limitiert wie `/preis-check`.
+
+**Fall 2 — falsches „Bester Preis seit N Monaten"** (Beispiel `B06XC43BF6`,
+Bomann-Kühlschrank: 199,90 € behauptet als bester Preis seit 8 Monaten, obwohl
+wenige Tage zuvor 184,99 € und 187,00 € im selben Chart standen).
+Ursache in `best_price_since_months()`: die Schleife überspringt bewusst die
+jüngste Preisstrecke, bis der Preis einmal spürbar über dem aktuellen lag —
+damit ein flaches Plateau nicht auf „seit 0 Monaten" ankert. Dieses Überspringen
+schluckte aber auch **echte, tiefere** Punkte in dieser Strecke. Jetzt gilt: ein
+spürbar tieferer Punkt (>0,3 % unter aktuell, alles darunter ist Keepa-
+Rundungsrauschen) in der Anfangsstrecke → `None`, keine „seit"-Aussage.
+
+Zwei Regressionstests in `test_atl_tags.py` (der Realfall und die Gegenprobe,
+dass Rundungsrauschen das Urteil nicht kippt), alle 15 Tests grün.
+
+**Wichtig nach dem Deploy:** Falsche Tags stehen als Text in `products.tag` und
+verschwinden erst, wenn der stündliche Preis-Check sie neu berechnet — also
+innerhalb einer Stunde, nicht sofort.
+
+
 ## 2026-08-11 (abends): Erste echte Messwerte — zwei Annahmen widerlegt
 
 **1. Der vermutete Engpass war nicht der Engpass.** Der Verdacht vom 09.08.

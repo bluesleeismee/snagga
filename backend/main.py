@@ -713,8 +713,40 @@ def _not_found_page(message: str) -> HTMLResponse:
 </html>""")
 
 
+async def _needs_history_refresh(request: Request, row) -> bool:
+    """
+    Holt fehlende Preishistorie live nach. Gibt True zurück, wenn etwas geholt
+    wurde und der Aufrufer seine Zeile neu lesen sollte.
+
+    Warum als Helper (Bug gefunden 2026-08-11): diese Logik stand nur in
+    /preis/{asin}. /deal/{asin} rendert dasselbe Layout aus derselben Tabelle,
+    las die Historie aber roh aus der DB — ohne Nachladen. Deals aus Keepas
+    /deal-Endpoint bringen jedoch KEINE Historie mit (nur /product tut das), und
+    bis der nächtliche Deep-Sync sie nachzieht, vergeht bis zu ein Tag. Ergebnis:
+    frisch entdeckte, aktive Deals zeigten auf /deal eine Seite ganz ohne Chart —
+    ausgerechnet die URL, die aus Feed, Mastodon und Bluesky verlinkt wird.
+
+    Rate-limitiert wie /preis-check, damit kein Crawler das Keepa-Tagesbudget
+    leert. Bei Limit passiert nichts — die Seite rendert mit dem alten Stand.
+    """
+    stale = (row["last_checked"] is None
+             or datetime.utcnow() - row["last_checked"] > timedelta(hours=PRICE_FRESH_HOURS))
+    # Nachladen wenn: kein Chart da (egal ob aktiver Deal oder Stub) ODER
+    # nicht-aktiv und der gespeicherte Preis veraltet (Compliance-Refresh).
+    if not ((not row["has_real_history"]) or (not row["is_active"] and stale)):
+        return False
+
+    ip = (request.headers.get("x-forwarded-for")
+          or (request.client.host if request.client else "?")).split(",")[0].strip()
+    if not _pc_rate_ok(ip):
+        return False
+
+    await fetch_and_store_history(row["asin"])
+    return True
+
+
 @app.api_route("/deal/{asin}", methods=["GET", "HEAD"], response_class=HTMLResponse)
-async def deal_page(asin: str):
+async def deal_page(request: Request, asin: str):
     """
     Eigene, serverseitig gerenderte und crawlbare Detailseite pro Deal.
     Anders als /share: KEIN Redirect. Die React-SPA selbst hat nur eine
@@ -736,6 +768,18 @@ async def deal_page(asin: str):
         )
     if not row:
         return _not_found_page("Deal nicht gefunden")
+
+    # Fehlende Historie nachladen, sonst zeigt die Seite keinen Chart — siehe
+    # _needs_history_refresh(). Muss VOR dem Lesen von price_history passieren.
+    if await _needs_history_refresh(request, row):
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT asin, name, brand, image_url, current_price, original_price, tag, category, "
+                "all_time_low, atl_confirmed, avg_price, avg90_price, avg180_price, has_real_history, "
+                "rating, reviews, affiliate_url, is_active, prime, last_checked, last_updated "
+                "FROM products WHERE asin=$1",
+                asin,
+            )
 
     canonical = f"https://www.snagga.de/deal/{asin}"
     name      = html.escape((row["name"] or "Deal")[:200])
@@ -2135,26 +2179,18 @@ async def price_page(request: Request, asin: str):
         if not row:
             return _not_found_page("Produkt nicht gefunden")
 
-    stale = (row["last_checked"] is None
-             or datetime.utcnow() - row["last_checked"] > timedelta(hours=PRICE_FRESH_HOURS))
-    # Ad hoc live holen wenn: kein Chart da (egal ob aktiver Deal oder Stub) ODER
-    # nicht-aktiv und der gespeicherte Preis veraltet (Compliance-Refresh).
-    if (not row["has_real_history"]) or (not row["is_active"] and stale):
-        ip = (request.headers.get("x-forwarded-for")
-              or (request.client.host if request.client else "?")).split(",")[0].strip()
-        if _pc_rate_ok(ip):
-            await fetch_and_store_history(asin)
-            async with pool.acquire() as conn:
-                row = await conn.fetchrow(
-                    "SELECT asin, name, brand, image_url, current_price, original_price, "
-                    "all_time_low, atl_confirmed, avg_price, avg90_price, avg180_price, category, "
-                    "affiliate_url, is_active, rating, reviews, tag, has_real_history, prime, "
-                    "last_checked, last_updated "
-                    "FROM products WHERE asin=$1",
-                    asin,
-                )
-        # Bei Rate-Limit: einfach mit dem (evtl. veralteten) Stand weiterrendern —
-        # fresh_check unten sorgt dafür, dass kein veralteter Preis gezeigt wird.
+    # Bei Rate-Limit wird einfach mit dem (evtl. veralteten) Stand weitergerendert —
+    # fresh_check unten sorgt dafür, dass kein veralteter Preis gezeigt wird.
+    if await _needs_history_refresh(request, row):
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT asin, name, brand, image_url, current_price, original_price, "
+                "all_time_low, atl_confirmed, avg_price, avg90_price, avg180_price, category, "
+                "affiliate_url, is_active, rating, reviews, tag, has_real_history, prime, "
+                "last_checked, last_updated "
+                "FROM products WHERE asin=$1",
+                asin,
+            )
 
     async with pool.acquire() as conn:
         await conn.execute("UPDATE products SET last_viewed=$1 WHERE asin=$2", datetime.utcnow(), asin)

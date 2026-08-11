@@ -572,10 +572,22 @@ def best_price_since_months(history: list, current: float) -> int | None:
     # der Preis einmal spürbar ÜBER dem aktuellen lag, und dann den jüngsten Punkt
     # suchen, der wieder gleich günstig oder günstiger war — das ist der ehrliche
     # „seit"-Zeitpunkt.
+    #
+    # ACHTUNG (Bug gefunden 2026-08-11 an B06XC43BF6): dieses Überspringen darf
+    # NUR preisgleiche Punkte schlucken. Vorher verschlang es auch echte, tiefere
+    # Punkte — beim Kühlschrank lag der Preis wenige Tage zuvor bei 184,99 € und
+    # 187,00 €, aktuell bei 199,90 €; beide wurden übersprungen, weil noch kein
+    # höherer Punkt gesehen war, und die Seite behauptete „Bester Preis seit 8
+    # Monaten" direkt neben einem Chart, in dem der tiefere Preis zu sehen war.
+    # Ein spürbar tieferer Punkt in dieser Anfangsstrecke bedeutet: der aktuelle
+    # Preis ist nicht der beste, es gibt keine ehrliche „seit"-Aussage → None.
+    lower_tol = current * 0.997
     anchor = history[0][1]  # Fallback: davor nie so günstig -> ganze Spanne
     seen_higher = False
     for price, ts in reversed(history):
         if not seen_higher:
+            if price < lower_tol:
+                return None
             if price > tol:
                 seen_higher = True
             continue

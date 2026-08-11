@@ -149,6 +149,48 @@ def test_bester_preis_seit_respektiert_gleich_guenstigen_punkt():
     assert months is None or months < 12
 
 
+def test_bester_preis_seit_ignoriert_juengeres_tief_nicht():
+    """
+    Realfall Bomann-Kühlschrank B06XC43BF6 (11.08.2026): aktuell 199,90 €, wenige
+    Tage zuvor 184,99 € und 187,00 €. Die Seite behauptete "Bester Preis seit 8
+    Monaten" — direkt neben dem Chart, in dem das tiefere Niveau zu sehen war.
+
+    Ursache: die Schleife übersprang die jüngste Strecke, bis der Preis einmal
+    spürbar ÜBER dem aktuellen lag. Damit verschwanden auch die echten Tiefs in
+    dieser Strecke. Ein spürbar tieferer Punkt dort heisst: kein bester Preis.
+    """
+    now = datetime.utcnow()
+    history = [
+        (229.0, now - timedelta(days=200)),
+        (217.0, now - timedelta(days=120)),
+        (229.0, now - timedelta(days=60)),
+        (217.0, now - timedelta(days=20)),
+        (187.0, now - timedelta(days=8)),    # günstiger als jetzt …
+        (184.99, now - timedelta(days=6)),   # … und noch günstiger
+        (199.9, now - timedelta(days=2)),
+        (199.9, now - timedelta(days=1)),
+    ]
+    assert best_price_since_months(history, 199.9) is None
+
+
+def test_bester_preis_seit_toleriert_rundungsrauschen():
+    """
+    Gegenprobe zum Test darüber: 0,2 % unter dem aktuellen Preis ist Keepa-
+    Rundungsrauschen und darf die Aussage NICHT kippen — sonst hätte praktisch
+    kein Produkt mehr ein Urteil.
+    """
+    now = datetime.utcnow()
+    history = [
+        (300.0, now - timedelta(days=400)),
+        (295.0, now - timedelta(days=300)),
+        (300.0, now - timedelta(days=100)),
+        (209.6, now - timedelta(days=5)),    # 0,19 % unter 210 → Rauschen
+        (210.0, now - timedelta(days=1)),
+    ]
+    months = best_price_since_months(history, 210.0)
+    assert months is not None and months >= 3
+
+
 def test_bester_preis_seit_ohne_teureren_punkt_ist_none():
     """Flache Linie / aktuell teuerster Stand → keine belastbare Aussage."""
     assert best_price_since_months([p for p in _hist([20.0, 20.0, 20.0])], 20.0) is None
