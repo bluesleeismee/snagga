@@ -2929,8 +2929,26 @@ async def debug_category_tree(token: str = Query(default="")):
 
 
 @app.get("/debug/category-children/{cat_id}")
-async def debug_category_children(cat_id: int, token: str = Query(default="")):
-    """Holt Unterkategorien einer bestimmten Kategorie."""
+async def debug_category_children(cat_id: str, token: str = Query(default="")):
+    """
+    Holt Unterkategorien MIT NAMEN. `cat_id` darf eine kommagetrennte Liste
+    sein (Keepa erlaubt mehrere Knoten pro Request, kostet 1 Token je Knoten).
+
+    Zwei Korrekturen (David, 15.08.2026), beide beim Neuaufbau der Kategorie-
+    Tabelle aufgefallen:
+
+    1. Mehrere IDs pro Request. Keepa erlaubt laut eigener API-Doku bis zu 10
+       kommagetrennte Knoten pro /category-Aufruf. Nötig, weil Keepa NUR die
+       angefragten Knoten zurückgibt: Wer die Namen der Unterkategorien
+       braucht, muss deren IDs selbst anfragen. Amazons Baum hat zwischen Root
+       und den eigentlichen Unterkategorien ausserdem eine Zwischenebene
+       ("Produkte") — über 15 Oberkategorien wären das sonst ~250 Einzelcalls
+       statt weniger Batches.
+    2. `parents=0` statt `parents=1`. Der Elternbaum wird hier nie ausgewertet,
+       kostet aber Antwortgrösse. fetch_keepa_category_children_named() in
+       keepa.py fragt ebenfalls mit parents=0 — dieser Endpoint war nur nie
+       nachgezogen worden.
+    """
     _check_admin(token)
     import os, httpx
     KEEPA_KEY = os.getenv("KEEPA_API_KEY", "")
@@ -2939,7 +2957,7 @@ async def debug_category_children(cat_id: int, token: str = Query(default="")):
 
     async with httpx.AsyncClient(timeout=30) as client:
         r = await client.get("https://api.keepa.com/category",
-                             params={"key": KEEPA_KEY, "domain": 3, "category": cat_id, "parents": 1})
+                             params={"key": KEEPA_KEY, "domain": 3, "category": cat_id, "parents": 0})
         r.raise_for_status()
         data = r.json()
 
