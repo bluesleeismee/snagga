@@ -211,6 +211,62 @@ def test_gestrichene_kategorien_sind_weg():
         assert sortiment.rolle(weg, "Irgendwas") == sortiment.UNBEKANNT
 
 
+# ── 8. Die vier Kategorielisten dürfen nicht auseinanderlaufen ─────────────
+# Genau das war die Ursache des ganzen Umbaus: Kategorie-Wissen lag verteilt in
+# ROOTCAT_MAP, EXCLUDE_ROOTCATS, KEYWORD_MAP, CATEGORY_MAX_RANK und
+# INCLUDE_CAT_IDS — und lief auseinander, ohne dass es jemand merkte.
+#
+# Am 15.08.2026, NACH dem ersten Deploy des Umbaus, war der Stand: „Spielzeug"
+# und „Gewerbe/Industrie" waren als Oberkategorien beschlossen, standen aber
+# gleichzeitig in EXCLUDE_ROOTCATS und fehlten in ROOTCAT_MAP — sie konnten
+# nichts liefern. „Auto & Motorrad" und „Kamera & Foto" waren gestrichen, wurden
+# von ROOTCAT_MAP aber weiter vergeben und kamen ungehindert herein.
+
+def test_rootcat_map_kennt_nur_gueltige_kategorien():
+    import scraper
+    unbekannt = {c for c in scraper.ROOTCAT_MAP.values() if c not in sortiment.KATEGORIEN}
+    assert not unbekannt, f"ROOTCAT_MAP vergibt gestrichene Kategorien: {sorted(unbekannt)}"
+
+
+def test_keyword_map_kennt_nur_gueltige_kategorien():
+    import scraper
+    unbekannt = {c for c in scraper.KEYWORD_MAP if c not in sortiment.KATEGORIEN}
+    assert not unbekannt, f"KEYWORD_MAP kennt gestrichene Kategorien: {sorted(unbekannt)}"
+
+
+def test_jede_kategorie_hat_eine_rangschwelle():
+    from scoring import CATEGORY_MAX_RANK
+    fehlt = [c for c in sortiment.oberkategorien() if c not in CATEGORY_MAX_RANK]
+    assert not fehlt, f"Ohne Rangschwelle (still 30.000): {fehlt}"
+
+
+def test_jede_kategorie_ist_ueber_rootcat_erreichbar():
+    """Eine Oberkategorie ohne rootCat-Eintrag kann sich nie füllen."""
+    import scraper
+    erreichbar = set(scraper.ROOTCAT_MAP.values())
+    fehlt = [c for c in sortiment.oberkategorien() if c not in erreichbar]
+    assert not fehlt, f"Nicht über ROOTCAT_MAP erreichbar: {fehlt}"
+
+
+def test_keine_gewuenschte_kategorie_ist_geblockt():
+    """
+    Der teuerste Fehler dieser Art: Spielzeug und Gewerbe/Industrie standen in
+    EXCLUDE_ROOTCATS, während sie gleichzeitig als Oberkategorie geführt wurden.
+    """
+    import scraper
+    geblockt = [rid for rid, cat in scraper.ROOTCAT_MAP.items()
+                if cat in sortiment.KATEGORIEN and rid in scraper.EXCLUDE_ROOTCATS]
+    assert not geblockt, f"rootCat-IDs gewünschter Kategorien in EXCLUDE_ROOTCATS: {geblockt}"
+
+
+def test_classify_category_laesst_nur_bekannte_durch():
+    import scraper
+    # Auto & Motorrad: gestrichen, rootCat wird trotzdem geliefert
+    assert scraper.classify_category("Bosch Autobatterie 70Ah", root_cat=78191031) is None
+    # Spielzeug: gewünscht, muss durchkommen
+    assert scraper.classify_category("LEGO Technic Bagger", root_cat=12950651) == "Spielzeug"
+
+
 # ── 7. Score ohne belegtes Tief ────────────────────────────────────────────
 
 def test_score_ohne_tief_bleibt_ueber_min_score():

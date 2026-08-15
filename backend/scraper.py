@@ -30,7 +30,7 @@ from scoring import (
     resolve_atl,
     atl_for_display,
 )
-from sortiment import kern_namen
+from sortiment import kern_namen, KATEGORIEN
 
 AFFILIATE_TAG   = "snagga-21"  # Fallback-Tag für Kategorien ohne eigenen Tracking-Tag
 
@@ -131,11 +131,17 @@ CATALOG_MIN_PRICE_MULTIPLIER = 1.3
 # Aus Debug-Endpoint /debug/keepa-cats ermittelt (150 Deals, 2026-06-28)
 # ---------------------------------------------------------------------------
 ROOTCAT_MAP: dict[int, str] = {
-    # Auto & Motorrad (78191031 war fälschlich in EXCLUDE_ROOTCATS!)
-    78191031:    "Auto & Motorrad",
-    79899031:    "Auto & Motorrad",
-    80931031:    "Auto & Motorrad",
-    77:          "Auto & Motorrad",
+    # Auto & Motorrad ist am 15.08.2026 entfallen und steht jetzt in
+    # EXCLUDE_ROOTCATS. Kamera & Foto ebenfalls: der Knoten 571860 ist kein
+    # Root, sondern ein Kind von Elektronik & Foto — die Snagga-Kategorie
+    # konnte sich deshalb nie über rootCat füllen.
+    # Spielzeug
+    12950651:    "Spielzeug",
+    12950661:    "Spielzeug",
+    124545011:   "Spielzeug",
+    # Gewerbe, Industrie & Wissenschaft (3D-Druck, Messtechnik, Werkstatt)
+    5866098031:  "Gewerbe, Industrie & Wissenschaft",
+    5866099031:  "Gewerbe, Industrie & Wissenschaft",
     # Baumarkt
     80084031:    "Baumarkt",
     80084:       "Baumarkt",
@@ -161,11 +167,10 @@ ROOTCAT_MAP: dict[int, str] = {
     65633031:    "Drogerie & Körperpflege",
     64980031:    "Drogerie & Körperpflege",
     64117011:    "Drogerie & Körperpflege",
-    84230031:    "Drogerie & Körperpflege",
-    84231031:    "Drogerie & Körperpflege",
-    129371031:   "Drogerie & Körperpflege",
-    129369031:   "Drogerie & Körperpflege",
-    129368031:   "Drogerie & Körperpflege",
+    # Kosmetik-Knoten (84230031 & Kinder) am 15.08.2026 entfernt: sie brachten
+    # Make-Up, Hautpflege und Düfte unter Drogerie & Körperpflege herein, wo
+    # genau diese Unterkategorien auf RAUS stehen. Der Root steht jetzt in
+    # EXCLUDE_ROOTCATS — einmal blocken statt zweimal filtern.
     # Elektro-Großgeräte
     908823031:   "Elektro-Großgeräte",
     908824031:   "Elektro-Großgeräte",
@@ -183,12 +188,12 @@ ROOTCAT_MAP: dict[int, str] = {
     526742:      "Games",
     124544011:   "Games",
     296676011:   "Games",
-    # Kamera & Foto
-    571860:      "Kamera & Foto",
-    # Beleuchtung + Küche, Haushalt & Wohnen
-    213083031:   "Küche, Haushalt & Wohnen",
-    213084031:   "Küche, Haushalt & Wohnen",
-    227218031:   "Küche, Haushalt & Wohnen",
+    # Kamera & Foto: Knoten 571860 hängt unter Elektronik & Foto und wird jetzt
+    # auch dorthin einsortiert — die eigene Snagga-Kategorie ist entfallen.
+    571860:      "Elektronik & Foto",
+    # Küche, Haushalt & Wohnen (213083031/213084031/227218031 = Beleuchtung,
+    # steht in EXCLUDE_ROOTCATS und ist hier nur noch zur Erinnerung genannt)
+    3167641:     "Küche, Haushalt & Wohnen",
     3167641:     "Küche, Haushalt & Wohnen",
     3375251:     "Küche, Haushalt & Wohnen",
     3667441:     "Küche, Haushalt & Wohnen",
@@ -373,18 +378,30 @@ async def _kern_knoten(client: httpx.AsyncClient) -> tuple[list[int], int]:
     return ids, tokens_used
 
 
-# Explizit ausschließen (rootCat → None, egal was Keywords sagen)
+# Explizit ausschließen (rootCat → None, egal was Keywords sagen).
+# Stand 15.08.2026 an sortiment.KATEGORIEN angeglichen.
 EXCLUDE_ROOTCATS: set[int] = {
     11961464031,  # Bekleidung / Fashion
     340846031,    # Lebensmittel & Getränke
-    12950651,     # Spielzeug
     186606,       # Bücher
     340852031,    # Heimtier
     284266,       # Film/Video/DVD
     255882,       # Musik-Tonträger (Vinyl, CDs)
     355007011,    # Taschen & Accessoires
-    5866098031,   # Gewerbe/Industrie (Präzisionslager etc.)
     192416031,    # Bürobedarf (Stempel, Büromaterial)
+    # Am 15.08.2026 gestrichene Oberkategorien — hier explizit blocken, damit
+    # sie nicht über den Keyword-Fallback zurückkommen.
+    78191031,     # Auto & Motorrad (Modell-Nischenteile)
+    79899031,     # Auto & Motorrad
+    80931031,     # Auto & Motorrad
+    77,           # Auto & Motorrad
+    84230031,     # Kosmetik (dupliziert Drogerie & Körperpflege)
+    301927,       # Software (keine belastbare Preishistorie)
+    213083031,    # Beleuchtung (Unterkategorien laufen unter Küche/Haushalt)
+    # 12950651 (Spielzeug) und 5866098031 (Gewerbe/Industrie) standen bis
+    # 15.08.2026 hier — beide sind jetzt gewünschte Oberkategorien. Solange sie
+    # geblockt waren, konnten LEGO, Playmobil und 3D-Drucker gar nicht ins
+    # Schaufenster kommen, egal wie die Kategorie-Tabelle aussah.
 }
 
 # Keyword-Fallback NUR für bekannte Produkte (exhaustiv, kein Catch-all)
@@ -402,11 +419,6 @@ KEYWORD_MAP: dict[str, list[str]] = {
     "Computer & Zubehör": [
         "computer", "pc ", "desktop", "mini-pc", "stick pc",
         "ram ", "arbeitsspeicher", "mainboard", "netzteil", "gehäuse tower",
-    ],
-    "Kamera & Foto": [
-        "kamera", "camera", "objektiv", "lens", "spiegelreflex", "dslr",
-        "mirrorless", "systemkamera", "gopro", "action cam", "stativ",
-        "blitzgerät", "drohne", "drone",
     ],
     "Games": [
         "playstation", "ps5", "ps4", "xbox", "nintendo switch",
@@ -446,16 +458,30 @@ KEYWORD_MAP: dict[str, list[str]] = {
         "kopfhörer studio", "audio interface", "midi", "synthesizer",
         "lautsprecher pa", "dj controller",
     ],
-    "Auto & Motorrad": [
-        "dashcam", "navigationssystem", "navi ", "obd2", "autoreinigung",
-        "autopflege", "dachbox", "fahrradträger auto",
+    "Spielzeug": [
+        "lego", "playmobil", "ravensburger", "kosmos experimentierkasten",
+        "carrera bahn", "bruder ", "puzzle ", "brettspiel", "gesellschaftsspiel",
+        "modellbau", "rc auto", "ferngesteuert",
     ],
+    "Gewerbe, Industrie & Wissenschaft": [
+        "3d-drucker", "3d drucker", "filament", "resin drucker",
+        "messgerät", "multimeter", "oszilloskop", "wärmebildkamera",
+        "laserentfernungsmesser", "werkstattwagen",
+    ],
+    # "Auto & Motorrad" und "Kamera & Foto" am 15.08.2026 entfernt — beide
+    # Oberkategorien gibt es nicht mehr. Kamera-Produkte laufen jetzt unter
+    # Elektronik & Foto (Unterkategorie "Kamera & Foto" = KERN).
 }
 
 # Ausschluss-Keywords: egal was rootCat sagt, diese Produkte nie anzeigen
 EXCLUDE_KEYWORDS = [
     "papier", "druckerpapier", "bastelfilz", "filz ", "plüsch", "kuscheltier",
-    "spielzeug", "puppe ", "lego ", "puzzle", "brettspiel", "kartenspiel",
+    # „spielzeug", „lego ", „puzzle", „brettspiel", „kartenspiel" und „puppe "
+    # standen bis 15.08.2026 hier — aus der Zeit, als Spielzeug eine gesperrte
+    # Kategorie war. Sie hätten die Neuaufnahme lautlos wirkungslos gemacht:
+    # ein „LEGO Technic Bagger" wurde noch VOR der Kategorieprüfung verworfen.
+    # Was in Spielzeug nicht erwünscht ist, regelt jetzt sortiment.KATEGORIEN
+    # (Party- & Scherzartikel, Schulbedarf, Verkleiden … stehen dort auf RAUS).
     "buch ", "bücher", "roman ", "unterwäsche", "unterhose", "socken",
     "t-shirt", "jeans", "hose ", "jacke ", "pullover", "kleidung",
     "schuhe ", "sneaker ", "handtuch", "bettwäsche", "kissen ", "decke ",
@@ -532,21 +558,34 @@ def classify_category(title: str, root_cat: int = 0) -> str | None:
 
     # 3. rootCat-Mapping (zuverlässig wenn ID bekannt)
     if root_cat and root_cat in ROOTCAT_MAP:
-        mapped = ROOTCAT_MAP[root_cat]
-        # Kamera & Foto hat bei Keepa keine eigene rootCat-ID (571860 ist nur ein
-        # Kind von Elektronik & Foto/562066) — jedes Kamera-Produkt würde sonst
-        # immer als "Elektronik & Foto" einsortiert und die Kategorie bliebe
-        # für immer leer. Titel-Keywords zuerst prüfen, dann erst den Fallback.
-        if mapped == "Elektronik & Foto" and _KEYWORD_RE["Kamera & Foto"].search(title_l):
-            return "Kamera & Foto"
-        return _reroute_peripheral(mapped, title_l)
+        return _nur_bekannte(_reroute_peripheral(ROOTCAT_MAP[root_cat], title_l))
 
     # 4. Keyword-Fallback (exhaustiv — kein Catch-all mehr)
     for cat, pattern in _KEYWORD_RE.items():
         if pattern.search(title_l):
-            return _reroute_peripheral(cat, title_l)
+            return _nur_bekannte(_reroute_peripheral(cat, title_l))
 
     # 5. Kein Match → ablehnen
+    return None
+
+
+def _nur_bekannte(cat: str | None) -> str | None:
+    """
+    Lässt nur Kategorien durch, die in sortiment.KATEGORIEN stehen.
+
+    Der strukturelle Riegel gegen genau den Fehler, der diesen Umbau nötig
+    machte: Kategorie-Wissen lag an vier Stellen verteilt und lief auseinander.
+    Am 15.08.2026 vergab ROOTCAT_MAP noch „Auto & Motorrad" und „Kamera & Foto",
+    obwohl beide gestrichen waren — die Produkte kamen weiter herein, und weil
+    sortiment.rolle() für unbekannte Oberkategorien UNBEKANNT liefert, griff
+    auch die RAUS-Regel nicht.
+
+    Mit dieser Zeile ist die Tabelle die letzte Instanz: wer dort keine
+    Oberkategorie hat, wird nicht angezeigt — egal was ROOTCAT_MAP oder die
+    Keyword-Listen sagen.
+    """
+    if cat and cat in KATEGORIEN:
+        return cat
     return None
 
 

@@ -112,28 +112,40 @@ async def fetch_keepa_deals(
     # Wochendurchschnitt.
     # Whitelist: nur Deals aus diesen Amazon-DE Kategorien (root + Level-1-Subcats)
     # IDs ermittelt via /debug/category-children (2026-06-28, DE domain)
+    # Root-Whitelist der Breitensuche. Stand 15.08.2026 deckungsgleich mit den
+    # elf Oberkategorien in sortiment.KATEGORIEN.
+    #
+    # Entfernt: Auto & Motorrad, Kosmetik (dupliziert Drogerie), Beleuchtung
+    # (Unterkategorien laufen unter Küche/Haushalt und stehen dort auf
+    # ZUBEHÖR/RAUS). Ergänzt: Spielzeug und Gewerbe/Industrie — beide standen
+    # bis heute sogar in scraper.EXCLUDE_ROOTCATS und waren damit doppelt
+    # gesperrt.
+    #
+    # Garten (10925031) bleibt bewusst drin, obwohl es keine eigene Snagga-
+    # Kategorie ist: Rasenmäher, Bewässerungsgeräte und Gartenmöbel hängen bei
+    # Amazon dort, nicht unter Baumarkt. ROOTCAT_MAP sortiert sie nach Baumarkt.
     INCLUDE_CAT_IDS = [
-        # Auto & Motorrad
-        78191031, 79899031, 80931031,
-        # Baumarkt + Garten (10925031 war fälschlich als Gewerbe markiert)
+        # Baumarkt + Garten
         80084031, 80085031, 84144031, 83122031,
         10925031, 10925241, 10930941, 124540011,
         # Computer & Zubehör
         340843031, 340844031, 368180031, 368181031, 368182031,
-        # Drogerie & Körperpflege + Kosmetik
+        # Drogerie & Körperpflege
         64187031, 64257031, 5787997031, 65633031, 64980031,
-        84230031, 84231031, 129371031, 129369031, 129368031,
         # Elektro-Großgeräte
         908823031, 908824031, 908825031,
-        # Elektronik & Foto
+        # Elektronik & Foto (inkl. Kamera & Foto als Unterknoten)
         562066, 569604, 578112, 725718, 124538011,
         # Games
         300992, 541708, 526742, 124544011,
-        # Beleuchtung + Küche, Haushalt & Wohnen
-        213083031, 213084031, 227218031,
+        # Gewerbe, Industrie & Wissenschaft (3D-Druck, Messtechnik)
+        5866098031, 5866099031,
+        # Küche, Haushalt & Wohnen
         3167641, 3169011, 3312441, 3842901,
         # Musikinstrumente & DJ-Equipment
         340849031, 340850031,
+        # Spielzeug
+        12950651, 12950661, 124545011,
         # Sport & Freizeit
         16435051, 16435121, 16435061, 16435111,
     ]

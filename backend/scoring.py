@@ -203,10 +203,13 @@ def is_known_brand(brand: str, title: str = "") -> bool:
 # Kategorie-Konfiguration
 # ---------------------------------------------------------------------------
 
+# Eine Zeile je Oberkategorie aus sortiment.KATEGORIEN — sonst fällt sie still
+# auf 30.000 zurück, was für kleine Kategorien viel zu großzügig ist.
+# „Auto & Motorrad" und „Kamera & Foto" am 15.08.2026 entfernt (Kategorien
+# gestrichen), „Spielzeug" und „Gewerbe, Industrie & Wissenschaft" ergänzt.
 CATEGORY_MAX_RANK: dict[str, int] = {
     "Elektronik & Foto":          18_000,
     "Computer & Zubehör":         18_000,
-    "Kamera & Foto":              10_000,
     "Games":                       5_000,
     "Baumarkt":                   15_000,
     "Drogerie & Körperpflege":    30_000,
@@ -214,7 +217,12 @@ CATEGORY_MAX_RANK: dict[str, int] = {
     "Elektro-Großgeräte":         10_000,
     "Sport & Freizeit":           25_000,
     "Musikinstrumente & DJ-Equipment": 15_000,
-    "Auto & Motorrad":            10_000,
+    # Spielzeug ist ein Massenmarkt mit sehr vielen Kleinartikeln — die Grenze
+    # darf nicht zu weit sein, sonst kommt Krimskrams statt LEGO-Sets.
+    "Spielzeug":                  15_000,
+    # Gewerbe/Industrie verkauft in kleinen Stückzahlen; ein 3D-Drucker erreicht
+    # nie den Rang eines Küchengeräts. Entsprechend weiter gefasst.
+    "Gewerbe, Industrie & Wissenschaft": 30_000,
 }
 
 # Moderate Ausrichtung auf Elektronik/hochwertige Geräte: Score-Multiplikator je
