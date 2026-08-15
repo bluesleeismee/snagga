@@ -809,6 +809,10 @@ async def hourly_keepa_price_check():
                   f"({', '.join(r['asin'] for r in chartless[:8])}"
                   f"{' …' if len(chartless) > 8 else ''})")
 
+        # Reihenfolge zählt: erst die gestrichenen Kategorien räumen, dann die
+        # Quote rechnen. Andersherum würde die Quote noch gegen Deals rechnen,
+        # die gleich ohnehin verschwinden, und zu viel Zubehör deaktivieren.
+        deactivated += await _gestrichene_kategorien_deaktivieren(conn)
         deactivated += await _sortiment_quote_durchsetzen(conn)
 
     if deactivated > 0:
@@ -858,6 +862,41 @@ def _varianten_entdoppeln(kandidaten: list[dict]) -> tuple[list[dict], int]:
             gesehen.add(schluessel)
         behalten.append(k)
     return behalten, len(kandidaten) - len(behalten)
+
+
+async def _gestrichene_kategorien_deaktivieren(conn) -> int:
+    """
+    Deaktiviert aktive Deals, deren Oberkategorie es nicht mehr gibt.
+
+    Warum das eine eigene Regel braucht (David, 15.08.2026): Wird eine Kategorie
+    gestrichen, hört die Discovery auf, dorthin zu greifen — die BEREITS aktiven
+    Produkte bleiben aber liegen. Und sie sind gegen alle neuen Regeln immun:
+    `sortiment.rolle()` liefert für eine unbekannte Oberkategorie UNBEKANNT,
+    also greift weder RAUS noch die Zubehör-Quote. Ein aktiver „Auto &
+    Motorrad"-Deal bliebe stehen, bis er zufällig an Preis oder Rang scheitert.
+
+    Betrifft nicht nur den Umbau vom 15.08.2026: die Datenbank trägt auch
+    Kategorien aus früheren Iterationen („Beauty", „Gaming", „Haushalt",
+    „Küche", „Sport", „Sonstiges"), die nie aufgeräumt wurden.
+
+    Die /preis-Seiten dieser Produkte bleiben erreichbar — sie verschwinden nur
+    aus dem Schaufenster. Katalogseiten sind SEO-Substanz, die man nicht wegen
+    einer Sortimentsentscheidung wegwirft.
+    """
+    rows = await conn.fetch(
+        "SELECT DISTINCT category FROM products WHERE is_active=true")
+    weg = [r["category"] for r in rows if (r["category"] or "") not in KATEGORIEN]
+    if not weg:
+        return 0
+
+    result = await conn.fetch(
+        "UPDATE products SET is_active=false, is_top_pick=false "
+        "WHERE is_active=true AND category = ANY($1::text[]) RETURNING asin",
+        weg)
+    if result:
+        print(f"  Gestrichene Kategorien deaktiviert: {len(result)} "
+              f"({', '.join(sorted(weg))})")
+    return len(result)
 
 
 async def _sortiment_quote_durchsetzen(conn) -> int:

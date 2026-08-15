@@ -3115,6 +3115,14 @@ async def debug_observation_stats(token: str = Query(default=""), days: int = Qu
 
     gesamt = sum(r["n"] for r in raw) or 1
     return {
+        # Warnung, keine Zierde: die Spalten avg30/avg90/avg180/avg365 halten
+        # vor und nach dem 15.08.2026 VERSCHIEDENE Zeiträume. Bis dahin wurden
+        # Keepas Deal-Intervalle (48h/Woche/Monat/90 Tage) unter den Namen
+        # Ø30/Ø90/Ø180/Ø365 abgelegt; seither stehen dort Ø7d/Ø90d/Ø30d/Ø48h.
+        # Auch mehrere Ablehnungsgründe wurden umbenannt oder entfernt
+        # (preis_min_kategorie, avg365_anker, anti_spike). Eine Auswertung über
+        # diesen Stichtag hinweg vergleicht Äpfel mit Birnen.
+        "achtung_semantikbruch": "2026-08-15",
         "zeitraum_tage":   days,
         "rohzeilen_gesamt": roh,
         "verdichtete_zeilen": verd,
