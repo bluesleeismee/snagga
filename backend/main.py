@@ -3207,6 +3207,60 @@ async def debug_subcategories(token: str = Query(default=""), min_n: int = Query
     }
 
 
+@app.get("/debug/subcategory-sample")
+async def debug_subcategory_sample(token: str = Query(default=""),
+                                   sub: str = Query(default=""),
+                                   n: int = Query(default=30)):
+    """
+    Produkttitel einer Unterkategorie — um zu sehen, WAS dort tatsächlich liegt.
+
+    Warum das nötig ist (David, 15.08.2026): Sechs Ebene-2-Töpfe lassen sich vom
+    Namen her nicht einordnen, es sind zugleich die grössten — "Sport" (909),
+    "Wohnaccessoires & Deko" (818), "Küche, Kochen & Backen" (501), "Möbel"
+    (418), "Handys & Zubehör" (377), "Plattformen" (150). Ob sie KERN, ZUBEHÖR
+    oder RAUS sind, entscheidet, was Snagga künftig zeigt — Raten wäre genau der
+    Fehler, der uns hierher gebracht hat.
+
+    Der ursprüngliche Plan war, dafür die dritte Kategorieebene mitzuschreiben
+    (`sub_category2`). Der Plan war falsch: `sub_category2` füllt sich nur bei
+    einer /product-Anreicherung, und die trifft ausschliesslich AKTIVE Deals —
+    keine 50 von 22.041 Katalogprodukten. Die Auswertung wäre leer geblieben.
+    (`sub_category2` bleibt trotzdem stehen: für aktive Deals ist sie korrekt
+    und kostenlos, sie taugt nur nicht als Entscheidungsgrundlage.)
+
+    Die Titel dagegen stehen für JEDES Katalogprodukt längst in der Datenbank.
+    Kein Keepa-Token, keine Wartezeit, volle Abdeckung. Sortiert nach Preis
+    absteigend, weil oben am schnellsten sichtbar wird, ob ein Topf echte Geräte
+    enthält oder nur teures Kleinzeug.
+    """
+    _check_admin(token)
+    if not sub:
+        raise HTTPException(status_code=400, detail="Parameter 'sub' fehlt")
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT name, brand, current_price, category, sales_rank "
+            "FROM products WHERE TRIM(LOWER(sub_category)) = TRIM(LOWER($1)) "
+            "  AND current_price > 0 "
+            "ORDER BY current_price DESC LIMIT $2",
+            sub, max(1, min(n, 200)),
+        )
+        gesamt = await conn.fetchval(
+            "SELECT COUNT(*) FROM products WHERE TRIM(LOWER(sub_category)) = TRIM(LOWER($1))",
+            sub) or 0
+    return {
+        "unterkategorie": sub,
+        "katalog_gesamt": gesamt,
+        "gezeigt":        len(rows),
+        "produkte": [
+            {"titel": (r["name"] or "")[:110], "marke": r["brand"] or "",
+             "preis": round(r["current_price"] or 0, 2),
+             "kategorie": r["category"], "rang": r["sales_rank"] or 0}
+            for r in rows
+        ],
+    }
+
+
 @app.get("/debug/brand-coverage")
 async def debug_brand_coverage(token: str = Query(default=""), min_products: int = Query(default=5)):
     """
