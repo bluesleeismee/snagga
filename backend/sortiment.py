@@ -165,3 +165,37 @@ def zuviel_zubehoer(category: str, n_zubehoer: int, n_gesamt: int) -> int:
 def ist_konfiguriert() -> bool:
     """True, sobald mindestens eine Kategorie eingeordnet UND begrenzt ist."""
     return bool(SUBCATEGORY_ROLE and MAX_ZUBEHOER_ANTEIL)
+
+
+# ---------------------------------------------------------------------------
+# Dieselbe Tabelle, zweite Verwendung: Discovery (David, 13.08.2026)
+# ---------------------------------------------------------------------------
+# Die Quote oben ist ein Löschmechanismus — sie kann Zubehör verdrängen, aber
+# kein einziges gutes Produkt herbeischaffen. Das Ergebnis war entsprechend:
+# weniger Kacheln, gleicher Charakter. Der Fehler lag eine Stufe früher, in der
+# Discovery: alle Keepa-Abfragen liefen über ROOT-Knoten und wurden nach Rabatt-
+# PROZENT sortiert. In diesem Fenster stehen Kleinteile ganz oben, weil sie hohe
+# Margen und damit hohe Prozentnachlässe haben. Der Filter durfte danach nur
+# noch entscheiden, WELCHER Teil des Ramschs durchkommt.
+#
+# Keepas `includeCategories` akzeptiert aber auch Unterknoten. Fragt man direkt
+# „Monitore" statt „Computer & Zubehör" ab, besteht das Fenster von vornherein
+# aus Kernprodukten — und die Prozent-Sortierung darin ist sogar nützlich.
+#
+# Die Namen dafür stehen schon oben. Diese Funktion macht sie nur nachschlagbar.
+
+def kern_namen(category: str) -> set[str]:
+    """
+    Klein geschriebene Namen der Kern-Unterkategorien einer Oberkategorie.
+
+    Bewusst NUR die explizit als KERN markierten: UNBEKANNT gilt bei der Quote
+    als Kern (eine Pflegelücke darf nichts aussperren), bei der Discovery wäre
+    dieselbe Grosszügigkeit sinnlos — sie würde einfach wieder alles abfragen.
+    """
+    tabelle = SUBCATEGORY_ROLE.get(category or "") or {}
+    return {name for name, r in tabelle.items() if r == KERN}
+
+
+def hat_kern_namen() -> bool:
+    """True, wenn für mindestens eine Oberkategorie Kernknoten definiert sind."""
+    return any(kern_namen(c) for c in SUBCATEGORY_ROLE)

@@ -23,6 +23,67 @@ QUALITY_DISCOUNT_FACTOR = float(os.getenv("QUALITY_DISCOUNT_FACTOR", "0.80"))
 RANKLESS_MIN_REVIEWS = int(os.getenv("RANKLESS_MIN_REVIEWS", "500"))
 
 # ---------------------------------------------------------------------------
+# Preisabhängiges Quality Gate (David, 2026-08-12)
+# ---------------------------------------------------------------------------
+# Befund: 82 von 96 aktiven Deals lagen unter 100 €, ganze 4 über 200 € — und
+# unter den teuersten standen eine Teleskopstange und ein Beutel Kompostwürmer.
+# Airfryer, Monitore, PCs fehlten vollständig.
+#
+# Eine der beiden Ursachen sitzt hier: eine feste Schwelle von 20 % unter Ø90
+# behandelt ein 25-€-Kabel und einen 400-€-PC gleich. Auf Kleinteile mit hoher
+# Marge gibt es solche Nachlässe ständig, auf hochwertige Markengeräte fast nie
+# — 10 bis 15 % sind dort bereits ein sehr guter Zeitpunkt. Die feste Prozent-
+# schwelle sortiert also systematisch genau das Sortiment aus, das wir zeigen
+# wollen.
+#
+# Deshalb gestaffelt nach Preis, ergänzt um eine absolute Mindestersparnis:
+# 12 % auf einen 400-€-PC sind 48 € echtes Geld, 12 % auf ein 25-€-Kabel sind
+# 3 € und bleiben zu Recht draußen. Die Staffel lockert die Regel also nicht,
+# sie misst nur in der Einheit, die für den Käufer zählt.
+#
+# Das Versprechen bleibt unberührt: geprüft wird weiterhin gegen die echte
+# Historie (Ø90/Ø180/Ø365), nur der Mindestabstand ist preisgerecht.
+#
+# Format: (Preisuntergrenze in €, Faktor gegenüber Ø90). Absteigend geprüft.
+QUALITY_DISCOUNT_TIERS: list[tuple[float, float]] = [
+    (300.0, float(os.getenv("QUALITY_FACTOR_AB_300", "0.90"))),  # ≥ 300 € → ≥10 %
+    (100.0, float(os.getenv("QUALITY_FACTOR_AB_100", "0.86"))),  # 100–300 € → ≥14 %
+]
+
+# Unterhalb der günstigsten Staffel gilt weiter QUALITY_DISCOUNT_FACTOR (20 %).
+# Zusätzliche Bedingung für die gelockerten Staffeln: die Ersparnis gegenüber
+# Ø90 muss auch in Euro spürbar sein. Ohne diese Klammer käme über die 10-%-
+# Staffel jeder beliebige Preishüpfer bei teurer Ware durch.
+QUALITY_MIN_ERSPARNIS_EUR = float(os.getenv("QUALITY_MIN_ERSPARNIS_EUR", "25"))
+
+# Verkaufsrang-Aufschlag für hochpreisige Artikel. Der Rang misst Stückzahlen
+# innerhalb der Oberkategorie — dort konkurriert ein Laptop mit USB-Kabeln, die
+# sich um Größenordnungen häufiger verkaufen. Ein guter Laptop landet damit
+# zwangsläufig jenseits der 18.000er-Grenze von „Computer & Zubehör", obwohl
+# ihn niemand als Ladenhüter bezeichnen würde. Der Aufschlag korrigiert diesen
+# Maßstabsfehler, statt die Grenze für alle zu lockern.
+RANK_BONUS_AB_EUR    = float(os.getenv("RANK_BONUS_AB_EUR", "100"))
+RANK_BONUS_FAKTOR    = float(os.getenv("RANK_BONUS_FAKTOR", "3.0"))
+
+# Vertrauens-Signal für Produkte ohne bekannte Marke (siehe hard_filter_reason,
+# Abschnitt b). Anteil des erlaubten Rangfensters, den ein solches Produkt
+# unterbieten muss — 0.5 heisst: bessere Hälfte. Bewertungen sichern nur noch
+# Plausibilität, sie ersetzen den Nachfragebeleg nicht mehr.
+VERTRAUEN_RANG_ANTEIL = float(os.getenv("VERTRAUEN_RANG_ANTEIL", "0.5"))
+VERTRAUEN_MIN_REVIEWS = int(os.getenv("VERTRAUEN_MIN_REVIEWS", "100"))
+
+
+def erforderlicher_rabatt_faktor(current: float) -> float:
+    """
+    Gibt den Faktor gegenüber Ø90 zurück, den ein Angebot dieses Preises
+    unterschreiten muss (0.80 = mindestens 20 % günstiger).
+    """
+    for ab_preis, faktor in QUALITY_DISCOUNT_TIERS:
+        if current >= ab_preis:
+            return faktor
+    return QUALITY_DISCOUNT_FACTOR
+
+# ---------------------------------------------------------------------------
 # Bekannte Marken (Quality Gate)
 # ---------------------------------------------------------------------------
 
@@ -251,6 +312,7 @@ def hard_filter_reason(
     avg180:     float = 0,
     title:      str = "",
     brand:      str = "",
+    atl_ist_beleg: bool = True,
 ) -> str | None:
     """
     Wie passes_hard_filters(), gibt aber den GRUND der Ablehnung zurück
@@ -260,6 +322,10 @@ def hard_filter_reason(
 
     passes_hard_filters() ist ein dünner Wrapper darum, damit bestehende
     Aufrufer unverändert weiterlaufen.
+
+    `atl_ist_beleg=False` sagt: der übergebene `atl` ist der avg365-PROXY aus
+    dem /deal-Endpoint, kein belegtes Allzeittief. Genau das ist bei der
+    Discovery der Fall — siehe die Erklärung bei near_atl weiter unten.
     """
     # Nur Neuware: gebrauchte / generalüberholte / B-Ware sofort aussortieren.
     if is_excluded_condition(title):
@@ -273,7 +339,13 @@ def hard_filter_reason(
     if reviews < min_reviews:
         return "reviews"
 
+    # Rang-Grenze: ab RANK_BONUS_AB_EUR gelockert, weil der Rang Stückzahlen
+    # gegen den Kleinteil-Massenmarkt derselben Oberkategorie misst (siehe
+    # Kommentar bei RANK_BONUS_FAKTOR). Ohne diese Korrektur scheitert jedes
+    # Kernprodukt an einer Grenze, die für Zubehör kalibriert ist.
     max_rank = CATEGORY_MAX_RANK.get(category, 30_000)
+    if current >= RANK_BONUS_AB_EUR:
+        max_rank = int(max_rank * RANK_BONUS_FAKTOR)
     if sales_rank > 0 and sales_rank > max_rank:
         return "sales_rank"
 
@@ -314,17 +386,50 @@ def hard_filter_reason(
     # (a) Der Preisvorteil muss substanziell sein: ≥20% unter Ø90 (Fallback Ø180)
     #     ODER nahe am Allzeittief (aus /deal ist atl der avg365-Proxy —
     #     auch das ist ein starkes "historisch günstig"-Signal).
+    #     Die Schwelle ist preisabhängig (siehe QUALITY_DISCOUNT_TIERS): bei
+    #     hochpreisiger Ware zählt die Ersparnis in Euro, nicht in Prozent.
+    #     Für die gelockerten Staffeln gilt zusätzlich eine Mindestersparnis,
+    #     damit kein bloßer Preishüpfer bei teurer Ware durchrutscht.
     ref = avg90 if avg90 > 0 else avg180
-    real_discount = ref > 0 and current <= ref * QUALITY_DISCOUNT_FACTOR
-    near_atl      = atl > 0 and current <= atl * 1.05
+    faktor = erforderlicher_rabatt_faktor(current)
+    real_discount = ref > 0 and current <= ref * faktor
+    if real_discount and faktor > QUALITY_DISCOUNT_FACTOR:
+        real_discount = (ref - current) >= QUALITY_MIN_ERSPARNIS_EUR
+    #     WICHTIG (David, 13.08.2026): `near_atl` darf nur zählen, wenn `atl`
+    #     wirklich ein Tief ist. Bei der Discovery ist er das nicht — dort
+    #     kommt er aus /deal und ist der avg365-DURCHSCHNITT. Die Bedingung
+    #     hiess damit faktisch „Preis liegt in der Nähe des Jahresmittels", und
+    #     das genügte, um die Rabattprüfung komplett zu überspringen. Über
+    #     dieses Loch kam praktisch jedes Kleinteil ohne echten Preisvorteil
+    #     ins Schaufenster; es ist dieselbe Verwechslung, die wir bei der
+    #     ANZEIGE schon korrigiert haben (resolve_atl/atl_confirmed) und die im
+    #     Filter noch stand.
+    near_atl = atl_ist_beleg and atl > 0 and current <= atl * 1.05
     if not (real_discount or near_atl):
         return "rabatt_zu_klein"
 
-    # (b) Vertrauens-Signal: bekannte Marke ODER sehr solide Review-Basis.
-    #     Das Marken-Feld ist bei /deal-Daten oft leer (Backfill läuft) —
-    #     Rating + Review-Anzahl ist daher das primäre Signal, Marke der Bonus.
-    if not is_known_brand(brand, title) and not (rating >= 4.3 and reviews >= 500):
-        return "kein_vertrauenssignal"
+    # (b) Vertrauens-Signal: bekannte Marke ODER echter Nachfragebeleg.
+    #
+    #     Bis 13.08.2026 lautete die Alternative `rating >= 4.3 and reviews >= 500`.
+    #     Die Regel wirkte streng, selektierte aber genau falsch herum: eine
+    #     Bewertungsmasse von 500+ bei 4.3 Sternen ist für No-Name-Marketplace-
+    #     Ware der Normalfall (und zudem käuflich), während ein frisch
+    #     eingeführter Monitor eines echten Nischenherstellers sie nie erreicht.
+    #     Der Filter hat also zuverlässig viel-bewerteten Ramsch durchgelassen
+    #     und neue, hochwertige Ware ausgesperrt.
+    #
+    #     Ersetzt durch den Verkaufsrang als primären Beleg: er misst tatsächlich
+    #     verkaufte Stückzahlen und lässt sich nicht kaufen. Verlangt wird die
+    #     bessere Hälfte des ohnehin erlaubten Rangfensters — plus eine
+    #     Bewertungsbasis, die nur noch Plausibilität sichern muss (100 statt 500).
+    #     Unterm Strich: strenger gegen Bewertungsfarmen, offener für Neuware.
+    if not is_known_brand(brand, title):
+        rang_fenster = CATEGORY_MAX_RANK.get(category, 30_000)
+        if current >= RANK_BONUS_AB_EUR:
+            rang_fenster = int(rang_fenster * RANK_BONUS_FAKTOR)
+        starker_rang = 0 < sales_rank <= rang_fenster * VERTRAUEN_RANG_ANTEIL
+        if not (starker_rang and rating >= 4.2 and reviews >= VERTRAUEN_MIN_REVIEWS):
+            return "kein_vertrauenssignal"
 
     return None
 
@@ -340,11 +445,12 @@ def passes_hard_filters(
     avg180:     float = 0,
     title:      str = "",
     brand:      str = "",
+    atl_ist_beleg: bool = True,
 ) -> bool:
     """Gibt True zurück wenn das Produkt alle Mindestanforderungen erfüllt."""
     return hard_filter_reason(
         rating, reviews, sales_rank, category, current, avg90, atl,
-        avg180, title, brand,
+        avg180, title, brand, atl_ist_beleg,
     ) is None
 
 
