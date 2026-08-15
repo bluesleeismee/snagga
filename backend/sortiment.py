@@ -398,16 +398,35 @@ def zuviel_zubehoer(category: str, n_zubehoer: int, n_gesamt: int) -> int:
     """
     Wie viele ZUBEHOER-Deals liegen über der Quote? 0 = alles im Rahmen.
 
-    Gerechnet gegen die Gesamtzahl aktiver Deals der Kategorie, nicht gegen eine
-    feste Stückzahl — sonst wäre die Regel bei wenigen Deals sinnlos und bei
-    vielen zu streng.
+    Gerechnet wird gegen die Zahl der NICHT-Zubehör-Deals, nicht gegen die
+    Gesamtzahl (Korrektur David, 15.08.2026).
+
+    Beide Formeln landen am selben Endzustand — die alte kommt nur nicht in
+    einem Schritt dorthin:
+
+        alt:  10 aktiv / 5 Zubehör → 1 raus → 9/4 → 1 raus → 8/3 → Stopp
+        neu:  10 aktiv / 5 Zubehör → 2 raus → 8/3 → Stopp
+
+    Der Unterschied ist die Rückkopplung. Bei der alten Formel senkte jede
+    Deaktivierung die Gesamtzahl und damit die erlaubte Menge, was im nächsten
+    Lauf die nächste Deaktivierung auslöste. Zwischen zwei Läufen rücken aber
+    Backups nach (_promote_backups_simple) — die Kategorie kam damit nie zur
+    Ruhe, sondern deaktivierte und ersetzte stündlich weiter. Genau dieses
+    Zappeln war am 15.08.2026 zu sehen, als die aktiven Deals innerhalb einer
+    Stunde von 68 auf 49 fielen.
+
+    Gegen die Kernmenge gerechnet ist die Grenze stabil: sie ändert sich nicht,
+    wenn Zubehör verschwindet. Ein Durchlauf stellt die Quote exakt her, der
+    nächste findet nichts mehr zu tun.
     """
     if not QUOTA_AKTIV or n_gesamt <= 0:
         return 0
     grenze = MAX_ZUBEHOER_ANTEIL.get(category or "")
-    if grenze is None:
+    if grenze is None or grenze >= 1.0:
         return 0
-    return max(0, n_zubehoer - int(n_gesamt * grenze))
+    n_kern = max(0, n_gesamt - n_zubehoer)
+    erlaubt = int(n_kern * grenze / (1.0 - grenze))
+    return max(0, n_zubehoer - erlaubt)
 
 
 def kern_namen(category: str) -> set[str]:

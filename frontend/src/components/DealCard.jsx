@@ -82,7 +82,7 @@ export default function DealCard({ deal, onClick }) {
         {/* Discount badge */}
         {disc > 0 && (
           <div
-            title={`–${disc}% verglichen mit dem Durchschnittspreis der letzten 6 Monate`}
+            title={`–${disc}% verglichen mit dem Durchschnittspreis der letzten 90 Tage`}
             style={{
               position: 'absolute', top: 14, left: 14, zIndex: 2,
               background: 'var(--accent)', color: '#fff',

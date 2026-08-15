@@ -259,6 +259,28 @@ def test_keine_gewuenschte_kategorie_ist_geblockt():
     assert not geblockt, f"rootCat-IDs gewünschter Kategorien in EXCLUDE_ROOTCATS: {geblockt}"
 
 
+def test_quote_ist_nach_einem_durchlauf_stabil():
+    """
+    Ein Durchlauf muss die Quote exakt herstellen — der nächste darf nichts mehr
+    finden. Die alte Formel rechnete gegen die Gesamtzahl und brauchte mehrere
+    Runden; weil zwischen zwei Läufen Backups nachrücken, kam die Kategorie nie
+    zur Ruhe und deaktivierte stündlich weiter.
+    """
+    zub, gesamt = 5, 10
+    weg = sortiment.zuviel_zubehoer("Baumarkt", zub, gesamt)
+    zub, gesamt = zub - weg, gesamt - weg
+    assert sortiment.zuviel_zubehoer("Baumarkt", zub, gesamt) == 0, \
+        "zweiter Durchlauf räumt weiter — Rückkopplung wieder da"
+
+
+def test_quote_haelt_den_versprochenen_anteil():
+    """0.40 heisst: höchstens vier von zehn Kacheln sind Zubehör."""
+    zub, gesamt = 8, 20        # 12 Kern
+    weg = sortiment.zuviel_zubehoer("Baumarkt", zub, gesamt)
+    rest_zub, rest_gesamt = zub - weg, gesamt - weg
+    assert rest_zub / rest_gesamt <= 0.40 + 1e-9
+
+
 def test_classify_category_laesst_nur_bekannte_durch():
     import scraper
     # Auto & Motorrad: gestrichen, rootCat wird trotzdem geliefert

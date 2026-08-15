@@ -385,7 +385,7 @@ export default function ProductModal({ deal, onClose }) {
               </span>
               {deal.original_price > deal.current_price && (
                 <span
-                  title="Durchschnittspreis der letzten 6 Monate"
+                  title="Durchschnittspreis der letzten 90 Tage"
                   style={{ fontSize: 16, textDecoration: 'line-through', color: 'var(--muted)', cursor: 'help' }}
                 >
                   {fmtPrice(deal.original_price)}
@@ -393,7 +393,7 @@ export default function ProductModal({ deal, onClose }) {
               )}
               {disc > 0 && (
                 <div
-                  title={`–${disc}% verglichen mit dem Durchschnittspreis der letzten 6 Monate`}
+                  title={`–${disc}% verglichen mit dem Durchschnittspreis der letzten 90 Tage`}
                   style={{ background: 'var(--accent)', color: '#fff', padding: '3px 9px', fontSize: 12, fontWeight: 600, letterSpacing: 0.5, cursor: 'help' }}
                 >
                   –{disc}%

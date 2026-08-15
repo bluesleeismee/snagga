@@ -475,37 +475,42 @@ KEYWORD_MAP: dict[str, list[str]] = {
 
 # Ausschluss-Keywords: egal was rootCat sagt, diese Produkte nie anzeigen
 EXCLUDE_KEYWORDS = [
-    "papier", "druckerpapier", "bastelfilz", "filz ", "plüsch", "kuscheltier",
-    # „spielzeug", „lego ", „puzzle", „brettspiel", „kartenspiel" und „puppe "
-    # standen bis 15.08.2026 hier — aus der Zeit, als Spielzeug eine gesperrte
-    # Kategorie war. Sie hätten die Neuaufnahme lautlos wirkungslos gemacht:
-    # ein „LEGO Technic Bagger" wurde noch VOR der Kategorieprüfung verworfen.
-    # Was in Spielzeug nicht erwünscht ist, regelt jetzt sortiment.KATEGORIEN
-    # (Party- & Scherzartikel, Schulbedarf, Verkleiden … stehen dort auf RAUS).
+    # Ausgedünnt am 15.08.2026. Vorher standen hier rund 100 Stichwörter, und
+    # gut die Hälfte davon war der Versuch, über Wortraten zu erreichen, was
+    # jetzt die RAUS-Rolle in sortiment.KATEGORIEN sauber erledigt:
+    #
+    #   „spielzeug/lego/puzzle/brettspiel/puppe" → Spielzeug war gesperrt, ist
+    #       jetzt gewünscht. Ein „LEGO Technic Bagger" wurde VOR der
+    #       Kategorieprüfung verworfen — die Neuaufnahme wäre wirkungslos
+    #       geblieben, ohne dass es jemand gemerkt hätte.
+    #   „vase/kerzenhalter/bilderrahmen/wandteppich/gardine/…" → deckt
+    #       „Wohnaccessoires & Deko" ab, das komplett auf RAUS steht.
+    #   „häkelnadel/strickgarn/nähgarn/…" → „Basteln, Malen & Handarbeiten",
+    #       ebenfalls RAUS.
+    #   „nahrungsergänzung/vitamine/kapsel" → eigene RAUS-Unterkategorien
+    #       unter Drogerie & Körperpflege.
+    #   „teststreifen/blutzucker/blutdruck" → traf auch Beurer- und
+    #       Omron-Messgeräte, also genau die Kernware der Kategorie.
+    #
+    # Übrig bleibt, was mit der Kategorie NICHTS zu tun hat und deshalb auch
+    # nicht über sie zu fassen ist.
+    #
+    # Kategoriefremde Ware, die über falsche rootCats hereinrutscht:
     "buch ", "bücher", "roman ", "unterwäsche", "unterhose", "socken",
     "t-shirt", "jeans", "hose ", "jacke ", "pullover", "kleidung",
-    "schuhe ", "sneaker ", "handtuch", "bettwäsche", "kissen ", "decke ",
-    "nahrungsergänzung", "protein pulver", "vitamine", "kapsel ",
-    "lebensmittel", "kaffee bohnen", "tee ", "gewürze",
-    # Intime / erotische Produkte (filterErotic greift nicht immer)
-    "gleitgel", "lubricant", "intim", "kondome", "vibrator",
-    # Modell-/fahrzeugspezifische Teile (z.B. Sonnenblende für Nissan XY)
-    "passend für", "kompatibel mit", "ersatzteil", "oem ", "original-",
+    "schuhe ", "sneaker ",
+    "lebensmittel", "kaffee bohnen", "gewürze",
+    # Intime / erotische Produkte (Keepas filterErotic greift nicht immer)
+    "gleitgel", "lubricant", "kondome", "vibrator",
+    # Fahrzeug-/modellspezifische Teile: nie ein Deal für ein breites Publikum,
+    # und in JEDER Kategorie ein Ärgernis (Sonnenblende für Nissan XY).
+    "passend für", "kompatibel mit", "ersatzteil",
     "für nissan", "für bmw", "für mercedes", "für vw ", "für volkswagen",
     "für audi", "für ford", "für opel", "für toyota", "für honda",
     "für peugeot", "für renault", "für seat", "für skoda", "für hyundai",
     "für kia", "für fiat", "für volvo", "für mazda", "für suzuki",
-    # Deko / Heimtextilien / Handwerk die nichts bringen
-    "tapisserie", "wandteppich", "vorhang ", "gardine", "jalousie", "rollo ",
-    "doppelrollo", "flächenvorhang",
-    "vase ", "glasvase", "blumenvase", "kerzenhalter", "bilderrahmen",
-    "häkelnadel", "stricknadel", "häkelset", "wollnadel", "strickgarn",
-    "nähgarn", "nähnadel", "stoff ", "fleece ", "filznadel",
-    # Medizin / Teststreifen
-    "teststreifen", "blutzucker", "blutdruck",
-    # US-Importprodukte ohne DE-Relevanz
-    "toskanische bronze", "pfister ",
-    # Tastaturen/Eingabegeräte mit nicht-DACH-Layout (Amazon trennt das nicht per Kategorie)
+    # Tastaturen/Eingabegeräte mit nicht-DACH-Layout (Amazon trennt das nicht
+    # per Kategorie, und ein US-Layout ist für D-A-CH schlicht unbrauchbar)
     "norwegisches layout", "norwegische tastatur", "norwegisch layout",
     "schwedisches layout", "schwedische tastatur", "schwedisch layout",
     "dänisches layout", "dänische tastatur", "dänisch layout",

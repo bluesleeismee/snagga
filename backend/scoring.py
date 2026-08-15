@@ -225,57 +225,42 @@ CATEGORY_MAX_RANK: dict[str, int] = {
     "Gewerbe, Industrie & Wissenschaft": 30_000,
 }
 
-# Moderate Ausrichtung auf Elektronik/hochwertige Geräte: Score-Multiplikator je
-# Kategorie. Hebt Elektronik/Computer/Kamera/Games/Großgeräte an und dämpft die
-# günstigen Massen-Kategorien (Küche/Baumarkt/Drogerie), ohne sie leerzuräumen.
-CATEGORY_SCORE_WEIGHT: dict[str, float] = {
-    "Elektronik & Foto":               1.15,
-    "Computer & Zubehör":              1.15,
-    "Kamera & Foto":                   1.15,
-    "Games":                           1.15,
-    "Elektro-Großgeräte":              1.15,
-    "Küche, Haushalt & Wohnen":        0.90,
-    "Baumarkt":                        0.90,
-    "Drogerie & Körperpflege":         0.90,
-}
+# CATEGORY_SCORE_WEIGHT (Multiplikatoren 1.15 / 0.90 je Kategorie) ist am
+# 15.08.2026 entfallen.
+#
+# Der Multiplikator sollte das Schaufenster Richtung Elektronik schieben, indem
+# er Küche, Baumarkt und Drogerie dämpfte. Das war eine Korrektur am falschen
+# Ende: Er hat nicht mehr Elektronik herbeigeschafft, sondern nur gute
+# Baumarkt-Deals nach hinten sortiert — ein Makita-Akkuschrauber zum besten
+# Preis seit einem Jahr landete hinter einem mittelmässigen Kabel-Deal.
+#
+# Womit die Ausrichtung jetzt entsteht: die Discovery sucht gezielt in den
+# KERN-Knoten (sortiment.KATEGORIEN). Was gar nicht erst eingesammelt wird,
+# muss auch nicht im Score bestraft werden.
 
 
 # ---------------------------------------------------------------------------
-# Specificity Penalty
+# Specificity Penalty — entfallen am 15.08.2026
 # ---------------------------------------------------------------------------
+# Bis heute zog eine Stichwortliste bis zu 60 Punkte ab: „passend für",
+# „kompatibel mit", Modellnummern, „abdeckung", „organizer", „perücke",
+# „girlande", „ersatzfilter", „folie", „spiegel" …
+#
+# Die Liste war ein Ersatz dafür, dass wir Kleinteile nicht anders erkennen
+# konnten — und ein aussichtsloser: für jedes gesperrte Wort kam ein neues
+# Kleinteil nach, während echte Produkte mitflogen (ein Marken-Wandspiegel
+# wegen „spiegel", ein LEVOIT-Ersatzfilter-Set wegen „ersatzfilter", jeder
+# Artikel mit zwei Zahlen im Titel wegen der Modellcode-Regel).
+#
+# Diese Aufgabe erledigt jetzt die RAUS-Rolle in sortiment.KATEGORIEN, und zwar
+# an der richtigen Stelle: über die Amazon-Unterkategorie statt über Wortraten.
+# Was übrig blieb und wirklich nichts mit der Kategorie zu tun hat — Gebraucht-
+# ware, fahrzeugspezifische Ersatzteile, nicht-DACH-Tastaturlayouts —, steht in
+# scraper.EXCLUDE_KEYWORDS und ist dort ein harter Ausschluss statt ein Abzug.
 
 def specificity_penalty(title: str) -> int:
-    """
-    Straft Nischenprodukte durch Score-Abzug statt Hard-Block.
-    Ein gutes Universal-Produkt mit leicht spezifischem Titel kommt noch durch.
-    """
-    t = title.lower()
-    p = 0
-
-    if re.search(r'\b(passend für|kompatibel mit|ersatzteil)\b', t):
-        p += 40
-    if re.search(r'\bfür (nissan|bmw|mercedes|vw|volkswagen|audi|ford|opel|toyota|honda|peugeot|renault|seat|skoda|hyundai|kia|fiat|volvo|mazda|suzuki)\b', t):
-        p += 35
-    if re.search(r'\b(oem |original-|artikel-nr|art\.nr)\b', t):
-        p += 25
-    # 2+ vierstellige Nummernblöcke im Titel deuten auf Modellcodes hin
-    if len(re.findall(r'\b\d{4,}\b', t)) >= 2:
-        p += 20
-
-    # Generische Baumarkt-/Haushalt-Ersatzteile ("Entlüftungsabdeckung" u.ä.) —
-    # bewusst OHNE "adapter"/"kit", die auch bei echten Marken-Elektronik-
-    # Zubehörteilen (Anker, Apple, Ugreen …) sehr häufig im Titel vorkommen.
-    if re.search(r'\b(abdeckplane|abdeckung|organizer|halterung|verlängerung)\b', t):
-        p += 18
-
-    # Ramsch/Deko/Verbrauchsware, die zwar rechnerisch gut rabattiert ist, aber
-    # nicht ins Sortiment passt (Perücke, Weihnachts-Ornament, Ersatzfilter …).
-    # Gezielte Substantive statt breiter Wörter ("filter"/"stück"), damit Marken-
-    # produkte (Oral-B-Bürstenköpfe, Webcams, LEVOIT-Geräte) NICHT mitfliegen.
-    if re.search(r'\b(perücke|haarteil|ornament|girlande|kerze|aufkleber|serviette|kissenbezug|bilderhaken|ersatzfilter|hepa[-\s]?filter|folie|spiegel|sichtschutz(?:folie)?)\b', t):
-        p += 30
-
-    return min(p, 60)
+    """Immer 0. Bleibt als Funktion bestehen, damit Aufrufer nicht brechen."""
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -561,23 +546,21 @@ def calculate_deal_score(
         raw = f_avg * 0.40 + f_atl * 0.30 + f_pop * 0.20 + f_stab * 0.10
     else:
         raw = f_avg * 0.70 + f_pop * 0.20 + f_stab * 0.10
-    base_score = max(0, min(100, int(raw * 100)))
-
-    penalty = specificity_penalty(title) if title else 0
-    score   = max(0, base_score - penalty)
-
-    # Kategorie-Gewichtung (moderate Elektronik-/Premium-Ausrichtung).
-    weight = CATEGORY_SCORE_WEIGHT.get(category, 1.0)
-    score  = max(0, min(100, int(round(score * weight))))
+    # Kein Stichwort-Abzug und keine Kategorie-Gewichtung mehr (siehe oben).
+    # Der Score misst ab jetzt nur noch das, was er behauptet zu messen:
+    # Preisvorteil, Nähe zum Tief, Nachfrage, Stabilität.
+    score = max(0, min(100, int(raw * 100)))
 
     breakdown = json.dumps({
-        "avg90":   round(f_avg, 3),
-        "atl":     round(f_atl, 3),
-        "pop":     round(f_pop, 3),
-        "stab":    round(f_stab, 3),
-        "rank":    round(rank_f, 3),
-        "penalty": penalty,
-        "weight":  weight,
+        "avg90":     round(f_avg, 3),
+        "atl":       round(f_atl, 3),
+        "pop":       round(f_pop, 3),
+        "stab":      round(f_stab, 3),
+        "rank":      round(rank_f, 3),
+        # Sagt, welche Gewichtung galt — ohne belegtes Tief wandern dessen 30 %
+        # auf den Ø90-Abstand. Ohne dieses Feld ist ein Score im Nachhinein
+        # nicht mehr nachvollziehbar.
+        "tief_beleg": bool(atl > 0),
     })
     return score, breakdown
 
