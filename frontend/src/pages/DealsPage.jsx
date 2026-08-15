@@ -21,32 +21,36 @@ const SORTS = [
 // Muss mit CATEGORY_SLUGS in backend/main.py übereinstimmen — dort werden
 // diese Slugs für die dauerhaften /kategorie/{slug}-SEO-Seiten verwendet.
 const CAT_SLUGS = {
-  'Auto & Motorrad':                  'auto-motorrad',
   'Baumarkt':                         'baumarkt',
   'Computer & Zubehör':               'computer-zubehoer',
   'Drogerie & Körperpflege':          'drogerie-koerperpflege',
   'Elektro-Großgeräte':               'elektro-grossgeraete',
   'Elektronik & Foto':                'elektronik-foto',
   'Games':                            'games',
-  'Kamera & Foto':                    'kamera-foto',
+  'Gewerbe, Industrie & Wissenschaft': 'gewerbe-industrie-wissenschaft',
   'Küche, Haushalt & Wohnen':         'kueche-haushalt-wohnen',
   'Musikinstrumente & DJ-Equipment':  'musikinstrumente-dj-equipment',
+  'Spielzeug':                        'spielzeug',
   'Sport & Freizeit':                 'sport-freizeit',
 }
 
-// Gewünschte Reihenfolge der Kategorie-Chips
+// Gewünschte Reihenfolge der Kategorie-Chips.
+// Muss zu sortiment.KATEGORIEN im Backend passen (Stand 15.08.2026, elf
+// Oberkategorien). Entfallen: 'Auto & Motorrad' und 'Kamera & Foto' —
+// letzteres existiert bei Keepa nicht als eigene Kategorie und hängt unter
+// Elektronik & Foto. Neu: Spielzeug und Gewerbe, Industrie & Wissenschaft.
 const CAT_ORDER = [
   'Elektronik & Foto',
   'Computer & Zubehör',
   'Küche, Haushalt & Wohnen',
   'Games',
-  'Auto & Motorrad',
   'Sport & Freizeit',
-  'Drogerie & Körperpflege',
   'Baumarkt',
-  'Musikinstrumente & DJ-Equipment',
-  'Kamera & Foto',
+  'Spielzeug',
+  'Drogerie & Körperpflege',
   'Elektro-Großgeräte',
+  'Musikinstrumente & DJ-Equipment',
+  'Gewerbe, Industrie & Wissenschaft',
 ]
 const sortCats = (cats) => {
   const known  = CAT_ORDER.filter(c => cats.includes(c))

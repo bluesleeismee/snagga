@@ -8,9 +8,13 @@ export const CAT_LABELS = {
   'Elektro-Großgeräte':              'Grossgeräte',
   'Computer & Zubehör':              'Computer',
   'Elektronik & Foto':               'Elektronik',
-  'Auto & Motorrad':                 'Auto',
   'Sport & Freizeit':                'Sport',
-  'Kamera & Foto':                   'Kamera',
+  // 'Werkstatt' statt des sperrigen Amtsdeutsch: in der Chip-Leiste zählt
+  // Kürze, und was drinliegt (3D-Druck, Messtechnik, Werkzeug) trifft es
+  // besser als 'Gewerbe, Industrie & Wissenschaft'.
+  'Gewerbe, Industrie & Wissenschaft': 'Werkstatt',
+  // 'Auto & Motorrad' und 'Kamera & Foto' am 15.08.2026 entfallen — beide
+  // Kategorien gibt es im Backend nicht mehr (siehe sortiment.KATEGORIEN).
 }
 export const catLabel = (c) => CAT_LABELS[c] || c
 

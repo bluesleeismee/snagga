@@ -281,6 +281,20 @@ def test_quote_haelt_den_versprochenen_anteil():
     assert rest_zub / rest_gesamt <= 0.40 + 1e-9
 
 
+def test_seo_slugs_decken_genau_die_kategorien_ab():
+    """
+    Die Kategorie-Seiten (/kategorie/{slug}) sind die dauerhafte SEO-Basis —
+    einzelne Deals rotieren stündlich und sind dafür ungeeignet. Eine Kategorie
+    ohne Slug hat keine Seite; ein Slug ohne Kategorie liefert eine leere.
+    """
+    import re
+    src = open("main.py", encoding="utf-8").read()
+    block = src.split("CATEGORY_SLUGS: dict[str, str] = {")[1].split("\n}")[0]
+    slugs = {cat for _, cat in re.findall(r'"([^"]+)":\s*"([^"]+)"', block)}
+    assert slugs == set(sortiment.oberkategorien()), \
+        f"Slugs und Kategorien laufen auseinander: {sorted(slugs ^ set(sortiment.oberkategorien()))}"
+
+
 def test_classify_category_laesst_nur_bekannte_durch():
     import scraper
     # Auto & Motorrad: gestrichen, rootCat wird trotzdem geliefert

@@ -273,17 +273,27 @@ _SLUG_RE = re.compile(r"^[a-z0-9-]+$")
 # Muss mit den Kategorienamen aus ROOTCAT_MAP / classify_category() in scraper.py
 # übereinstimmen — dort werden Produkte diesen exakten Strings zugeordnet.
 CATEGORY_SLUGS: dict[str, str] = {
-    "auto-motorrad":                  "Auto & Motorrad",
     "baumarkt":                       "Baumarkt",
     "computer-zubehoer":              "Computer & Zubehör",
     "drogerie-koerperpflege":         "Drogerie & Körperpflege",
     "elektro-grossgeraete":           "Elektro-Großgeräte",
     "elektronik-foto":                "Elektronik & Foto",
     "games":                          "Games",
-    "kamera-foto":                    "Kamera & Foto",
+    "gewerbe-industrie-wissenschaft": "Gewerbe, Industrie & Wissenschaft",
     "kueche-haushalt-wohnen":         "Küche, Haushalt & Wohnen",
     "musikinstrumente-dj-equipment":  "Musikinstrumente & DJ-Equipment",
+    "spielzeug":                      "Spielzeug",
     "sport-freizeit":                 "Sport & Freizeit",
+}
+
+# Slugs gestrichener Kategorien. Sie standen in der Sitemap und sind womöglich
+# schon indexiert — deshalb kein 404, sondern eine dauerhafte Weiterleitung auf
+# die Kategorie, in der die Ware jetzt liegt (Kamera-Produkte laufen unter
+# Elektronik & Foto). Auto & Motorrad hat kein Ziel: dort gibt es die Ware nicht
+# mehr, die Seite leitet auf die Deal-Übersicht.
+CATEGORY_SLUGS_ALT: dict[str, str] = {
+    "kamera-foto":    "elektronik-foto",
+    "auto-motorrad":  "",
 }
 SLUG_BY_CATEGORY = {v: k for k, v in CATEGORY_SLUGS.items()}
 
@@ -330,9 +340,9 @@ _CATEGORY_LABELS = {
     "Elektro-Großgeräte":              "Grossgeräte",
     "Computer & Zubehör":              "Computer",
     "Elektronik & Foto":               "Elektronik",
-    "Auto & Motorrad":                 "Auto",
     "Sport & Freizeit":                "Sport",
-    "Kamera & Foto":                   "Kamera",
+    "Gewerbe, Industrie & Wissenschaft": "Werkstatt",
+    # "Auto & Motorrad" und "Kamera & Foto" am 15.08.2026 entfallen.
 }
 
 def _cat_label(category: str) -> str:
@@ -1086,7 +1096,18 @@ async def category_page(slug: str):
     aufbauen. Wichtig, weil einzelne Deals oft schon vor der Erstindexierung
     wieder ablaufen (Rotation stündlich) und daher als SEO-Basis ungeeignet sind.
     """
-    if not _SLUG_RE.match(slug) or slug not in CATEGORY_SLUGS:
+    if not _SLUG_RE.match(slug):
+        return _not_found_page("Kategorie nicht gefunden")
+
+    # Gestrichene Kategorie (15.08.2026): dauerhaft weiterleiten statt 404.
+    # Diese URLs standen in der Sitemap und sind womöglich indexiert — ein 404
+    # verschenkt die aufgebaute Autorität, ein 301 vererbt sie weiter.
+    if slug in CATEGORY_SLUGS_ALT:
+        ziel = CATEGORY_SLUGS_ALT[slug]
+        return RedirectResponse(
+            f"/kategorie/{ziel}" if ziel else "/", status_code=301)
+
+    if slug not in CATEGORY_SLUGS:
         return _not_found_page("Kategorie nicht gefunden")
 
     category  = CATEGORY_SLUGS[slug]
