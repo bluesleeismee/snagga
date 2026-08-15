@@ -73,26 +73,43 @@ def _first_pos(arr: list, *indices) -> float | None:
 
 async def fetch_keepa_deals(
     domain:      int   = 3,
-    delta_pct:   int   = 15,    # mind. X% Preissenkung
+    delta_pct:   int   = 10,    # mind. X% unter dem 90-Tage-Durchschnitt
     min_rating:  int   = 40,    # 4.0 Sterne × 10
     min_reviews: int   = 50,    # nach Empfang gefiltert
     page:        int   = 0,
     client: httpx.AsyncClient | None = None,
     include_cats: list[int] | None = None,  # None = volle Whitelist unten
-    min_price_cents: int = 2000,            # Preisuntergrenze, Keepa-seitig
+    min_price_cents: int = 2500,            # Preisuntergrenze, Keepa-seitig
 ) -> list[dict]:
     """
     Ruft den Keepa /deal Endpoint ab.
+
     Gibt Liste von Deal-Dicts zurück: asin, title, brand, image_url,
-    current_price, avg30, avg90, avg180, atl, sales_rank, rating, reviews,
-    is_fba, delta_pct
+    current_price, avg48h, avg7, avg30, avg90, sales_rank, rating, reviews,
+    is_fba, delta_pct.
+
+    Die Ø-Felder heissen seit 15.08.2026 so, wie Keepa sie tatsächlich liefert
+    — siehe DEAL_INTERVALLE unten. Vorher hiessen dieselben vier Werte
+    avg30/avg90/avg180/atl, waren aber Tag/Woche/Monat/90 Tage. Jede darauf
+    aufgebaute Regel hat deshalb gegen einen viel zu kurzen Zeitraum gemessen.
     """
     if not KEEPA_KEY:
         return []
 
     # Keepa Deal-Finder: priceTypes als Integer (0 = alle Typen)
     # deltaPercentRange: [min, max], negative = Preissenkung in %
-    # dateRange: 0=24h, 1=2 Tage, ... 6=7 Tage
+    #
+    # dateRange indexiert Keepas DealInterval — belegt in Keepas eigenem
+    # Java-Client (structs/Deal.java, enum DealInterval):
+    #     0 = DAY (real 48 h)   1 = WEEK   2 = MONTH   3 = _90_DAYS
+    # Derselbe Index gilt für die Arrays `avg[]` und `deltaPercent[]` im
+    # Response.
+    #
+    # Hier stand bis 15.08.2026 `dateRange: 2` mit dem Kommentar „letzte 3
+    # Tage". Beides falsch: 2 ist der MONAT. Und `avg[]` wurde als
+    # [30d, 90d, 180d, 365d] gelesen, war aber [48h, 7d, 30d, 90d] — der Wert,
+    # gegen den das Quality Gate seine 20 % verlangte, war in Wirklichkeit der
+    # Wochendurchschnitt.
     # Whitelist: nur Deals aus diesen Amazon-DE Kategorien (root + Level-1-Subcats)
     # IDs ermittelt via /debug/category-children (2026-06-28, DE domain)
     INCLUDE_CAT_IDS = [
@@ -124,8 +141,8 @@ async def fetch_keepa_deals(
         "page":                page,
         "domainId":            domain,
         "priceTypes":          [18],                 # BuyBox — Keepa erlaubt nur EINEN Wert pro Query
-        "deltaPercentRange":   [-100, -delta_pct],  # mind. X% gefallen
-        "dateRange":           2,                   # letzte 3 Tage
+        "deltaPercentRange":   [-100, -delta_pct],  # mind. X% unter Ø90
+        "dateRange":           3,                   # 3 = 90 Tage (DealInterval)
         "minRating":           min_rating,          # 40 = 4.0 Sterne (×10)
         "minReviews":          100,                 # mind. 100 Reviews (Keepa-seitig vorfiltern)
         # Preisuntergrenze. Entscheidend im Zusammenspiel mit sortType=1: Keepa
@@ -213,14 +230,23 @@ async def fetch_keepa_deals(
         if current <= 0:
             continue
 
-        # avg[] = Liste von Perioden-Arrays: [30d, 90d, 180d, 365d]
-        # Jedes Perioden-Array ist ein Preis-Typ-Array → besten verfügbaren Preis nehmen
+        # avg[] = ein Preis-Typ-Array je DealInterval: [48h, 7d, 30d, 90d].
+        # Jedes davon ist selbst nach Preis-Typ indexiert → besten Preis nehmen.
         avg_arr = d.get("avg") or []
-        avg30  = c2e(_cv_best(avg_arr[0]) if len(avg_arr) > 0 else 0)
-        avg90  = c2e(_cv_best(avg_arr[1]) if len(avg_arr) > 1 else 0)
-        avg180 = c2e(_cv_best(avg_arr[2]) if len(avg_arr) > 2 else 0)
-        # 365d-Ø als ATL-Proxy (besser als nichts)
-        atl = c2e(_cv_best(avg_arr[3]) if len(avg_arr) > 3 else 0) or avg180
+
+        def _avg(i: int) -> float:
+            return c2e(_cv_best(avg_arr[i]) if len(avg_arr) > i else 0)
+
+        avg48h = _avg(0)
+        avg7   = _avg(1)
+        avg30  = _avg(2)
+        avg90  = _avg(3)   # Referenz für die Rabattregel
+
+        # Kein ATL-Proxy mehr. Der /deal-Endpoint liefert KEIN Allzeittief;
+        # avg[3] als „atl" auszugeben hat den Filter und die Tag-Logik jahrelang
+        # in die Irre geführt ("Allzeittiefpreis" bei einem Preis nahe dem
+        # 90-Tage-MITTEL). Ein belegtes Tief liefert ausschliesslich /product
+        # über stats.atl — siehe scoring.resolve_atl().
 
         # Rating: current[16] ist Rating × 10 (z.B. 45 = 4.5 Sterne)
         rating  = round(_cv(cur_arr, IDX_RATING) / 10.0, 1)
@@ -240,9 +266,30 @@ async def fetch_keepa_deals(
         else:
             image_url = f"https://images-na.ssl-images-amazon.com/images/P/{asin}.01.LZZZZZZZ.jpg"
 
-        # deltaPercent: auch ein Array [30d, 90d, 180d, 365d] von Preis-Typ-Arrays
+        # deltaPercent nutzt dieselbe DealInterval-Indizierung wie avg[].
+        # Index 3 = 90 Tage, passend zu dateRange und zur Rabattregel. Vorher
+        # wurde Index 0 gelesen — der 48-Stunden-Wert, also die reine Tages-
+        # schwankung.
         dp_arr = d.get("deltaPercent") or []
-        dp = _cv_best(dp_arr[0]) if dp_arr else 0
+
+        def _delta(prozente: list) -> int:
+            """
+            Rabatt in Prozent, BuyBox bevorzugt.
+
+            Braucht einen eigenen Helfer statt _cv_best(): der verlangt Werte
+            > 0, und eine Preissenkung ist negativ (−17 = 17 % gefallen). Mit
+            _cv_best gelesen war `delta_pct` deshalb IMMER 0 — im Protokoll
+            deal_observations stand also durchgehend „0 % Rabatt", auch bei
+            Kandidaten mit −40 %. Aufgefallen 15.08.2026 beim Nachrechnen.
+            """
+            if not isinstance(prozente, list):
+                return 0
+            for idx in (IDX_BUYBOX, IDX_AMAZON, IDX_NEW_FBA):
+                if idx < len(prozente) and isinstance(prozente[idx], (int, float)) and prozente[idx] != 0:
+                    return int(prozente[idx])
+            return 0
+
+        dp = _delta(dp_arr[3]) if len(dp_arr) > 3 else 0
 
         results.append({
             "asin":          asin,
@@ -250,10 +297,10 @@ async def fetch_keepa_deals(
             "brand":         "",        # Deal-Endpoint gibt keine Brand
             "image_url":     image_url,
             "current_price": current,
+            "avg48h":        avg48h,
+            "avg7":          avg7,
             "avg30":         avg30,
             "avg90":         avg90,
-            "avg180":        avg180,
-            "atl":           atl,
             "sales_rank":    sales_rank,
             "rating":        rating,
             "reviews":       reviews,

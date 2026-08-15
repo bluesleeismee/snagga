@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from database import get_pool
 from keepa import (
     fetch_keepa_deals, enrich_with_keepa, fetch_keepa_bestsellers,
-    fetch_keepa_category_children_named, ELECTRONICS_CAT_IDS,
+    fetch_keepa_category_children_named,
 )
 from scoring import (
     CATEGORY_MAX_RANK,
@@ -55,53 +55,54 @@ CHART_GRACE_HOURS = int(os.getenv("CHART_GRACE_HOURS", "3"))
 MAX_BACKUP      = 150
 TOP_PICKS_COUNT = 10
 MIN_SCORE       = 30
-MIN_PRICE       = 20.0
-DEAL_PAGES      = 16    # 16 × 150 = 2.400 Kandidaten/Run
-ELECTRONICS_PAGES = 6   # Zusatzabfrage nur Elektronik/Geräte (−10 %), ~6 Tokens/Run
+# Ein Mindestpreis für alle Kategorien (David, 15.08.2026, Stufe 2).
+#
+# Vorher: 20 € global plus elf kategorieabhängige Werte zwischen 25 und 50 €
+# (CATEGORY_MIN_PRICE, siehe unten). Diese Staffel war ein Notbehelf — ein
+# Preisschwellwert als Ersatz dafür, dass Kleinteile nicht anders erkennbar
+# waren. Genau diese Aufgabe erledigt jetzt die RAUS-Rolle in sortiment.py, und
+# zwar treffsicher: ein 22-€-Artikel fliegt raus, weil er aus „Sportmedizin"
+# kommt, nicht weil er 22 € kostet.
+#
+# Was der Preis weiter leisten muss, erledigt QUALITY_MIN_ERSPARNIS_EUR (8 €)
+# in scoring.py: die Ersparnis muss spürbar sein. Das hebt die effektive
+# Prozenthürde für billige Ware automatisch an (bei 25 € braucht es 32 %,
+# bei 200 € reichen die 10 %) — ohne elf Sonderfälle.
+MIN_PRICE       = 25.0
+DEAL_PAGES      = 16    # Breitensuche: 16 × 150 = 2.400 Kandidaten/Run
+# Eine Rabattschwelle für alle Abfragen (David, 15.08.2026). Vorher standen hier
+# vier verschiedene Werte (15 / 10 / 10 / 8 %) — nicht aus einem Konzept heraus,
+# sondern weil jede neue Abfrage die vorige reparieren sollte. Gemessen wird
+# jetzt überall gegen den 90-Tage-Ø (keepa.dateRange=3), und dort ist eine
+# einheitliche Schwelle auch verteidigbar.
+DEAL_DELTA_PCT  = int(os.getenv("DEAL_DELTA_PCT", "10"))
 
-# Hochpreis-Abfrage (David, 2026-08-12) — der eigentliche Grund, warum keine
-# Airfryer, Monitore oder PCs im Schaufenster standen.
+# ── Kern-Knoten-Abfrage — die Hauptquelle ──────────────────────────────────
+# Keepa sortiert den /deal-Stream nach Rabatt-PROZENT. Eine Abfrage über
+# Root-Knoten holt damit die Artikel mit dem prozentual tiefsten Sturz, und das
+# sind fast ausnahmslos Kleinteile: auf Kabel, Hüllen und Gewürzgläser gibt es
+# ständig −40 %, auf einen 400-€-PC fast nie. Hochwertige Ware kam so gar nicht
+# erst in den Kandidatentopf — jede Nachjustierung an Filtern und Quoten konnte
+# danach nur noch aussortieren, was ohnehin schon Zubehör war.
 #
-# Keepa sortiert den /deal-Stream nach Rabatt-PROZENT. Die beiden Abfragen oben
-# holen damit die 2.400 Artikel mit dem prozentual tiefsten Sturz — und das sind
-# fast ausnahmslos Kleinteile, weil auf Kabel, Hüllen und Gewürzgläser ständig
-# −40 % gegeben wird, auf einen 400-€-PC dagegen fast nie. Hochwertige Ware kam
-# also gar nicht erst in den Kandidatentopf; jede Nachjustierung an Filtern und
-# Quoten danach konnte nur noch aussortieren, was ohnehin schon Zubehör war.
+# Zwei Anläufe dagegen sind gescheitert und wurden am 15.08.2026 entfernt:
+#   * Eine Hochpreis-Abfrage ab 100 € (12.08.). Richtiger Gedanke, zu grobes
+#     Werkzeug — „teuer" ist nicht „Kernprodukt". Über 100 € liegen auch
+#     Werkzeugkoffer-Sets und Bandagen (daher der „Leistenbruchgürtel"),
+#     während ein 89-€-Monitor durch das Fenster fällt.
+#   * Eine Elektronik-Zusatzabfrage mit gelockerter Schwelle (−10 % statt −15 %).
+#     Sie holte dieselben Root-Knoten nur noch einmal.
 #
-# Abhilfe ist keine weitere Lockerung, sondern ein eigenes Fenster: dieselbe
-# Sortierung, aber mit Preisuntergrenze. Keepa filtert serverseitig, die Seiten
-# enthalten also ausschließlich hochpreisige Kandidaten — und weil innerhalb
-# dieses Fensters wieder nach Rabatt sortiert wird, stehen die besten Deals
-# hochwertiger Ware oben. Kosten: 1 Token/Seite wie überall.
-HIGHVALUE_PAGES     = int(os.getenv("HIGHVALUE_PAGES", "8"))
-HIGHVALUE_MIN_EUR   = float(os.getenv("HIGHVALUE_MIN_EUR", "100"))
-HIGHVALUE_DELTA_PCT = int(os.getenv("HIGHVALUE_DELTA_PCT", "10"))
-
-# ── Kern-Knoten-Abfrage (David, 13.08.2026) ────────────────────────────────
-# Die Hochpreis-Abfrage oben war der richtige Gedanke, aber ein zu grobes
-# Werkzeug: „teuer" ist nicht dasselbe wie „Kernprodukt". Über 100 € liegen auch
-# Werkzeugkoffer-Sets, Nahrungsergänzungs-Grosspackungen und Bandagen — Davids
-# Befund vom 13.08.2026 („Leistenbruchgürtel in Grösse blabla") kam genau von
-# dort. Umgekehrt fällt ein 89-€-Monitor durch das Hochpreis-Fenster.
+# Was wirkt, ist die Steuerung über die KATEGORIE: `includeCategories` bekommt
+# die Keepa-Unterknoten, die in sortiment.KATEGORIEN auf KERN stehen (Monitore,
+# Laptops, Elektrische Küchengeräte, Elektro- & Handwerkzeuge …). Dann besteht
+# das Fenster von vornherein aus der gewünschten Ware, und die Rabatt-Sortierung
+# darin wird vom Problem zum Vorteil.
 #
-# Diese Abfrage steuert stattdessen über die Kategorie: `includeCategories`
-# bekommt nicht mehr Root-Knoten, sondern die Keepa-Unterknoten, die in
-# sortiment.SUBCATEGORY_ROLE als KERN markiert sind (Monitore, Laptops,
-# Fernseher, Elektrische Küchengeräte, Elektro- & Handwerkzeuge …). Damit
-# besteht das Fenster von vornherein aus der Ware, die wir zeigen wollen, und
-# die Rabatt-Sortierung darin wird vom Problem zum Vorteil: sie liefert die
-# besten Zeitpunkte für genau diese Produkte.
-#
-# Die Namen sind gemessen, nicht geraten (/debug/subcategories, 11.08.2026); die
-# Knoten-IDs holt _kern_knoten() zur Laufzeit aus Keepas Kategoriebaum. Findet
-# es keine (Namensdrift bei Amazon), bleibt die Abfrage einfach aus — die drei
-# bisherigen Abfragen laufen unverändert weiter.
+# Diese Abfrage existierte seit 13.08. schon — sie lief nur nie, weil
+# _kern_knoten() auf der falschen Baumebene suchte (siehe dort).
 KERN_PAGES      = int(os.getenv("KERN_PAGES", "10"))
-KERN_DELTA_PCT  = int(os.getenv("KERN_DELTA_PCT", "8"))
-# Kein zusätzlicher Preisfilter: die Kategorie macht die Arbeit, MIN_PRICE und
-# CATEGORY_MIN_PRICE greifen ohnehin nachgelagert.
-KERN_MIN_EUR    = float(os.getenv("KERN_MIN_EUR", "20"))
+KERN_DELTA_PCT  = int(os.getenv("KERN_DELTA_PCT", "10"))
 # Keepa nimmt lange includeCategories-Listen an, aber die URL wächst mit. In
 # Häppchen abfragen hält die Requests klein und verteilt das Ergebnis über
 # mehrere Kategorien, statt eine einzige das Fenster füllen zu lassen.
@@ -112,15 +113,11 @@ DEEPSYNC_LIMIT  = 500   # Deep-Sync deckt den ganzen aktiven Bestand ab (~283).
                         # im Basis-Token (gratis), daher unkritisch hoch — der
                         # stündliche Preis-Check hält Charts ohnehin schon aktuell.
 
-CATEGORY_MIN_PRICE: dict[str, float] = {
-    "Elektronik & Foto":                 25.0,
-    "Computer & Zubehör":                25.0,
-    "Elektro-Großgeräte":                50.0,
-    "Kamera & Foto":                     30.0,
-    "Musikinstrumente & DJ-Equipment":   30.0,
-    "Baumarkt":                          28.0,
-    "Küche, Haushalt & Wohnen":          28.0,
-}
+# Aufgelöst am 15.08.2026 (siehe MIN_PRICE oben): eine Schwelle für alle,
+# ergänzt um die Mindestersparnis in Euro. Das Dict bleibt leer stehen, damit
+# bestehende Aufrufer (CATEGORY_MIN_PRICE.get(cat, MIN_PRICE)) unverändert
+# funktionieren und auf MIN_PRICE zurückfallen.
+CATEGORY_MIN_PRICE: dict[str, float] = {}
 
 # Katalog-Qualität (David, 2026-07-06): Preisschwelle NUR für den Katalog-Aufbau
 # (seed_bestsellers) 30% über der Deal-Schwelle oben — filtert Billig-/Kleinteil-
@@ -306,33 +303,72 @@ async def _kern_knoten(client: httpx.AsyncClient) -> tuple[list[int], int]:
     EINER Stelle gepflegt (sortiment.SUBCATEGORY_ROLE), und ein umbenannter
     Amazon-Knoten fällt hier still raus, statt stumm falsche Ware zu liefern.
 
+    ZWEI Ebenen tief (Korrektur David, 15.08.2026) — das war der Grund, warum
+    diese Funktion nie einen einzigen Knoten fand:
+
+    Amazons Baum hat zwischen der Root-Kategorie und den eigentlichen
+    Unterkategorien eine Zwischenebene ohne inhaltliche Bedeutung. „Computer &
+    Zubehör" (340843031) hat nur vier Kinder, und keins davon heisst „Monitore"
+    — eines heisst **„Produkte"** (340844031), und erst DARUNTER liegen die 16
+    Unterkategorien aus Amazons Bestseller-Leiste. Bei anderen Kategorien heisst
+    der Zwischenknoten „Kategorien".
+
+    Die alte Fassung verglich `kern_namen()` gegen genau diese Zwischenebene und
+    fand folglich nie einen Treffer. Sie meldete das brav ins Log
+    („Kern-Knoten: KEINE gefunden") und übersprang die Abfrage — die Discovery
+    lief also die ganze Zeit ausschliesslich über die Root-Knoten, in denen ein
+    Laptop im selben Topf liegt wie ein USB-Kabel.
+
     Gibt (node_ids, verbrauchte Tokens) zurück. Leere Liste = Kern-Discovery
-    übersprungen; die übrigen Abfragen laufen unverändert.
+    übersprungen; die Breitensuche läuft unverändert.
     """
     tokens_used = await _ensure_children_cache(client)
 
-    # Name → gewünschte Rolle, nach Oberkategorie getrennt: derselbe Name kann
-    # unter verschiedenen Elternknoten hängen ("Monitore" nur unter Computer).
     ids: list[int] = []
     gefunden: dict[str, list[str]] = {}
     for parent_id, cat_name in ROOTCAT_MAP.items():
         gesucht = kern_namen(cat_name)
         if not gesucht:
             continue
+
+        # Ebene 1 unter der Root: teils schon die echten Unterkategorien, teils
+        # nur der Zwischenknoten. Beides prüfen, statt eine Struktur anzunehmen.
         for cid, name in _seed_children_cache.get(parent_id, []):
-            if cid in EXCLUDE_ROOTCATS or cid in ids:
+            if cid in EXCLUDE_ROOTCATS:
                 continue
-            if name.strip().lower() in gesucht:
+            if name.strip().lower() in gesucht and cid not in ids:
                 ids.append(cid)
                 gefunden.setdefault(cat_name, []).append(name)
+                continue
+
+            # Kein Namenstreffer → Zwischenknoten. Eine Ebene tiefer schauen.
+            # Kostet 1 Token je Zwischenknoten, aber nur bei kaltem Cache
+            # (SEED_CHILDREN_TTL_HOURS, Default wöchentlich).
+            if cid in _seed_children_cache:
+                enkel = _seed_children_cache[cid]
+            else:
+                enkel, cost = await fetch_keepa_category_children_named(
+                    cid, domain=3, client=client)
+                tokens_used += cost
+                if cost > 0:
+                    _seed_children_cache[cid] = enkel
+                elif not enkel:
+                    continue
+            for eid, ename in enkel:
+                if eid in EXCLUDE_ROOTCATS or eid in ids:
+                    continue
+                if ename.strip().lower() in gesucht:
+                    ids.append(eid)
+                    gefunden.setdefault(cat_name, []).append(ename)
 
     if ids:
         for cat_name, namen in sorted(gefunden.items()):
-            print(f"  Kern-Knoten {cat_name}: {', '.join(sorted(namen))}")
+            print(f"  Kern-Knoten {cat_name}: {len(namen)} — {', '.join(sorted(namen))}")
+        print(f"  Kern-Knoten gesamt: {len(ids)}")
     else:
-        # Laut, nicht still: ohne Treffer fällt die Discovery auf das alte
-        # Verhalten zurück, und das soll im Log sichtbar sein.
-        print("  Kern-Knoten: KEINE gefunden — Namen in sortiment.SUBCATEGORY_ROLE "
+        # Laut, nicht still: ohne Treffer fällt die Discovery auf die
+        # Breitensuche zurück, und das soll im Log sichtbar sein.
+        print("  Kern-Knoten: KEINE gefunden — Namen in sortiment.KATEGORIEN "
               "prüfen (Amazon-Knoten umbenannt?). Kern-Abfrage wird übersprungen.")
     return ids, tokens_used
 
@@ -540,7 +576,7 @@ async def hourly_keepa_price_check():
         # Tier-Staffelung: Top 100 (deal_score) stündlich, Rest alle 4h → ~60% Token-Einsparung
         active = await conn.fetch(
             "SELECT asin, name, brand, current_price, avg90_price, avg180_price, all_time_low, "
-            "atl_confirmed, category, rating, reviews, sales_rank FROM products "
+            "atl_confirmed, category, sub_category, rating, reviews, sales_rank FROM products "
             "WHERE is_active=true AND ("
             "  last_checked IS NULL "
             "  OR (deal_score >= (SELECT PERCENTILE_CONT(0.8) WITHIN GROUP (ORDER BY deal_score) "
@@ -587,16 +623,23 @@ async def hourly_keepa_price_check():
             # Volatil UND schwacher Rabatt (kaum unter avg90) → faul, raus.
             weak_volatile = volatile and avg90 > 0 and live_price > avg90 * 0.95
 
+            # avg30 kennt die products-Tabelle nicht (nur avg90_price und
+            # avg180_price aus /product) → 0 = Anti-Spike hier übersprungen. Er
+            # hat bei der Aufnahme bereits gegriffen; hier geht es darum, ob der
+            # Deal noch gut IST, nicht ob er es je war.
+            #
+            # Der stündliche Check ist ausserdem die einzige Stelle, an der die
+            # Unterkategorie vorliegt — /deal liefert sie nicht. Die RAUS-Regel
+            # greift deshalb erst hier: ein Produkt aus „Sportmedizin" oder
+            # „Wohnaccessoires & Deko" verschwindet beim nächsten Lauf.
             if weak_volatile or not passes_hard_filters(
                 row["rating"], row["reviews"], row["sales_rank"] or 0,
-                row["category"], live_price, avg90, atl, avg180,
+                row["category"], live_price, avg90,
+                atl=atl, avg30=0.0,
                 title=row["name"] or "",
                 brand=(row["brand"] or "") if "brand" in row.keys() else "",
-                # `all_time_low` hält ohne Beleg weiterhin den avg365-Proxy
-                # (siehe UPDATE weiter unten: geschrieben wird nur bei
-                # atl_confirmed). Als Tief-Argument im Quality Gate zählt er
-                # deshalb nur, wenn er auch belegt ist.
                 atl_ist_beleg=bool(row["atl_confirmed"]),
+                sub_category=(row["sub_category"] or "") if "sub_category" in row.keys() else "",
             ):
                 await conn.execute(
                     "UPDATE products SET is_active=false, is_top_pick=false, "
@@ -906,10 +949,13 @@ async def fetch_and_update_deals():
             obs_seen.add(d["asin"])
             observations.append((
                 d["asin"], cat or "", d["current_price"],
-                d.get("avg30") or 0.0, d.get("avg90") or 0.0, d.get("avg180") or 0.0,
-                # d["atl"] ist der avg365-Proxy aus dem /deal-Endpoint (KEIN belegtes
-                # Allzeittief) — hier deshalb ehrlich als avg365 abgelegt.
-                d.get("atl") or 0.0,
+                # Spaltennamen im Protokoll bleiben (avg30/avg90/avg180/avg365),
+                # gefüllt werden sie ab 15.08.2026 mit dem, was /deal wirklich
+                # liefert: Ø7d, Ø90d, Ø30d, Ø48h. Umbenennen hiesse die Tabelle
+                # migrieren; der Erkenntniswert liegt im Vergleich der Zeiträume,
+                # nicht im Spaltennamen.
+                d.get("avg7") or 0.0, d.get("avg90") or 0.0, d.get("avg30") or 0.0,
+                d.get("avg48h") or 0.0,
                 d.get("list_price") or 0.0,
                 int(d.get("delta_pct") or 0),
                 d.get("rating") or 0.0, int(d.get("reviews") or 0),
@@ -942,13 +988,15 @@ async def fetch_and_update_deals():
 
                 hf_reason = hard_filter_reason(
                     d["rating"], d["reviews"], d["sales_rank"], cat,
-                    d["current_price"], d["avg90"], d["atl"], d["avg180"],
+                    d["current_price"], d["avg90"],
+                    atl=0.0, avg30=d.get("avg30") or 0.0,
                     title=d["title"] or "",
                     brand=d.get("brand") or "",
-                    # d["atl"] ist hier der avg365-Proxy aus /deal, KEIN belegtes
-                    # Tief — er darf die Rabattprüfung nicht aushebeln. Als
-                    # avg365-Anker (weiter oben im Filter) bleibt er gültig.
+                    # /deal liefert kein Allzeittief und keine Unterkategorie.
+                    # Beides kommt erst mit /product; die RAUS-Prüfung holt der
+                    # stündliche Preis-Check nach.
                     atl_ist_beleg=False,
+                    sub_category="",
                 )
                 if hf_reason:
                     skipped_filter += 1
@@ -957,7 +1005,7 @@ async def fetch_and_update_deals():
                     continue
 
                 score, breakdown = calculate_deal_score(
-                    d["current_price"], d["avg90"], d["atl"],
+                    d["current_price"], d["avg90"], 0.0,
                     d["sales_rank"], cat,
                     d["rating"], d["reviews"],
                     price_updated=None,
@@ -972,86 +1020,78 @@ async def fetch_and_update_deals():
 
                 d["deal_score"]      = score
                 d["score_breakdown"] = breakdown
-                # d["atl"] ist der avg365-PROXY (der /deal-Endpoint liefert kein
-                # Allzeittief) → nie als Tief-Beleg durchreichen: atl=0/False.
-                # Der Tag kommt hier allein aus den Ø-Vergleichen; ein belegtes Tief
+                # Kein Tief-Beleg aus /deal → atl=0, atl_confirmed=False. Der Tag
+                # entsteht hier allein aus dem Ø90-Vergleich; ein belegtes Tief
                 # liefert erst der Preis-Check/Deep-Sync via /product.
-                d["tag"]             = determine_tag(d["current_price"], 0.0, d["avg90"], d["avg180"],
+                d["tag"]             = determine_tag(d["current_price"], 0.0, d["avg90"], 0.0,
                                                      atl_confirmed=False)
-                # Durchgestrichener Preis = 180-Tage-Ø: deckt sich mit dem Rabatt-
-                # Tooltip ("Durchschnittspreis der letzten 6 Monate") UND mit dem
-                # Deep-Sync, der ebenfalls avg180 nutzt — sonst wechselt der
-                # angezeigte Rabatt je nach Update-Pfad. Fallback: avg90, sonst +25%.
-                # (Aktive Deals liegen per Hard-Filter unter avg180*0.92, also ist
-                #  avg180 immer > current; die Kachel zeigt den Strich ohnehin nur
-                #  bei original_price > current_price.)
-                d["original_price"]  = d["avg180"] or d["avg90"] or round(d["current_price"] * 1.25, 2)
+                # Durchgestrichener Preis = 90-Tage-Ø, also exakt die Referenz,
+                # gegen die auch gefiltert wird. Vorher stand hier avg180 — ein
+                # Wert, der in Wahrheit der 30-Tage-Schnitt war und damit weder
+                # zum Tooltip („6 Monate") noch zur Filterregel passte. Ein Preis
+                # auf der Kachel und die Zahl, gegen die geprüft wurde, sind ab
+                # jetzt dieselbe.
+                d["original_price"]  = d["avg90"] or round(d["current_price"] * 1.25, 2)
                 d["avg_price"]       = d["avg90"] or d["current_price"]
                 seen_asins.add(d["asin"])
                 candidates.append(d)
 
-        # Hauptabfrage: ganze Whitelist, mind. −15 %
-        for page in range(DEAL_PAGES):
-            page_deals = await fetch_keepa_deals(
-                domain=3, delta_pct=15, min_rating=40, min_reviews=50,
-                page=page, client=client,
-            )
-            if not page_deals:
-                break
-            got_any = True
-            process(page_deals)
+        # ── Discovery, neu geordnet (David, 15.08.2026) ─────────────────────
+        # Vorher liefen hier VIER überlappende Abfragen (Whitelist −15 %,
+        # Elektronik −10 %, Hochpreis ab 100 €, Kern-Knoten −8 %). Sie waren
+        # nacheinander entstanden, jede als Reparatur der vorigen, und holten
+        # sich gegenseitig dieselben Kandidaten. Vor allem aber lief die einzige
+        # zielgenaue davon — die Kern-Abfrage — faktisch nie: `_kern_knoten()`
+        # suchte auf der falschen Baumebene und fand nie einen Knoten.
+        #
+        # Jetzt zwei Abfragen mit klarer Aufgabenteilung:
 
-        # Zusatzabfrage: nur Elektronik/Geräte, schon ab −10 % → holt mehr echte
-        # Geräte ins Angebot, die bei −15 % kaum im Deal-Stream auftauchen.
-        for page in range(ELECTRONICS_PAGES):
-            page_deals = await fetch_keepa_deals(
-                domain=3, delta_pct=10, min_rating=40, min_reviews=50,
-                page=page, client=client, include_cats=ELECTRONICS_CAT_IDS,
-            )
-            if not page_deals:
-                break
-            got_any = True
-            process(page_deals)
-
-        # Hochpreis-Abfrage: eigenes Fenster ab HIGHVALUE_MIN_EUR (siehe
-        # Kommentar bei HIGHVALUE_PAGES). Ohne sie bleibt das Schaufenster
-        # strukturell auf Kleinteile beschränkt, egal wie die Filter stehen.
-        for page in range(HIGHVALUE_PAGES):
-            page_deals = await fetch_keepa_deals(
-                domain=3, delta_pct=HIGHVALUE_DELTA_PCT, min_rating=40, min_reviews=50,
-                page=page, client=client,
-                min_price_cents=int(HIGHVALUE_MIN_EUR * 100),
-            )
-            if not page_deals:
-                break
-            got_any = True
-            process(page_deals)
-
-        # Kern-Abfrage: nicht „was ist am stärksten reduziert", sondern „was ist
-        # in den Regalen los, die wir zeigen wollen" (siehe KERN_PAGES oben).
-        # Läuft zuletzt, damit ihre Treffer die vorherigen ergänzen statt sie zu
-        # verdrängen — die Dedup über seen_asins hält die ersten Fundstellen.
+        # 1. KERN-ABFRAGE — die eigentliche Suche.
+        #    Fenster sind die Unterkategorien, die in sortiment.KATEGORIEN auf
+        #    KERN stehen: Monitore, Laptops, Elektrische Küchengeräte, Elektro-
+        #    & Handwerkzeuge, Bau- & Konstruktionsspielzeug …
+        #    Keepas Sortierung nach Rabatt-Prozent wird damit vom Problem zum
+        #    Vorteil: innerhalb eines Kern-Knotens stehen oben die besten
+        #    Zeitpunkte für genau die Ware, die wir zeigen wollen.
         kern_ids: list[int] = []
         if KERN_AKTIV:
             kern_ids, kern_tokens = await _kern_knoten(client)
             if kern_tokens:
                 print(f"  Kategoriebaum: {kern_tokens} Tokens (nur bei kaltem Cache)")
-        kern_vorher = len(candidates)
         for start in range(0, len(kern_ids), KERN_BATCH):
             batch = kern_ids[start:start + KERN_BATCH]
             for page in range(KERN_PAGES):
                 page_deals = await fetch_keepa_deals(
                     domain=3, delta_pct=KERN_DELTA_PCT, min_rating=40, min_reviews=50,
                     page=page, client=client, include_cats=batch,
-                    min_price_cents=int(KERN_MIN_EUR * 100),
+                    min_price_cents=int(MIN_PRICE * 100),
                 )
                 if not page_deals:
                     break
                 got_any = True
                 process(page_deals)
+        kern_treffer = len(candidates)
         if kern_ids:
-            print(f"  Kern-Abfrage: {len(kern_ids)} Knoten · "
-                  f"{len(candidates) - kern_vorher} zusätzliche qualifizierte Deals")
+            print(f"  Kern-Abfrage: {len(kern_ids)} Knoten · {kern_treffer} qualifizierte Deals")
+
+        # 2. BREITENSUCHE — Auffangnetz, keine Hauptquelle.
+        #    Deckt ab, was die Kern-Knoten nicht erfassen: umbenannte Knoten,
+        #    Ware in noch nicht eingeordneten Unterkategorien, und den Fall,
+        #    dass die Namensauflösung ganz scheitert. Läuft über dieselbe
+        #    Root-Whitelist wie früher, aber mit derselben Schwelle wie überall
+        #    sonst — die vier verschiedenen Prozentwerte sind entfallen.
+        #    Die Dedup über seen_asins hält die Kern-Treffer.
+        for page in range(DEAL_PAGES):
+            page_deals = await fetch_keepa_deals(
+                domain=3, delta_pct=DEAL_DELTA_PCT, min_rating=40, min_reviews=50,
+                page=page, client=client,
+                min_price_cents=int(MIN_PRICE * 100),
+            )
+            if not page_deals:
+                break
+            got_any = True
+            process(page_deals)
+        print(f"  Breitensuche: {len(candidates) - kern_treffer} zusätzliche Deals")
 
         if not got_any:
             print("  Keepa /deals lieferte keine Daten — Abbruch.")
@@ -1179,10 +1219,13 @@ async def fetch_and_update_deals():
                         score_breakdown = EXCLUDED.score_breakdown
                 """,
                     asin, (p["title"] or "")[:200], p["brand"], p["image_url"], p["category"],
-                    # all_time_low bei Neuanlage: avg365-Proxy oder 0 (= unbekannt),
-                    # NIE der aktuelle Preis. atl_confirmed bleibt beim DEFAULT false.
-                    p["current_price"], p["original_price"], p["atl"] or 0.0, p["avg_price"],
-                    p["avg90"] or 0.0, p["avg180"] or 0.0,
+                    # all_time_low bei Neuanlage: 0 = unbekannt. Seit 15.08.2026
+                    # gibt es hier keinen Proxy mehr — /deal liefert kein Tief,
+                    # und ein erfundenes Tief war die Wurzel der drei falschen
+                    # „Allzeittiefpreis"-Badges. atl_confirmed bleibt DEFAULT false.
+                    p["current_price"], p["original_price"], 0.0, p["avg_price"],
+                    # avg180_price bleibt 0, bis /product den echten Wert liefert.
+                    p["avg90"] or 0.0, 0.0,
                     p["deal_score"], p["rating"], p["reviews"], True,
                     now, None,   # last_updated=now, last_checked=NULL: Discovery (/deal) liefert KEINE History.
                                  # NULL signalisiert dem stündlichen Preis-Check, dass /product + History noch fehlen.

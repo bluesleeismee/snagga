@@ -7,54 +7,60 @@ import os
 import re
 from datetime import datetime
 
-# Quality Gate (a): Wie weit muss der Preis unter dem Ø90 liegen, damit ein
-# Angebot ins Regal darf? 0.80 = mindestens 20 % darunter.
+from sortiment import ist_raus
+
+# ---------------------------------------------------------------------------
+# Die eine Rabattregel (David, 15.08.2026)
+# ---------------------------------------------------------------------------
+# Referenz ist der gewichtete Durchschnitts-Buy-Box-Preis der letzten 90 TAGE,
+# die Schwelle liegt 10 % darunter.
 #
-# Über Env verstellbar, weil das der wirksamste Regler für die ANGEBOTSMENGE ist:
-# Keepa liefert nur Kandidaten ab −15 % gegenüber der eigenen Referenz, dieses
-# Gate verlangt danach nochmals −20 % gegenüber Ø90 — die Kombination ist streng.
-# Zum Nachjustieren KEIN Deploy nötig, nur die Env-Variable in Render ändern.
-# Höher (z. B. 0.85) = mehr Deals, schwächerer Preisvorteil. Niedriger = strenger.
-QUALITY_DISCOUNT_FACTOR = float(os.getenv("QUALITY_DISCOUNT_FACTOR", "0.80"))
+# Vorher stand hier 20 % — gegen einen Wert, der „avg90" hiess, aber der
+# WOCHEN-Durchschnitt war (siehe keepa.py: Keepas /deal-Intervalle sind Tag /
+# Woche / Monat / 90 Tage, gelesen wurden sie als Ø30/Ø90/Ø180/Ø365). Gegen den
+# Wochenschnitt sind 20 % nichts: jedes Kleinteil mit normalem Preisgezappel
+# erfüllt das mehrmals im Monat, ein Monitor dagegen fast nie. Genau deshalb
+# bestand die Einlagesohle und der Markenartikel nicht.
+#
+# 10 % gegen den 90-Tage-Schnitt sind die deutlich HÖHERE Hürde: der Wert ist
+# träge und lässt sich durch eine Preisdelle der letzten Tage nicht drücken.
+#
+# Über Env verstellbar, ohne Deploy. Höher (0.92) = mehr Deals, schwächerer
+# Preisvorteil. Niedriger (0.85) = strenger.
+QUALITY_DISCOUNT_FACTOR = float(os.getenv("QUALITY_DISCOUNT_FACTOR", "0.90"))
+
+# Zweite Bedingung: die Ersparnis muss auch in Euro spürbar sein.
+#
+# 10 % sind bei 25 € genau 2,50 € — rechnerisch ein Deal, aber niemand stellt
+# dafür den Wecker. Bei 400 € sind dieselben 10 % vierzig Euro. Eine feste
+# Euro-Untergrenze hebt die effektive Prozenthürde für billige Ware automatisch
+# an (bei 25 € braucht es 32 %, bei 200 € reichen die 10 %) und macht damit elf
+# kategorieabhängige Preisgrenzen überflüssig.
+QUALITY_MIN_ERSPARNIS_EUR = float(os.getenv("QUALITY_MIN_ERSPARNIS_EUR", "8"))
+
+# Anti-Spike gegen den 30-Tage-Schnitt: Der Preis muss auch unter dem letzten
+# Monat liegen, nicht nur unter dem Quartal. Ohne diese Klammer genügt es, dass
+# ein Produkt vor zwei Monaten teuer war — der 90-Tage-Schnitt bliebe hoch,
+# obwohl der heutige Preis seit Wochen der normale ist. Die 0.97 lassen
+# Rundungsrauschen durch, nicht mehr.
+ANTI_SPIKE_FAKTOR_30T = float(os.getenv("ANTI_SPIKE_FAKTOR_30T", "0.97"))
 
 # Mindest-Bewertungszahl, wenn Keepa keinen Sales-Rank liefert. Ohne Rang ist die
 # Bewertungsbasis der einzige verbleibende Nachfragebeleg — siehe
 # hard_filter_reason(). Über Env verstellbar, um die Wirkung zu messen.
 RANKLESS_MIN_REVIEWS = int(os.getenv("RANKLESS_MIN_REVIEWS", "500"))
 
-# ---------------------------------------------------------------------------
-# Preisabhängiges Quality Gate (David, 2026-08-12)
-# ---------------------------------------------------------------------------
-# Befund: 82 von 96 aktiven Deals lagen unter 100 €, ganze 4 über 200 € — und
-# unter den teuersten standen eine Teleskopstange und ein Beutel Kompostwürmer.
-# Airfryer, Monitore, PCs fehlten vollständig.
+# Die Preisstaffel von 2026-08-12 ist entfallen (David, 15.08.2026).
 #
-# Eine der beiden Ursachen sitzt hier: eine feste Schwelle von 20 % unter Ø90
-# behandelt ein 25-€-Kabel und einen 400-€-PC gleich. Auf Kleinteile mit hoher
-# Marge gibt es solche Nachlässe ständig, auf hochwertige Markengeräte fast nie
-# — 10 bis 15 % sind dort bereits ein sehr guter Zeitpunkt. Die feste Prozent-
-# schwelle sortiert also systematisch genau das Sortiment aus, das wir zeigen
-# wollen.
+# Sie war der Versuch, eine zu hohe Prozenthürde für teure Ware abzumildern:
+# 20 % unter Ø90 gibt es auf Kleinteile ständig, auf einen 400-€-PC fast nie.
+# Also wurde nach Preis gestaffelt (10 % ab 300 €, 14 % ab 100 €, sonst 20 %).
 #
-# Deshalb gestaffelt nach Preis, ergänzt um eine absolute Mindestersparnis:
-# 12 % auf einen 400-€-PC sind 48 € echtes Geld, 12 % auf ein 25-€-Kabel sind
-# 3 € und bleiben zu Recht draußen. Die Staffel lockert die Regel also nicht,
-# sie misst nur in der Einheit, die für den Käufer zählt.
-#
-# Das Versprechen bleibt unberührt: geprüft wird weiterhin gegen die echte
-# Historie (Ø90/Ø180/Ø365), nur der Mindestabstand ist preisgerecht.
-#
-# Format: (Preisuntergrenze in €, Faktor gegenüber Ø90). Absteigend geprüft.
-QUALITY_DISCOUNT_TIERS: list[tuple[float, float]] = [
-    (300.0, float(os.getenv("QUALITY_FACTOR_AB_300", "0.90"))),  # ≥ 300 € → ≥10 %
-    (100.0, float(os.getenv("QUALITY_FACTOR_AB_100", "0.86"))),  # 100–300 € → ≥14 %
-]
-
-# Unterhalb der günstigsten Staffel gilt weiter QUALITY_DISCOUNT_FACTOR (20 %).
-# Zusätzliche Bedingung für die gelockerten Staffeln: die Ersparnis gegenüber
-# Ø90 muss auch in Euro spürbar sein. Ohne diese Klammer käme über die 10-%-
-# Staffel jeder beliebige Preishüpfer bei teurer Ware durch.
-QUALITY_MIN_ERSPARNIS_EUR = float(os.getenv("QUALITY_MIN_ERSPARNIS_EUR", "25"))
+# Mit der korrigierten Referenz braucht es das nicht mehr. Die alte Hürde war
+# nur deshalb so hoch angesetzt, weil sie gegen den WOCHEN-Schnitt gemessen hat
+# und dort nichts galt. Gegen den echten 90-Tage-Schnitt sind 10 % für alle
+# Preisklassen anspruchsvoll, und die Mindestersparnis in Euro erledigt die
+# Kleinteile sauberer als drei Preisstufen. Eine Regel statt vier.
 
 # Verkaufsrang-Aufschlag für hochpreisige Artikel. Der Rang misst Stückzahlen
 # innerhalb der Oberkategorie — dort konkurriert ein Laptop mit USB-Kabeln, die
@@ -75,12 +81,11 @@ VERTRAUEN_MIN_REVIEWS = int(os.getenv("VERTRAUEN_MIN_REVIEWS", "100"))
 
 def erforderlicher_rabatt_faktor(current: float) -> float:
     """
-    Gibt den Faktor gegenüber Ø90 zurück, den ein Angebot dieses Preises
-    unterschreiten muss (0.80 = mindestens 20 % günstiger).
+    Faktor gegenüber dem 90-Tage-Ø, den ein Angebot unterschreiten muss.
+
+    Seit 15.08.2026 preisunabhängig — die Staffelung ist entfallen (siehe oben).
+    Die Funktion bleibt bestehen, damit Aufrufer und Tests nicht brechen.
     """
-    for ab_preis, faktor in QUALITY_DISCOUNT_TIERS:
-        if current >= ab_preis:
-            return faktor
     return QUALITY_DISCOUNT_FACTOR
 
 # ---------------------------------------------------------------------------
@@ -308,11 +313,12 @@ def hard_filter_reason(
     category:   str,
     current:    float,
     avg90:      float,
-    atl:        float,
-    avg180:     float = 0,
+    atl:        float = 0,
+    avg30:      float = 0,
     title:      str = "",
     brand:      str = "",
-    atl_ist_beleg: bool = True,
+    atl_ist_beleg: bool = False,
+    sub_category: str = "",
 ) -> str | None:
     """
     Wie passes_hard_filters(), gibt aber den GRUND der Ablehnung zurück
@@ -323,20 +329,28 @@ def hard_filter_reason(
     passes_hard_filters() ist ein dünner Wrapper darum, damit bestehende
     Aufrufer unverändert weiterlaufen.
 
-    `atl_ist_beleg=False` sagt: der übergebene `atl` ist der avg365-PROXY aus
-    dem /deal-Endpoint, kein belegtes Allzeittief. Genau das ist bei der
-    Discovery der Fall — siehe die Erklärung bei near_atl weiter unten.
+    Parameter seit 15.08.2026:
+      `avg90`  echter 90-Tage-Durchschnitt — die EINZIGE Rabattreferenz.
+      `avg30`  30-Tage-Durchschnitt, nur für den Anti-Spike. 0 = unbekannt.
+      `atl`    belegtes Allzeittief oder 0. Zählt nur mit `atl_ist_beleg=True`;
+               der /deal-Endpoint liefert kein Tief, deshalb ist False Default.
+      `sub_category`  für die RAUS-Prüfung. Leer = noch nicht geladen, dann
+               wird nicht geprüft (siehe sortiment.ist_raus).
     """
     # Nur Neuware: gebrauchte / generalüberholte / B-Ware sofort aussortieren.
     if is_excluded_condition(title):
         return "zustand"
 
+    # Ausgeschlossene Unterkategorie (sortiment.RAUS). Steht bewusst weit oben:
+    # was gar nicht ins Sortiment gehört, muss nicht erst auf Rabatt geprüft
+    # werden — und im Log ist "kategorie_raus" die aussagekräftigste Antwort.
+    if ist_raus(category, sub_category):
+        return "kategorie_raus"
+
     if rating < 4.0:
         return "rating"
 
-    # Allgemein: mind. 100 Reviews; Auto & Motorrad: 500 (filtert Modell-Nischenteile)
-    min_reviews = 500 if category == "Auto & Motorrad" else 100
-    if reviews < min_reviews:
+    if reviews < 100:
         return "reviews"
 
     # Rang-Grenze: ab RANK_BONUS_AB_EUR gelockert, weil der Rang Stückzahlen
@@ -359,54 +373,35 @@ def hard_filter_reason(
     if sales_rank <= 0 and reviews < RANKLESS_MIN_REVIEWS:
         return "kein_rang_kein_beleg"
 
-    if avg90 <= 0 and avg180 <= 0:
-        return "keine_referenz"
+    # ── Referenz: 90 Tage, ohne Ausweichmöglichkeit ─────────────────────────
+    # Keine 90-Tage-Historie → keine Aussage über den Kaufzeitpunkt und ein
+    # leerer Chart. Solche Produkte werden abgelehnt statt notdürftig gegen
+    # einen kürzeren Zeitraum geprüft (Entscheidung David, 15.08.2026). Das
+    # kostet uns Neuerscheinungen — die sind aber selten echte Deals.
+    if avg90 <= 0:
+        return "keine_referenz_90t"
 
-    # Anti-Spike: current muss unter avg90 UND avg180 liegen
-    # Verhindert Fake-Deals durch kurze Preisspikes (normal €30 → spike €60 → zurück €30)
-    ref90  = avg90  if avg90  > 0 else None
-    ref180 = avg180 if avg180 > 0 else None
-
-    below90  = ref90  is None or current <= ref90  * 0.92
-    below180 = ref180 is None or current <= ref180 * 0.92
-
-    if not (below90 and below180):
-        return "anti_spike"
-
-    # avg365 als langfristiger Anker (atl aus /deal = avg365):
-    # Wenn avg180 deutlich über avg365 liegt, war avg180 durch einen länger andauernden
-    # Spike inflated. Dann muss current auch unter avg365 liegen.
-    if atl > 0 and avg180 > 0 and atl < avg180 * 0.80:
-        if current > atl * 0.95:
-            return "avg365_anker"
-
-    # ── Quality Gate (2026-07-05): Glaubwürdigkeit vor Menge ────────────────
-    # snagga verspricht, dass jeder gezeigte Preis gegen die echte Historie
-    # geprüft ist — das Regal muss diesen Anspruch einlösen.
-    # (a) Der Preisvorteil muss substanziell sein: ≥20% unter Ø90 (Fallback Ø180)
-    #     ODER nahe am Allzeittief (aus /deal ist atl der avg365-Proxy —
-    #     auch das ist ein starkes "historisch günstig"-Signal).
-    #     Die Schwelle ist preisabhängig (siehe QUALITY_DISCOUNT_TIERS): bei
-    #     hochpreisiger Ware zählt die Ersparnis in Euro, nicht in Prozent.
-    #     Für die gelockerten Staffeln gilt zusätzlich eine Mindestersparnis,
-    #     damit kein bloßer Preishüpfer bei teurer Ware durchrutscht.
-    ref = avg90 if avg90 > 0 else avg180
-    faktor = erforderlicher_rabatt_faktor(current)
-    real_discount = ref > 0 and current <= ref * faktor
-    if real_discount and faktor > QUALITY_DISCOUNT_FACTOR:
-        real_discount = (ref - current) >= QUALITY_MIN_ERSPARNIS_EUR
-    #     WICHTIG (David, 13.08.2026): `near_atl` darf nur zählen, wenn `atl`
-    #     wirklich ein Tief ist. Bei der Discovery ist er das nicht — dort
-    #     kommt er aus /deal und ist der avg365-DURCHSCHNITT. Die Bedingung
-    #     hiess damit faktisch „Preis liegt in der Nähe des Jahresmittels", und
-    #     das genügte, um die Rabattprüfung komplett zu überspringen. Über
-    #     dieses Loch kam praktisch jedes Kleinteil ohne echten Preisvorteil
-    #     ins Schaufenster; es ist dieselbe Verwechslung, die wir bei der
-    #     ANZEIGE schon korrigiert haben (resolve_atl/atl_confirmed) und die im
-    #     Filter noch stand.
-    near_atl = atl_ist_beleg and atl > 0 and current <= atl * 1.05
-    if not (real_discount or near_atl):
+    # ── Die Rabattregel: 10 % unter dem 90-Tage-Ø UND mind. 8 € Ersparnis ────
+    # Beide Bedingungen zusammen, kein Oder. Der frühere Ausweg „nahe am
+    # Allzeittief" ist ersatzlos entfallen: bei der Discovery gab es nie ein
+    # belegtes Tief, sondern nur den avg365-Proxy, und über dieses Loch kam
+    # praktisch jedes Kleinteil ohne echten Preisvorteil ins Schaufenster.
+    ersparnis = avg90 - current
+    if current > avg90 * QUALITY_DISCOUNT_FACTOR:
         return "rabatt_zu_klein"
+    if ersparnis < QUALITY_MIN_ERSPARNIS_EUR:
+        return "ersparnis_zu_klein"
+
+    # ── Anti-Spike gegen den Monat ──────────────────────────────────────────
+    # Der Preis muss auch unter dem 30-Tage-Schnitt liegen. Sonst genügt es,
+    # dass ein Produkt vor zwei Monaten teuer war: der 90-Tage-Schnitt bliebe
+    # hoch, obwohl der heutige Preis längst der normale ist.
+    if avg30 > 0 and current > avg30 * ANTI_SPIKE_FAKTOR_30T:
+        return "anti_spike_30t"
+
+    # Belegtes Allzeittief ist ab hier nur noch ein PLUS für den Score und den
+    # Tag, kein Ersatz für die Rabattregel. `atl`/`atl_ist_beleg` bleiben in der
+    # Signatur, damit Aufrufer und Tag-Logik dieselbe Datenquelle benutzen.
 
     # (b) Vertrauens-Signal: bekannte Marke ODER echter Nachfragebeleg.
     #
@@ -441,16 +436,17 @@ def passes_hard_filters(
     category:   str,
     current:    float,
     avg90:      float,
-    atl:        float,
-    avg180:     float = 0,
+    atl:        float = 0,
+    avg30:      float = 0,
     title:      str = "",
     brand:      str = "",
-    atl_ist_beleg: bool = True,
+    atl_ist_beleg: bool = False,
+    sub_category: str = "",
 ) -> bool:
     """Gibt True zurück wenn das Produkt alle Mindestanforderungen erfüllt."""
     return hard_filter_reason(
         rating, reviews, sales_rank, category, current, avg90, atl,
-        avg180, title, brand, atl_ist_beleg,
+        avg30, title, brand, atl_ist_beleg, sub_category,
     ) is None
 
 
@@ -544,7 +540,19 @@ def calculate_deal_score(
         f_stab = 0.5
 
     # ── Gesamt ──────────────────────────────────────────────────────────────
-    raw = f_avg * 0.40 + f_atl * 0.30 + f_pop * 0.20 + f_stab * 0.10
+    # Ohne belegtes Allzeittief wird dessen Gewicht auf den Ø90-Abstand
+    # umgelegt statt verschenkt (David, 15.08.2026).
+    #
+    # Vorher floss bei fehlendem Tief eine harte Null mit 30 % Gewicht ein, das
+    # Maximum lag damit bei 70 Punkten. Solange der /deal-Endpoint einen
+    # avg365-PROXY als „Tief" lieferte, fiel das nicht auf; seit der Proxy
+    # entfernt ist, hätte jeder frisch entdeckte Deal 30 Punkte eingebüsst und
+    # wäre reihenweise an MIN_SCORE gescheitert — ein Qualitätsfilter, der in
+    # Wahrheit nur misst, ob /product schon gelaufen ist.
+    if atl > 0:
+        raw = f_avg * 0.40 + f_atl * 0.30 + f_pop * 0.20 + f_stab * 0.10
+    else:
+        raw = f_avg * 0.70 + f_pop * 0.20 + f_stab * 0.10
     base_score = max(0, min(100, int(raw * 100)))
 
     penalty = specificity_penalty(title) if title else 0
