@@ -75,6 +75,11 @@ MIGRATE_PRODUCTS = [
     # den Drilldown-Filter der Suche. Leer bei Alt-Stubs, füllt sich bei jeder
     # /product-Anreicherung (Seeding, Deep-Sync, /preis-Klick) von selbst.
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS sub_category TEXT DEFAULT ''",
+    # Dritte Amazon-Ebene (David, 15.08.2026). Wird NUR gesammelt, nicht
+    # gefiltert: erst messen, dann entscheiden. Füllt sich bei jeder
+    # /product-Anreicherung von selbst, kostet keinen zusätzlichen Token.
+    # Auswertung über /debug/subcategories?ebene=3.
+    "ALTER TABLE products ADD COLUMN IF NOT EXISTS sub_category2 TEXT DEFAULT ''",
     # Ist `all_time_low` ein BELEGTES Allzeittief (Keepa stats.atl aus /product
     # oder Minimum einer echten Preishistorie) — oder nur der avg365-Proxy, den
     # der /deal-Endpoint liefert? Ohne diese Unterscheidung landeten beide Werte

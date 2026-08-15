@@ -1738,9 +1738,9 @@ async def preis_check(request: Request, q: str = Query(default="")):
                    last_updated, last_checked, affiliate_url,
                    is_active, is_backup, is_top_pick, is_fba,
                    sales_rank, tag, score_breakdown, first_seen, sub_category,
-                   atl_confirmed)
+                   atl_confirmed, sub_category2)
                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
-                        $16,$17,$18,false,false,false,$19,$20,'','',$16,$21,$22)
+                        $16,$17,$18,false,false,false,$19,$20,'','',$16,$21,$22,$23)
                 ON CONFLICT (asin) DO NOTHING
             """,
                 asin, (kd["title"] or "Produkt")[:200], kd.get("brand") or "",
@@ -1751,6 +1751,7 @@ async def preis_check(request: Request, q: str = Query(default="")):
                 now, now, f"https://www.amazon.de/dp/{asin}?tag={aff_tag}",
                 kd["is_fba"], kd["sales_rank"] or 0,
                 kd.get("sub_category") or "", atl_ok,
+                kd.get("sub_category2") or "",
             )
             if hist:
                 await conn.execute("DELETE FROM price_history WHERE asin=$1", asin)
@@ -3112,7 +3113,8 @@ async def debug_observation_stats(token: str = Query(default=""), days: int = Qu
 
 
 @app.get("/debug/subcategories")
-async def debug_subcategories(token: str = Query(default=""), min_n: int = Query(default=3)):
+async def debug_subcategories(token: str = Query(default=""), min_n: int = Query(default=3),
+                              ebene: int = Query(default=2)):
     """
     Verteilung der Unterkategorien je Oberkategorie — Grundlage für die
     Kernsortiment-Frage.
@@ -3132,12 +3134,32 @@ async def debug_subcategories(token: str = Query(default=""), min_n: int = Query
     Zeigt je Oberkategorie: Unterkategorien mit Anzahl aktiver Deals, Anzahl im
     Katalog und Median-Preis. Der Preis ist der beste Hinweis darauf, ob eine
     Unterkategorie Kernsortiment oder Kleinteil ist.
+
+    `ebene=3` (David, 15.08.2026) wertet stattdessen `sub_category2` aus, gruppiert
+    nach „Ebene2 › Ebene3". Zweck: sechs Ebene-2-Töpfe sind zu unscharf, um sie
+    einzuordnen — "Sport" (904 Produkte, Median 38 €), "Wohnaccessoires & Deko"
+    (816), "Küche, Kochen & Backen" (501), "Möbel" (417), "Handys & Zubehör"
+    (376), "Plattformen" (149). Bei denen sagt der Name nicht, ob dort Kernware
+    oder Kleinteile liegen. Statt zu raten wird gemessen.
+
+    Achtung: `sub_category2` füllt sich erst ab dem Deploy vom 15.08.2026 und nur
+    bei Produkten, die seither eine /product-Anreicherung durchlaufen haben. Die
+    Auswertung ist also anfangs dünn und wird täglich vollständiger; `abgedeckt`
+    im Ergebnis sagt, wie belastbar sie schon ist.
     """
     _check_admin(token)
+    spalte = "sub_category2" if ebene == 3 else "sub_category"
     pool = await get_pool()
     async with pool.acquire() as conn:
+        if ebene == 3:
+            # Ebene 3 nur im Kontext ihrer Ebene 2 lesbar: "Fahrräder" allein sagt
+            # nichts, "Sport › Fahrräder" schon.
+            sub_expr = ("COALESCE(NULLIF(TRIM(sub_category),''),'(ohne)') || ' › ' || "
+                        "COALESCE(NULLIF(TRIM(sub_category2),''),'(ohne)')")
+        else:
+            sub_expr = "COALESCE(NULLIF(TRIM(sub_category),''),'(ohne)')"
         rows = await conn.fetch(
-            "SELECT category, COALESCE(NULLIF(TRIM(sub_category),''),'(ohne)') AS sub, "
+            f"SELECT category, {sub_expr} AS sub, "
             "       COUNT(*) AS n, "
             "       COUNT(*) FILTER (WHERE is_active) AS n_aktiv, "
             "       PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY current_price) AS preis_median, "
@@ -3148,10 +3170,18 @@ async def debug_subcategories(token: str = Query(default=""), min_n: int = Query
             min_n,
         )
         ohne_sub = await conn.fetchval(
-            "SELECT COUNT(*) FROM products WHERE COALESCE(TRIM(sub_category),'')='' "
+            f"SELECT COUNT(*) FROM products WHERE COALESCE(TRIM({spalte}),'')='' "
             "AND is_active=true") or 0
         aktiv = await conn.fetchval(
             "SELECT COUNT(*) FROM products WHERE is_active=true") or 0
+        # Wie viel des Katalogs die gewählte Ebene überhaupt schon kennt. Ohne
+        # diese Zahl liest man eine halb gefüllte Ebene-3-Auswertung wie eine
+        # vollständige und zieht falsche Schlüsse.
+        gesamt_kat = await conn.fetchval(
+            "SELECT COUNT(*) FROM products WHERE current_price > 0") or 0
+        mit_spalte = await conn.fetchval(
+            f"SELECT COUNT(*) FROM products WHERE current_price > 0 "
+            f"AND COALESCE(TRIM({spalte}),'') <> ''") or 0
 
     out: dict = {}
     for r in rows:
@@ -3163,8 +3193,15 @@ async def debug_subcategories(token: str = Query(default=""), min_n: int = Query
             "preis_max":      round(r["preis_max"] or 0, 2),
         })
     return {
+        "ebene":                       ebene,
+        "spalte":                      spalte,
         "aktive_deals":                aktiv,
         "aktive_ohne_unterkategorie":  ohne_sub,
+        "abgedeckt": {
+            "katalog_gesamt": gesamt_kat,
+            "mit_wert":       mit_spalte,
+            "anteil_pct":     round(100.0 * mit_spalte / gesamt_kat, 1) if gesamt_kat else 0.0,
+        },
         "schwelle_min_produkte":       min_n,
         "kategorien":                  out,
     }

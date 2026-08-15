@@ -79,6 +79,7 @@ async def fetch_keepa_deals(
     page:        int   = 0,
     client: httpx.AsyncClient | None = None,
     include_cats: list[int] | None = None,  # None = volle Whitelist unten
+    min_price_cents: int = 2000,            # Preisuntergrenze, Keepa-seitig
 ) -> list[dict]:
     """
     Ruft den Keepa /deal Endpoint ab.
@@ -127,7 +128,13 @@ async def fetch_keepa_deals(
         "dateRange":           2,                   # letzte 3 Tage
         "minRating":           min_rating,          # 40 = 4.0 Sterne (×10)
         "minReviews":          100,                 # mind. 100 Reviews (Keepa-seitig vorfiltern)
-        "priceRange":          [2000, -1],          # mind. €20 (2000 Cent), kein Maximum
+        # Preisuntergrenze. Entscheidend im Zusammenspiel mit sortType=1: Keepa
+        # gibt die Treffer nach Rabatt-PROZENT sortiert zurück, und dort stehen
+        # praktisch nur Kleinteile oben. Ein Airfryer mit −20 % taucht in den
+        # ersten 2.400 Treffern nie auf. Erst eine eigene Abfrage mit hoher
+        # Untergrenze macht das Fenster für hochwertige Ware überhaupt sichtbar
+        # (siehe HIGHVALUE_PAGES in scraper.py).
+        "priceRange":          [min_price_cents, -1],
         "hasReviews":          True,
         "isFilterEnabled":     True,
         "filterErotic":        True,
@@ -308,14 +315,26 @@ async def fetch_keepa_bestsellers(
 # /category — direkte Unterknoten eines Kategorie-Knotens (1 Token/Request)
 # ---------------------------------------------------------------------------
 
-async def fetch_keepa_category_children(
+async def fetch_keepa_category_children_named(
     category_id: int,
     domain: int = 3,
     client: httpx.AsyncClient | None = None,
-) -> tuple[list[int], int]:
+) -> tuple[list[tuple[int, str]], int]:
     """
-    Liefert die direkten Kind-Knoten-IDs einer Amazon-Kategorie.
-    Kostet 1 Token/Request. Gibt (child_ids, tokens_consumed) zurück.
+    Wie fetch_keepa_category_children(), gibt aber (id, NAME) je Unterknoten
+    zurück. Kostet dieselben 1 Token/Request — Keepa liefert die Namen im selben
+    Response mit, wir haben sie bisher nur weggeworfen.
+
+    Der Name ist der entscheidende Teil: erst mit ihm lässt sich „Monitore" von
+    „Computer-Zubehör" unterscheiden und damit gezielt DORT nach Deals suchen,
+    wo die Kernprodukte liegen (siehe KERN-Discovery in scraper.py). Ohne Namen
+    bleibt nur die Root-Ebene, in der ein Laptop im selben Topf liegt wie ein
+    USB-Kabel.
+
+    Der Request fragt mit parents=0 nur den einen Knoten ab; Keepa legt die
+    Kinder trotzdem als eigene Einträge in `categories` ab, sodass wir ihre
+    Namen ohne zweiten Call bekommen. Fehlt ein Name (kommt vor), liefern wir ""
+    zurück — der Aufrufer behandelt namenlose Knoten als „unbekannt".
     """
     if not KEEPA_KEY:
         return [], 0
@@ -340,11 +359,33 @@ async def fetch_keepa_category_children(
 
     cats = data.get("categories") or {}
     cat = cats.get(str(category_id)) or {}
-    children = [c for c in (cat.get("children") or []) if isinstance(c, int) and c > 0]
+    child_ids = [c for c in (cat.get("children") or []) if isinstance(c, int) and c > 0]
+    children = [
+        (cid, ((cats.get(str(cid)) or {}).get("name") or "").strip())
+        for cid in child_ids
+    ]
     tokens_consumed = data.get("tokensConsumed") or 1
-    print(f"  Keepa /category cat {category_id}: {len(children)} Unterknoten · "
-          f"{tokens_consumed} Tokens verbraucht · {data.get('tokensLeft')} übrig")
+    benannt = sum(1 for _, n in children if n)
+    print(f"  Keepa /category cat {category_id}: {len(children)} Unterknoten "
+          f"({benannt} mit Namen) · {tokens_consumed} Tokens verbraucht · "
+          f"{data.get('tokensLeft')} übrig")
     return children, tokens_consumed
+
+
+async def fetch_keepa_category_children(
+    category_id: int,
+    domain: int = 3,
+    client: httpx.AsyncClient | None = None,
+) -> tuple[list[int], int]:
+    """
+    Liefert die direkten Kind-Knoten-IDs einer Amazon-Kategorie.
+    Kostet 1 Token/Request. Gibt (child_ids, tokens_consumed) zurück.
+
+    Dünner Wrapper um fetch_keepa_category_children_named(), damit bestehende
+    Aufrufer unverändert weiterlaufen.
+    """
+    children, cost = await fetch_keepa_category_children_named(category_id, domain, client)
+    return [cid for cid, _ in children], cost
 
 
 # ---------------------------------------------------------------------------
@@ -467,10 +508,29 @@ def _parse_product(p: dict) -> dict | None:
     if len(tree) > 1 and isinstance(tree[1], dict):
         sub_category = (tree[1].get("name") or "").strip()[:80]
 
+    # Dritte Ebene (David, 15.08.2026). Reine MESSUNG, es wird noch nichts damit
+    # gefiltert — siehe Kommentar bei sub_category2 in database.py.
+    #
+    # Hintergrund: Ebene 2 ist meistens präzise genug ("Laptops", "Monitore"),
+    # aber sechs Töpfe sind nachweislich unscharf und zugleich die grössten:
+    # "Sport" (904 Katalogprodukte, Median 38 €), "Wohnaccessoires & Deko" (816),
+    # "Küche, Kochen & Backen" (501), "Möbel" (417), "Handys & Zubehör" (376),
+    # "Plattformen" (149). Bei denen lässt sich vom Namen nicht ableiten, ob dort
+    # Kernware oder Kleinteile liegen — und Raten war bisher genau der Fehler.
+    #
+    # Keepa liefert den vollen Pfad ohnehin in jedem /product-Response mit; er
+    # wurde nur weggeworfen. Mitschreiben kostet also keinen einzigen Token und
+    # erlaubt in ein paar Tagen dieselbe Auswertung wie /debug/subcategories,
+    # nur eine Ebene tiefer — dann mit Zahlen statt Vermutung entscheiden.
+    sub_category2 = ""
+    if len(tree) > 2 and isinstance(tree[2], dict):
+        sub_category2 = (tree[2].get("name") or "").strip()[:80]
+
     return {
         "title":          (p.get("title") or "").strip(),
         "brand":          (p.get("brand") or "").strip(),
         "sub_category":   sub_category,
+        "sub_category2":  sub_category2,
         "image_url":      image_url,
         "current_price":  current_price,
         "original_price": original_price,

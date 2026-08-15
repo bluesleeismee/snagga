@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from database import get_pool
 from keepa import (
     fetch_keepa_deals, enrich_with_keepa, fetch_keepa_bestsellers,
-    fetch_keepa_category_children, ELECTRONICS_CAT_IDS,
+    fetch_keepa_category_children_named, ELECTRONICS_CAT_IDS,
 )
 from scoring import (
     CATEGORY_MAX_RANK,
@@ -30,6 +30,7 @@ from scoring import (
     resolve_atl,
     atl_for_display,
 )
+from sortiment import kern_namen
 
 AFFILIATE_TAG   = "snagga-21"  # Fallback-Tag für Kategorien ohne eigenen Tracking-Tag
 
@@ -57,6 +58,55 @@ MIN_SCORE       = 30
 MIN_PRICE       = 20.0
 DEAL_PAGES      = 16    # 16 × 150 = 2.400 Kandidaten/Run
 ELECTRONICS_PAGES = 6   # Zusatzabfrage nur Elektronik/Geräte (−10 %), ~6 Tokens/Run
+
+# Hochpreis-Abfrage (David, 2026-08-12) — der eigentliche Grund, warum keine
+# Airfryer, Monitore oder PCs im Schaufenster standen.
+#
+# Keepa sortiert den /deal-Stream nach Rabatt-PROZENT. Die beiden Abfragen oben
+# holen damit die 2.400 Artikel mit dem prozentual tiefsten Sturz — und das sind
+# fast ausnahmslos Kleinteile, weil auf Kabel, Hüllen und Gewürzgläser ständig
+# −40 % gegeben wird, auf einen 400-€-PC dagegen fast nie. Hochwertige Ware kam
+# also gar nicht erst in den Kandidatentopf; jede Nachjustierung an Filtern und
+# Quoten danach konnte nur noch aussortieren, was ohnehin schon Zubehör war.
+#
+# Abhilfe ist keine weitere Lockerung, sondern ein eigenes Fenster: dieselbe
+# Sortierung, aber mit Preisuntergrenze. Keepa filtert serverseitig, die Seiten
+# enthalten also ausschließlich hochpreisige Kandidaten — und weil innerhalb
+# dieses Fensters wieder nach Rabatt sortiert wird, stehen die besten Deals
+# hochwertiger Ware oben. Kosten: 1 Token/Seite wie überall.
+HIGHVALUE_PAGES     = int(os.getenv("HIGHVALUE_PAGES", "8"))
+HIGHVALUE_MIN_EUR   = float(os.getenv("HIGHVALUE_MIN_EUR", "100"))
+HIGHVALUE_DELTA_PCT = int(os.getenv("HIGHVALUE_DELTA_PCT", "10"))
+
+# ── Kern-Knoten-Abfrage (David, 13.08.2026) ────────────────────────────────
+# Die Hochpreis-Abfrage oben war der richtige Gedanke, aber ein zu grobes
+# Werkzeug: „teuer" ist nicht dasselbe wie „Kernprodukt". Über 100 € liegen auch
+# Werkzeugkoffer-Sets, Nahrungsergänzungs-Grosspackungen und Bandagen — Davids
+# Befund vom 13.08.2026 („Leistenbruchgürtel in Grösse blabla") kam genau von
+# dort. Umgekehrt fällt ein 89-€-Monitor durch das Hochpreis-Fenster.
+#
+# Diese Abfrage steuert stattdessen über die Kategorie: `includeCategories`
+# bekommt nicht mehr Root-Knoten, sondern die Keepa-Unterknoten, die in
+# sortiment.SUBCATEGORY_ROLE als KERN markiert sind (Monitore, Laptops,
+# Fernseher, Elektrische Küchengeräte, Elektro- & Handwerkzeuge …). Damit
+# besteht das Fenster von vornherein aus der Ware, die wir zeigen wollen, und
+# die Rabatt-Sortierung darin wird vom Problem zum Vorteil: sie liefert die
+# besten Zeitpunkte für genau diese Produkte.
+#
+# Die Namen sind gemessen, nicht geraten (/debug/subcategories, 11.08.2026); die
+# Knoten-IDs holt _kern_knoten() zur Laufzeit aus Keepas Kategoriebaum. Findet
+# es keine (Namensdrift bei Amazon), bleibt die Abfrage einfach aus — die drei
+# bisherigen Abfragen laufen unverändert weiter.
+KERN_PAGES      = int(os.getenv("KERN_PAGES", "10"))
+KERN_DELTA_PCT  = int(os.getenv("KERN_DELTA_PCT", "8"))
+# Kein zusätzlicher Preisfilter: die Kategorie macht die Arbeit, MIN_PRICE und
+# CATEGORY_MIN_PRICE greifen ohnehin nachgelagert.
+KERN_MIN_EUR    = float(os.getenv("KERN_MIN_EUR", "20"))
+# Keepa nimmt lange includeCategories-Listen an, aber die URL wächst mit. In
+# Häppchen abfragen hält die Requests klein und verteilt das Ergebnis über
+# mehrere Kategorien, statt eine einzige das Fenster füllen zu lassen.
+KERN_BATCH      = int(os.getenv("KERN_BATCH", "12"))
+KERN_AKTIV      = os.getenv("KERN_DISCOVERY_AKTIV", "1") not in ("0", "false", "False")
 DEEPSYNC_LIMIT  = 500   # Deep-Sync deckt den ganzen aktiven Bestand ab (~283).
                         # Muss die Zahl aktiver Deals übersteigen. History steckt
                         # im Basis-Token (gratis), daher unkritisch hoch — der
@@ -172,20 +222,25 @@ ROOTCAT_MAP: dict[int, str] = {
 SEED_MAX_CHILDREN_PER_NODE = int(os.getenv("SEED_MAX_CHILDREN_PER_NODE", "25"))
 SEED_CHILDREN_TTL_HOURS = int(os.getenv("SEED_CHILDREN_TTL_HOURS", str(24 * 7)))
 
-_seed_children_cache: dict[int, list[int]] = {}
+# Elternknoten-ID → [(Kind-ID, Kind-NAME)]. Der Name kostet nichts extra (Keepa
+# liefert ihn im selben Response) und ist die Grundlage der Kern-Discovery: nur
+# mit ihm lässt sich „Monitore" von „Computer-Zubehör" unterscheiden.
+_seed_children_cache: dict[int, list[tuple[int, str]]] = {}
 _seed_children_fetched_at: datetime | None = None
 
 
-async def _expanded_seed_nodes(client: httpx.AsyncClient) -> tuple[list[tuple[int, str]], int]:
+async def _ensure_children_cache(client: httpx.AsyncClient) -> int:
     """
-    Baut die Seed-Knoten-Liste für seed_bestsellers: jeder ROOTCAT_MAP-Knoten
-    plus bis zu SEED_MAX_CHILDREN_PER_NODE direkte Unterknoten (gleiche
-    Snagga-Kategorie wie der Elternknoten — die endgültige Produkt-Kategorie
-    entscheidet ohnehin classify_category).
+    Füllt _seed_children_cache (Kind-IDs + Namen je ROOTCAT_MAP-Knoten) und gibt
+    die verbrauchten Tokens zurück.
 
-    Kind-Discovery kostet 1 Token/Elternknoten, läuft aber nur alle
-    SEED_CHILDREN_TTL_HOURS (Default: wöchentlich) bzw. nach Neustart.
-    Gibt (Liste[(node_id, kategorie)], verbrauchte Tokens) zurück.
+    Bewusst als eigener Schritt, weil ihn jetzt ZWEI Jobs brauchen: der
+    Katalog-Seed und die stündliche Kern-Discovery. Ohne gemeinsamen Cache
+    würde derselbe Kategoriebaum zweimal bezahlt.
+
+    Kostet 1 Token/Elternknoten, läuft aber nur alle SEED_CHILDREN_TTL_HOURS
+    (Default: wöchentlich) bzw. nach Neustart — der Amazon-Kategoriebaum ändert
+    sich praktisch nie.
     """
     global _seed_children_fetched_at
     tokens_used = 0
@@ -203,22 +258,83 @@ async def _expanded_seed_nodes(client: httpx.AsyncClient) -> tuple[list[tuple[in
     # nicht cachen, nächster Lauf versucht es erneut.
     missing = [p for p in ROOTCAT_MAP if p not in _seed_children_cache]
     for parent_id in missing:
-        children, cost = await fetch_keepa_category_children(parent_id, domain=3, client=client)
+        children, cost = await fetch_keepa_category_children_named(
+            parent_id, domain=3, client=client)
         tokens_used += cost
         if cost > 0:
-            _seed_children_cache[parent_id] = children[:SEED_MAX_CHILDREN_PER_NODE]
+            # Ungekürzt cachen: die Kürzung auf SEED_MAX_CHILDREN_PER_NODE ist
+            # eine Seed-Sparmassnahme und darf der Kern-Discovery keine Knoten
+            # wegnehmen.
+            _seed_children_cache[parent_id] = children
     if all(p in _seed_children_cache for p in ROOTCAT_MAP):
         _seed_children_fetched_at = _seed_children_fetched_at or now
+    return tokens_used
+
+
+async def _expanded_seed_nodes(client: httpx.AsyncClient) -> tuple[list[tuple[int, str]], int]:
+    """
+    Baut die Seed-Knoten-Liste für seed_bestsellers: jeder ROOTCAT_MAP-Knoten
+    plus bis zu SEED_MAX_CHILDREN_PER_NODE direkte Unterknoten (gleiche
+    Snagga-Kategorie wie der Elternknoten — die endgültige Produkt-Kategorie
+    entscheidet ohnehin classify_category).
+
+    Gibt (Liste[(node_id, kategorie)], verbrauchte Tokens) zurück.
+    """
+    tokens_used = await _ensure_children_cache(client)
 
     nodes: list[tuple[int, str]] = []
     seen: set[int] = set()
     for parent_id, cat_name in ROOTCAT_MAP.items():
-        for node_id in [parent_id, *_seed_children_cache.get(parent_id, [])]:
+        kinder = [cid for cid, _ in _seed_children_cache.get(parent_id, [])]
+        for node_id in [parent_id, *kinder[:SEED_MAX_CHILDREN_PER_NODE]]:
             if node_id in seen or node_id in EXCLUDE_ROOTCATS:
                 continue
             seen.add(node_id)
             nodes.append((node_id, cat_name))
     return nodes, tokens_used
+
+
+async def _kern_knoten(client: httpx.AsyncClient) -> tuple[list[int], int]:
+    """
+    Keepa-Knoten-IDs der Kern-Unterkategorien — das Fenster, in dem die
+    Kern-Discovery sucht (siehe KERN_PAGES oben).
+
+    Abgeglichen wird über den NAMEN: sortiment.kern_namen() liefert die
+    gemessenen Namen je Oberkategorie ("monitore", "laptops", …), der
+    Kategoriebaum liefert die IDs dazu. Der Umweg über den Namen statt fest
+    eingetragener IDs ist Absicht — die Zuordnung Kern/Zubehör wird an genau
+    EINER Stelle gepflegt (sortiment.SUBCATEGORY_ROLE), und ein umbenannter
+    Amazon-Knoten fällt hier still raus, statt stumm falsche Ware zu liefern.
+
+    Gibt (node_ids, verbrauchte Tokens) zurück. Leere Liste = Kern-Discovery
+    übersprungen; die übrigen Abfragen laufen unverändert.
+    """
+    tokens_used = await _ensure_children_cache(client)
+
+    # Name → gewünschte Rolle, nach Oberkategorie getrennt: derselbe Name kann
+    # unter verschiedenen Elternknoten hängen ("Monitore" nur unter Computer).
+    ids: list[int] = []
+    gefunden: dict[str, list[str]] = {}
+    for parent_id, cat_name in ROOTCAT_MAP.items():
+        gesucht = kern_namen(cat_name)
+        if not gesucht:
+            continue
+        for cid, name in _seed_children_cache.get(parent_id, []):
+            if cid in EXCLUDE_ROOTCATS or cid in ids:
+                continue
+            if name.strip().lower() in gesucht:
+                ids.append(cid)
+                gefunden.setdefault(cat_name, []).append(name)
+
+    if ids:
+        for cat_name, namen in sorted(gefunden.items()):
+            print(f"  Kern-Knoten {cat_name}: {', '.join(sorted(namen))}")
+    else:
+        # Laut, nicht still: ohne Treffer fällt die Discovery auf das alte
+        # Verhalten zurück, und das soll im Log sichtbar sein.
+        print("  Kern-Knoten: KEINE gefunden — Namen in sortiment.SUBCATEGORY_ROLE "
+              "prüfen (Amazon-Knoten umbenannt?). Kern-Abfrage wird übersprungen.")
+    return ids, tokens_used
 
 
 # Explizit ausschließen (rootCat → None, egal was Keywords sagen)
@@ -476,6 +592,11 @@ async def hourly_keepa_price_check():
                 row["category"], live_price, avg90, atl, avg180,
                 title=row["name"] or "",
                 brand=(row["brand"] or "") if "brand" in row.keys() else "",
+                # `all_time_low` hält ohne Beleg weiterhin den avg365-Proxy
+                # (siehe UPDATE weiter unten: geschrieben wird nur bei
+                # atl_confirmed). Als Tief-Argument im Quality Gate zählt er
+                # deshalb nur, wenn er auch belegt ist.
+                atl_ist_beleg=bool(row["atl_confirmed"]),
             ):
                 await conn.execute(
                     "UPDATE products SET is_active=false, is_top_pick=false, "
@@ -533,10 +654,12 @@ async def hourly_keepa_price_check():
                     "last_checked=$5, last_updated=$5, score_breakdown=$6, "
                     "all_time_low = CASE WHEN $8 THEN $7 ELSE all_time_low END, "
                     "atl_confirmed = $8, "
-                    "sub_category = CASE WHEN $9 != '' THEN $9 ELSE sub_category END "
+                    "sub_category = CASE WHEN $9 != '' THEN $9 ELSE sub_category END, "
+                    "sub_category2 = CASE WHEN $10 != '' THEN $10 ELSE sub_category2 END "
                     "WHERE asin=$1",
                     asin, live_price, score, tag, now, breakdown, atl_now, atl_ok,
                     (kd.get("sub_category") or "") if kd else "",
+                    (kd.get("sub_category2") or "") if kd else "",
                 )
 
                 # Kostenlose Keepa-History einspielen → Chart aktuell, Marke mitnehmen.
@@ -607,6 +730,47 @@ async def hourly_keepa_price_check():
     await _recalculate_top_picks()
     print(f"  Keepa Preis-Check fertig: {deactivated} deaktiviert "
           f"({volatile_cnt} volatil), {len(current_prices)} geprüft.")
+
+
+VARIANTEN_WORTE = int(os.getenv("VARIANTEN_WORTE", "5"))
+
+
+def _varianten_schluessel(titel: str) -> str:
+    """
+    Erzeugt einen groben Produktschlüssel aus den ersten Titelwörtern.
+
+    Amazon führt Farben, Größen und Speicherausbauten als eigene ASINs mit
+    eigenem Preis — für Keepa sind das verschiedene Produkte, für den Besucher
+    dreimal dasselbe. Der Titel beginnt praktisch immer mit Marke und Modell und
+    unterscheidet sich erst danach ("… Space 2, Schwarz" / "… Space 2, Blau"),
+    deshalb genügen die ersten `VARIANTEN_WORTE` Wörter.
+
+    Bewusst grob gehalten: lieber gelegentlich zwei echte Geschwistermodelle
+    zusammenfassen (wir verlieren einen Deal von vielen) als das Schaufenster
+    mit Dubletten zu füllen — gemessen am 12.08.2026 standen dieselben
+    soundcore-Kopfhörer dreimal und iPhone-Hüllen mehrfach in der Liste.
+    """
+    worte = re.findall(r"[a-z0-9äöüß]+", (titel or "").lower())
+    return " ".join(worte[:VARIANTEN_WORTE])
+
+
+def _varianten_entdoppeln(kandidaten: list[dict]) -> tuple[list[dict], int]:
+    """
+    Behält je Produktschlüssel nur den besten Kandidaten. Erwartet eine bereits
+    nach Score absteigend sortierte Liste — der erste Treffer ist damit der
+    beste, alle weiteren sind Farb-/Größenvarianten mit schlechterem Angebot.
+    Gibt (bereinigte Liste, Anzahl entfernter Dubletten) zurück.
+    """
+    gesehen: set[str] = set()
+    behalten: list[dict] = []
+    for k in kandidaten:
+        schluessel = _varianten_schluessel(k.get("title") or "")
+        if schluessel and schluessel in gesehen:
+            continue
+        if schluessel:
+            gesehen.add(schluessel)
+        behalten.append(k)
+    return behalten, len(kandidaten) - len(behalten)
 
 
 async def _sortiment_quote_durchsetzen(conn) -> int:
@@ -781,6 +945,10 @@ async def fetch_and_update_deals():
                     d["current_price"], d["avg90"], d["atl"], d["avg180"],
                     title=d["title"] or "",
                     brand=d.get("brand") or "",
+                    # d["atl"] ist hier der avg365-Proxy aus /deal, KEIN belegtes
+                    # Tief — er darf die Rabattprüfung nicht aushebeln. Als
+                    # avg365-Anker (weiter oben im Filter) bleibt er gültig.
+                    atl_ist_beleg=False,
                 )
                 if hf_reason:
                     skipped_filter += 1
@@ -845,12 +1013,55 @@ async def fetch_and_update_deals():
             got_any = True
             process(page_deals)
 
+        # Hochpreis-Abfrage: eigenes Fenster ab HIGHVALUE_MIN_EUR (siehe
+        # Kommentar bei HIGHVALUE_PAGES). Ohne sie bleibt das Schaufenster
+        # strukturell auf Kleinteile beschränkt, egal wie die Filter stehen.
+        for page in range(HIGHVALUE_PAGES):
+            page_deals = await fetch_keepa_deals(
+                domain=3, delta_pct=HIGHVALUE_DELTA_PCT, min_rating=40, min_reviews=50,
+                page=page, client=client,
+                min_price_cents=int(HIGHVALUE_MIN_EUR * 100),
+            )
+            if not page_deals:
+                break
+            got_any = True
+            process(page_deals)
+
+        # Kern-Abfrage: nicht „was ist am stärksten reduziert", sondern „was ist
+        # in den Regalen los, die wir zeigen wollen" (siehe KERN_PAGES oben).
+        # Läuft zuletzt, damit ihre Treffer die vorherigen ergänzen statt sie zu
+        # verdrängen — die Dedup über seen_asins hält die ersten Fundstellen.
+        kern_ids: list[int] = []
+        if KERN_AKTIV:
+            kern_ids, kern_tokens = await _kern_knoten(client)
+            if kern_tokens:
+                print(f"  Kategoriebaum: {kern_tokens} Tokens (nur bei kaltem Cache)")
+        kern_vorher = len(candidates)
+        for start in range(0, len(kern_ids), KERN_BATCH):
+            batch = kern_ids[start:start + KERN_BATCH]
+            for page in range(KERN_PAGES):
+                page_deals = await fetch_keepa_deals(
+                    domain=3, delta_pct=KERN_DELTA_PCT, min_rating=40, min_reviews=50,
+                    page=page, client=client, include_cats=batch,
+                    min_price_cents=int(KERN_MIN_EUR * 100),
+                )
+                if not page_deals:
+                    break
+                got_any = True
+                process(page_deals)
+        if kern_ids:
+            print(f"  Kern-Abfrage: {len(kern_ids)} Knoten · "
+                  f"{len(candidates) - kern_vorher} zusätzliche qualifizierte Deals")
+
         if not got_any:
             print("  Keepa /deals lieferte keine Daten — Abbruch.")
             return 0
 
         # Sortieren nach Score
         candidates.sort(key=lambda x: x["deal_score"], reverse=True)
+        candidates, dubletten = _varianten_entdoppeln(candidates)
+        if dubletten:
+            print(f"  Varianten-Dubletten entfernt: {dubletten}")
         active_pool = candidates[:MAX_ACTIVE]
         backup_pool = candidates[MAX_ACTIVE : MAX_ACTIVE + MAX_BACKUP]
 
@@ -1194,13 +1405,15 @@ async def fetch_and_store_history(asin: str) -> bool:
                 brand     = CASE WHEN $12 != '' THEN $12 ELSE brand END,
                 tag       = $13,
                 sub_category = CASE WHEN $14 != '' THEN $14 ELSE sub_category END,
-                atl_confirmed = $15
+                atl_confirmed = $15,
+                sub_category2 = CASE WHEN $16 != '' THEN $16 ELSE sub_category2 END
             WHERE asin = $1
         """,
             asin, kd["current_price"], atl_stored, kd["avg_price"],
             kd["avg90_price"], kd["avg180_price"], kd["rating"], kd["reviews"],
             kd["sales_rank"], now, kd["image_url"], (kd.get("brand") or ""),
             tag, kd.get("sub_category") or "", atl_ok,
+            kd.get("sub_category2") or "",
         )
         if hist:
             await conn.execute("DELETE FROM price_history WHERE asin=$1", asin)
@@ -1391,9 +1604,9 @@ async def seed_bestsellers(max_tokens: int = 6000, max_per_cat: int = 400,
                            last_updated, last_checked, affiliate_url,
                            is_active, is_backup, is_top_pick, is_fba,
                            sales_rank, tag, score_breakdown, first_seen, has_real_history,
-                           sub_category, atl_confirmed)
+                           sub_category, atl_confirmed, sub_category2)
                         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
-                                $16,$17,$18,false,false,false,$19,$20,'','',$16,false,$21,$22)
+                                $16,$17,$18,false,false,false,$19,$20,'','',$16,false,$21,$22,$23)
                         ON CONFLICT (asin) DO NOTHING
                     """,
                         asin, (title or "Produkt")[:200], kd.get("brand") or "",
@@ -1404,6 +1617,7 @@ async def seed_bestsellers(max_tokens: int = 6000, max_per_cat: int = 400,
                         now, now, f"https://www.amazon.de/dp/{asin}?tag={aff_tag}",
                         kd.get("is_fba") or False, kd["sales_rank"] or 0,
                         kd.get("sub_category") or "", atl_ok,
+                        kd.get("sub_category2") or "",
                     )
                     added += 1
 
@@ -1518,7 +1732,8 @@ async def nightly_deep_sync():
                     last_deep_sync  = $15,
                     image_url       = CASE WHEN $16 != '' THEN $16 ELSE image_url END,
                     brand           = CASE WHEN $17 != '' THEN $17 ELSE brand END,
-                    sub_category    = CASE WHEN $18 != '' THEN $18 ELSE sub_category END
+                    sub_category    = CASE WHEN $18 != '' THEN $18 ELSE sub_category END,
+                    sub_category2   = CASE WHEN $20 != '' THEN $20 ELSE sub_category2 END
                 WHERE asin = $1
             """,
                 asin,
@@ -1527,6 +1742,7 @@ async def nightly_deep_sync():
                 kd["rating"], kd["reviews"], kd["sales_rank"], kd["is_fba"],
                 score, tag, breakdown, now, kd["image_url"], (kd.get("brand") or ""),
                 kd.get("sub_category") or "", atl_ok,
+                kd.get("sub_category2") or "",
             )
 
             # Echte Preishistorie IMMER frisch setzen: alte (evtl. simulierte)
