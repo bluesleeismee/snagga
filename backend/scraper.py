@@ -52,6 +52,18 @@ MAX_ACTIVE      = 500
 # stündliche Preis-Check versucht in dieser Zeit mehrfach, Historie zu holen —
 # klappt es nicht, kann der Deal das Chart-Versprechen nicht einlösen.
 CHART_GRACE_HOURS = int(os.getenv("CHART_GRACE_HOURS", "3"))
+# Karenzzeit, bis ein aktiver Deal ohne frische Bestätigung aus der Liste fliegt.
+#
+# „Bestätigt" heisst: entweder hat der Preis-Check ihn erneut gegen die
+# Hard-Filter geprüft, oder die Discovery hat ihn erneut gefunden — beide
+# schreiben `last_updated`. Passiert keins von beidem, weiss niemand mehr, ob
+# der beworbene Preis noch gilt.
+#
+# 8 Stunden, nicht kürzer: die untere Tier-Stufe des Preis-Checks wird nur alle
+# 4 Stunden fällig, der Job läuft stündlich — ein gesunder Deal kann also legitim
+# gut 5 Stunden alt sein. 8 lässt Luft für einen ausgefallenen Lauf, ohne dass
+# eine Karteileiche einen ganzen Tag stehen bleibt.
+PREIS_GRACE_HOURS = int(os.getenv("PREIS_GRACE_HOURS", "8"))
 MAX_BACKUP      = 150
 TOP_PICKS_COUNT = 10
 # Punkte-Untergrenze bei der Entdeckung (David, 16.08.2026: 30 → 18, per Env).
@@ -669,12 +681,24 @@ async def hourly_keepa_price_check():
     # Reihenfolge per id (monoton) statt Zeitstempel (price_history.timestamp ist TEXT).
     move_counts = await _count_price_moves(asins)
 
-    deactivated = volatile_cnt = 0
+    deactivated = volatile_cnt = ohne_preis = 0
     async with db.acquire() as conn:
         for row in active:
             asin       = row["asin"]
             live_price = current_prices.get(asin)
             if live_price is None:
+                # Keepa kennt gerade keinen brauchbaren Preis (kein Angebot,
+                # keine Buy Box). `last_checked` trotzdem setzen — sonst bleibt
+                # die Zeile für die Tier-Abfrage oben dauerhaft „fällig" und
+                # wird JEDE Stunde erneut abgefragt, für immer, ein Token pro
+                # Lauf (Fund 16.08.2026 am Olympus-Objektiv für 793 €).
+                #
+                # `last_updated` bleibt bewusst unangetastet: es ist der Beleg
+                # „zuletzt bestätigt", und bestätigt wurde hier nichts. Genau
+                # daran greift die Karenz-Regel weiter unten.
+                ohne_preis += 1
+                await conn.execute(
+                    "UPDATE products SET last_checked=$2 WHERE asin=$1", asin, now)
                 continue
 
             avg90  = row["avg90_price"]  or 0.0
@@ -829,6 +853,36 @@ async def hourly_keepa_price_check():
                   f"({', '.join(r['asin'] for r in chartless[:8])}"
                   f"{' …' if len(chartless) > 8 else ''})")
 
+        # ── Invariante: kein aktiver Deal ohne frische Bestätigung ──────────
+        # Gegenstück zur Chart-Invariante darüber, und aus demselben Grund
+        # nötig (Fund 16.08.2026): Ein Objektiv für 793 € stand aktiv im
+        # Schaufenster — mit rating 0.0, reviews 0 und 1,3 % Abstand zum Ø90.
+        # Es hätte an drei Hard-Filtern scheitern müssen, wurde aber nie wieder
+        # geprüft, weil `live_price is None` es jede Stunde stumm übersprang.
+        #
+        # Bisher hing das Aufräumen an zwei Stellen, die beide nicht greifen:
+        # die Chart-Invariante prüft nur `has_real_history=false`, und die
+        # 4-Stunden-Regel in fetch_and_update_deals() läuft im ANDEREN Job —
+        # bricht der ab (Keepa liefert nichts, `if not got_any: return`), räumt
+        # niemand auf.
+        #
+        # Deshalb hier, im Job, der ohnehin dafür zuständig ist zu entscheiden,
+        # ob ein Deal noch gut IST: Was seit PREIS_GRACE_HOURS von keiner Seite
+        # mehr bestätigt wurde, verschwindet aus der Liste. Die /preis-Seite
+        # bleibt erreichbar, Backups rücken nach.
+        veraltet = await conn.fetch(
+            "UPDATE products SET is_active=false, is_top_pick=false "
+            "WHERE is_active=true "
+            "  AND COALESCE(last_updated, first_seen) < NOW() - make_interval(hours => $1) "
+            "RETURNING asin",
+            PREIS_GRACE_HOURS,
+        )
+        if veraltet:
+            deactivated += len(veraltet)
+            print(f"  Ohne Bestätigung seit {PREIS_GRACE_HOURS}h deaktiviert: "
+                  f"{len(veraltet)} ({', '.join(r['asin'] for r in veraltet[:8])}"
+                  f"{' …' if len(veraltet) > 8 else ''})")
+
         # Reihenfolge zählt: erst die gestrichenen Kategorien räumen, dann die
         # Quote rechnen. Andersherum würde die Quote noch gegen Deals rechnen,
         # die gleich ohnehin verschwinden, und zu viel Zubehör deaktivieren.
@@ -840,7 +894,8 @@ async def hourly_keepa_price_check():
 
     await _recalculate_top_picks()
     print(f"  Keepa Preis-Check fertig: {deactivated} deaktiviert "
-          f"({volatile_cnt} volatil), {len(current_prices)} geprüft.")
+          f"({volatile_cnt} volatil), {len(current_prices)} geprüft"
+          f"{f', {ohne_preis} ohne Preis' if ohne_preis else ''}.")
 
 
 VARIANTEN_WORTE = int(os.getenv("VARIANTEN_WORTE", "5"))
@@ -999,11 +1054,27 @@ async def _count_price_moves(asins: list[str], window: int = 12, threshold: floa
 
 
 async def _promote_backups_simple(count: int):
-    """Rückt die besten Backup-Deals ohne erneute Preis-Verifikation vor."""
+    """
+    Rückt die besten Backup-Deals vor.
+
+    `last_updated` wird dabei auf jetzt gesetzt und `last_checked` auf NULL
+    (Ergänzung 16.08.2026, zusammen mit PREIS_GRACE_HOURS):
+
+      * `last_updated` ist die Uhr der Karenz-Regel. Ein Backup, das ein paar
+        Stunden gelegen hat, wäre sonst im selben Moment wieder deaktiviert, in
+        dem es vorrückt — und beim nächsten Lauf erneut befördert. Genau die
+        Sorte Rückkopplung, die schon bei der Zubehör-Quote für stündliches
+        Zappeln gesorgt hat (siehe sortiment.zuviel_zubehoer).
+      * `last_checked=NULL` sorgt dafür, dass die Tier-Abfrage des Preis-Checks
+        das Produkt beim nächsten Lauf ZUERST greift. Vorgerückt wird ohne
+        erneute Preis-Verifikation — sie wird damit unmittelbar nachgeholt,
+        lange innerhalb der Karenzzeit.
+    """
     db = await get_pool()
     async with db.acquire() as conn:
         await conn.execute(
-            "UPDATE products SET is_active=true, is_backup=false "
+            "UPDATE products SET is_active=true, is_backup=false, "
+            "  last_updated=NOW(), last_checked=NULL "
             "WHERE asin IN ("
             "  SELECT asin FROM products WHERE is_backup=true "
             "  ORDER BY deal_score DESC LIMIT $1"
