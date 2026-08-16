@@ -2800,6 +2800,142 @@ async def trigger_deep_sync(token: str = Query(default="")):
                        "Danach zeigen die Top-Deal-Preisseiten echte Charts."}
 
 
+@app.get("/debug/deal-rohdaten")
+async def debug_deal_rohdaten(token: str = Query(default=""), page: int = Query(default=0)):
+    """
+    Wertet EINE rohe Keepa-/deal-Antwort aus, bevor irgendein Snagga-Filter läuft.
+
+    Die Frage (gemessen 16.08.2026): Von 28.614 Kandidaten eines Tages fielen
+    49,8 % an `preis_min` (unter 25 €) und 24,7 % an `reviews` (unter 100) —
+    zusammen drei Viertel des Fensters. Beides sind Bedingungen, die in der
+    Abfrage bereits stehen (`priceRange: [2500, -1]`, `minReviews: 100`). Wenn
+    sie wirkten, dürfte keiner dieser Kandidaten ankommen.
+
+    Zwei Erklärungen sind möglich, und sie führen zu GEGENSÄTZLICHEN Massnahmen:
+
+      a) Keepa wendet den Parameter nicht an → die Selektion muss repariert
+         werden, unsere Filter bleiben wie sie sind.
+      b) Keepa filtert korrekt, wir lesen die Werte falsch → `current[17]` fehlt
+         und wird als 0 gelesen (also „keine Bewertungen" statt „unbekannt"),
+         bzw. die Preis-Fallback-Kette BuyBox → Amazon → NEW_FBA setzt einen
+         Preis ein, auf den Keepa nie gefiltert hat. Dann müssen unsere Filter
+         weg und die Selektion bleibt.
+
+    Rät man hier falsch, verschlimmert man es. Deshalb erst zählen: Der Endpoint
+    trennt genau diese beiden Fälle, indem er die BuyBox-Werte SEPARAT von den
+    Fallback-Werten auswertet.
+
+    Benutzt bewusst keepa.deal_selection() — dieselbe Selektion wie die
+    Produktion. Kostet die Tokens EINER Deal-Seite, verändert nichts.
+    """
+    _check_admin(token)
+    import os, json, httpx
+    from keepa import deal_selection
+
+    KEEPA_KEY = os.getenv("KEEPA_API_KEY", "")
+    if not KEEPA_KEY:
+        return {"error": "KEEPA_API_KEY nicht gesetzt"}
+
+    from scraper import MIN_PRICE, DEAL_DELTA_PCT
+    min_cents = int(MIN_PRICE * 100)
+    sel = deal_selection(domain=3, delta_pct=DEAL_DELTA_PCT, min_rating=40,
+                         page=page, min_price_cents=min_cents)
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.get("https://api.keepa.com/deal",
+                             params={"key": KEEPA_KEY,
+                                     "selection": json.dumps(sel, separators=(',', ':'))})
+        r.raise_for_status()
+        data = r.json()
+
+    raw = (data.get("deals") or {}).get("dr") or []
+    IDX_AMAZON, IDX_NEW_FBA, IDX_RATING, IDX_REVIEWS, IDX_BUYBOX = 0, 10, 16, 17, 18
+
+    def wert(arr, idx):
+        if arr and idx < len(arr):
+            v = arr[idx]
+            if isinstance(v, (int, float)) and v > 0:
+                return v
+        return 0
+
+    quelle_zaehler = {"buybox": 0, "amazon": 0, "new_fba": 0, "keine": 0}
+    bb_vorhanden = bb_unter_min = 0
+    eff_unter_min = 0
+    eff_unter_min_ohne_bb = 0
+    rev_fehlt = rev_unter_100 = rev_ok = 0
+    beispiele_preis: list[dict] = []
+    beispiele_reviews: list[str] = []
+
+    for d in raw:
+        cur = d.get("current") or []
+        bb  = wert(cur, IDX_BUYBOX)
+        amz = wert(cur, IDX_AMAZON)
+        fba = wert(cur, IDX_NEW_FBA)
+
+        if bb:
+            bb_vorhanden += 1
+            if bb < min_cents:
+                bb_unter_min += 1
+
+        eff = bb or amz or fba
+        quelle_zaehler["buybox" if bb else "amazon" if amz else
+                       "new_fba" if fba else "keine"] += 1
+        if eff and eff < min_cents:
+            eff_unter_min += 1
+            if not bb:
+                eff_unter_min_ohne_bb += 1
+            if len(beispiele_preis) < 8:
+                beispiele_preis.append({
+                    "titel": (d.get("title") or "")[:70],
+                    "buybox_cent": bb, "amazon_cent": amz, "new_fba_cent": fba,
+                    "genutzt_cent": eff,
+                })
+
+        rev = wert(cur, IDX_REVIEWS)
+        if not rev:
+            rev_fehlt += 1
+            if len(beispiele_reviews) < 8:
+                beispiele_reviews.append((d.get("title") or "")[:70])
+        elif rev < 100:
+            rev_unter_100 += 1
+        else:
+            rev_ok += 1
+
+    n = len(raw) or 1
+    return {
+        "hinweis": "Rohe Keepa-Antwort VOR allen Snagga-Filtern. Selektion = keepa.deal_selection().",
+        "seite": page,
+        "kandidaten": len(raw),
+        "tokens_uebrig": data.get("tokensLeft"),
+        "selektion_geprueft": {"priceRange": sel.get("priceRange"),
+                               "minReviews": sel.get("minReviews"),
+                               "priceTypes": sel.get("priceTypes")},
+        "preis": {
+            # Der entscheidende Wert: BuyBox ist der Preistyp, auf den Keepa
+            # laut priceTypes/priceRange filtern SOLL. Ist er hier > 0, wendet
+            # Keepa den Parameter nicht an (Fall a). Ist er 0, filtert Keepa
+            # korrekt und unsere Fallback-Kette bringt die Ausreisser (Fall b).
+            "buybox_unter_min":        bb_unter_min,
+            "buybox_vorhanden":        bb_vorhanden,
+            "buybox_fehlt":            len(raw) - bb_vorhanden,
+            "effektiv_unter_min":      eff_unter_min,
+            "effektiv_unter_min_pct":  round(100.0 * eff_unter_min / n, 1),
+            "davon_ohne_buybox":       eff_unter_min_ohne_bb,
+            "preisquelle":             quelle_zaehler,
+            "beispiele":               beispiele_preis,
+        },
+        "reviews": {
+            # Analog: fehlt current[17] häufig, lesen wir „unbekannt" als 0 und
+            # werfen weg, was Keepa bereits als >=100 garantiert hat (Fall b).
+            "feld_fehlt":       rev_fehlt,
+            "feld_fehlt_pct":   round(100.0 * rev_fehlt / n, 1),
+            "unter_100":        rev_unter_100,
+            "ab_100":           rev_ok,
+            "beispiele_ohne_feld": beispiele_reviews,
+        },
+    }
+
+
 @app.get("/debug/keepa-cats")
 async def debug_keepa_cats(token: str = Query(default="")):
     """Gibt rootCat-Verteilung + avg-Datenverfügbarkeit aus Keepa /deal zurück."""

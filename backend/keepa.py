@@ -68,48 +68,27 @@ def _first_pos(arr: list, *indices) -> float | None:
 
 
 # ---------------------------------------------------------------------------
-# /deals — ASIN-Discovery
+# Die EINE Deal-Selektion
 # ---------------------------------------------------------------------------
 
-async def fetch_keepa_deals(
-    domain:      int   = 3,
-    delta_pct:   int   = 10,    # mind. X% unter dem 90-Tage-Durchschnitt
-    min_rating:  int   = 40,    # 4.0 Sterne × 10
-    min_reviews: int   = 50,    # nach Empfang gefiltert
-    page:        int   = 0,
-    client: httpx.AsyncClient | None = None,
-    include_cats: list[int] | None = None,  # None = volle Whitelist unten
-    min_price_cents: int = 2500,            # Preisuntergrenze, Keepa-seitig
-) -> list[dict]:
+def deal_selection(
+    domain:          int = 3,
+    delta_pct:       int = 10,
+    min_rating:      int = 40,
+    page:            int = 0,
+    include_cats:    list[int] | None = None,
+    min_price_cents: int = 2500,
+) -> dict:
     """
-    Ruft den Keepa /deal Endpoint ab.
+    Baut das `selection`-Objekt für Keepas /deal.
 
-    Gibt Liste von Deal-Dicts zurück: asin, title, brand, image_url,
-    current_price, avg48h, avg7, avg30, avg90, sales_rank, rating, reviews,
-    is_fba, delta_pct.
-
-    Die Ø-Felder heissen seit 15.08.2026 so, wie Keepa sie tatsächlich liefert
-    — siehe DEAL_INTERVALLE unten. Vorher hiessen dieselben vier Werte
-    avg30/avg90/avg180/atl, waren aber Tag/Woche/Monat/90 Tage. Jede darauf
-    aufgebaute Regel hat deshalb gegen einen viel zu kurzen Zeitraum gemessen.
+    Als eigene Funktion, seit die Messung vom 16.08.2026 (siehe
+    /debug/deal-rohdaten) dieselbe Abfrage stellen muss wie die Produktion.
+    Eine zweite, handgeschriebene Kopie der Selektion wäre wertlos: sie würde
+    genau dann auseinanderlaufen, wenn es darauf ankommt — dieselbe Falle wie
+    bei /debug/keepa-cats, das mit eigenen Parametern misst und deshalb zur
+    Frage nach priceRange nichts sagen kann.
     """
-    if not KEEPA_KEY:
-        return []
-
-    # Keepa Deal-Finder: priceTypes als Integer (0 = alle Typen)
-    # deltaPercentRange: [min, max], negative = Preissenkung in %
-    #
-    # dateRange indexiert Keepas DealInterval — belegt in Keepas eigenem
-    # Java-Client (structs/Deal.java, enum DealInterval):
-    #     0 = DAY (real 48 h)   1 = WEEK   2 = MONTH   3 = _90_DAYS
-    # Derselbe Index gilt für die Arrays `avg[]` und `deltaPercent[]` im
-    # Response.
-    #
-    # Hier stand bis 15.08.2026 `dateRange: 2` mit dem Kommentar „letzte 3
-    # Tage". Beides falsch: 2 ist der MONAT. Und `avg[]` wurde als
-    # [30d, 90d, 180d, 365d] gelesen, war aber [48h, 7d, 30d, 90d] — der Wert,
-    # gegen den das Quality Gate seine 20 % verlangte, war in Wirklichkeit der
-    # Wochendurchschnitt.
     # Whitelist: nur Deals aus diesen Amazon-DE Kategorien (root + Level-1-Subcats)
     # IDs ermittelt via /debug/category-children (2026-06-28, DE domain)
     # Root-Whitelist der Breitensuche. Stand 15.08.2026 deckungsgleich mit den
@@ -170,6 +149,56 @@ async def fetch_keepa_deals(
         "sortType":            1,                   # 1 = nach deltaPercent
         "includeCategories":   include_cats or INCLUDE_CAT_IDS,  # optional Teilmenge
     }
+    return selection
+
+
+# ---------------------------------------------------------------------------
+# /deals — ASIN-Discovery
+# ---------------------------------------------------------------------------
+
+async def fetch_keepa_deals(
+    domain:      int   = 3,
+    delta_pct:   int   = 10,    # mind. X% unter dem 90-Tage-Durchschnitt
+    min_rating:  int   = 40,    # 4.0 Sterne × 10
+    min_reviews: int   = 50,    # nach Empfang gefiltert
+    page:        int   = 0,
+    client: httpx.AsyncClient | None = None,
+    include_cats: list[int] | None = None,  # None = volle Whitelist unten
+    min_price_cents: int = 2500,            # Preisuntergrenze, Keepa-seitig
+) -> list[dict]:
+    """
+    Ruft den Keepa /deal Endpoint ab.
+
+    Gibt Liste von Deal-Dicts zurück: asin, title, brand, image_url,
+    current_price, avg48h, avg7, avg30, avg90, sales_rank, rating, reviews,
+    is_fba, delta_pct.
+
+    Die Ø-Felder heissen seit 15.08.2026 so, wie Keepa sie tatsächlich liefert
+    — siehe DEAL_INTERVALLE unten. Vorher hiessen dieselben vier Werte
+    avg30/avg90/avg180/atl, waren aber Tag/Woche/Monat/90 Tage. Jede darauf
+    aufgebaute Regel hat deshalb gegen einen viel zu kurzen Zeitraum gemessen.
+    """
+    if not KEEPA_KEY:
+        return []
+
+    # Keepa Deal-Finder: priceTypes als Integer (0 = alle Typen)
+    # deltaPercentRange: [min, max], negative = Preissenkung in %
+    #
+    # dateRange indexiert Keepas DealInterval — belegt in Keepas eigenem
+    # Java-Client (structs/Deal.java, enum DealInterval):
+    #     0 = DAY (real 48 h)   1 = WEEK   2 = MONTH   3 = _90_DAYS
+    # Derselbe Index gilt für die Arrays `avg[]` und `deltaPercent[]` im
+    # Response.
+    #
+    # Hier stand bis 15.08.2026 `dateRange: 2` mit dem Kommentar „letzte 3
+    # Tage". Beides falsch: 2 ist der MONAT. Und `avg[]` wurde als
+    # [30d, 90d, 180d, 365d] gelesen, war aber [48h, 7d, 30d, 90d] — der Wert,
+    # gegen den das Quality Gate seine 20 % verlangte, war in Wirklichkeit der
+    # Wochendurchschnitt.
+    selection = deal_selection(
+        domain=domain, delta_pct=delta_pct, min_rating=min_rating,
+        page=page, include_cats=include_cats, min_price_cents=min_price_cents,
+    )
 
     own_client = client is None
     if own_client:
