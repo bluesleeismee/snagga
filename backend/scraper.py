@@ -705,6 +705,32 @@ async def hourly_keepa_price_check():
             avg90  = row["avg90_price"]  or 0.0
             avg180 = row["avg180_price"] or 0.0
             atl    = row["all_time_low"] or 0.0
+
+            # Unterkategorie aus der FRISCHEN Keepa-Antwort, nicht aus der
+            # DB-Zeile (Korrektur 16.08.2026).
+            #
+            # Vorher lief der Hard-Filter gegen `row["sub_category"]` — den Wert,
+            # der beim Laden der Zeile in der DB stand. Bei einem frisch
+            # entdeckten Deal ist der leer, denn Keepas /deal liefert keine
+            # Unterkategorie. `ist_raus()` gibt bei leerem Wert bewusst False
+            # zurück, der Deal besteht also. Erst UNTEN im else-Zweig wurde
+            # `sub_category` geschrieben — die RAUS-Prüfung fand also frühestens
+            # beim ÜBERNÄCHSTEN Lauf statt.
+            #
+            # Praktisch heisst das: bis zu fünf Stunden sichtbar. Die untere
+            # Tier-Stufe wird nur alle vier Stunden fällig, dazu die Stunde bis
+            # zum nächsten Job. Gemessen am 16.08.2026 standen dadurch sechs
+            # aktive Deals in „Wohnaccessoires & Deko" — einer Unterkategorie,
+            # die auf RAUS steht: vier Carpettex-Teppiche und zwei weitere, elf
+            # Prozent des ganzen Schaufensters.
+            #
+            # `kd` liegt hier bereits vor (enriched wurde vor der Schleife
+            # geholt). Die Prüfung kostet also nichts extra und greift beim
+            # ERSTEN Check nach der Entdeckung.
+            kd       = enriched.get(asin) or {}
+            sub_cat  = (kd.get("sub_category") or "").strip() or (
+                (row["sub_category"] or "") if "sub_category" in row.keys() else "")
+
             volatile = move_counts.get(asin, 0) >= 3
             if volatile:
                 volatile_cnt += 1
@@ -728,7 +754,7 @@ async def hourly_keepa_price_check():
                 title=row["name"] or "",
                 brand=(row["brand"] or "") if "brand" in row.keys() else "",
                 atl_ist_beleg=bool(row["atl_confirmed"]),
-                sub_category=(row["sub_category"] or "") if "sub_category" in row.keys() else "",
+                sub_category=sub_cat,
             ):
                 await conn.execute(
                     "UPDATE products SET is_active=false, is_top_pick=false, "
@@ -746,7 +772,7 @@ async def hourly_keepa_price_check():
                 )
                 # Echte History (gratis im Basis-Token) → konkretes Kachel-Urteil
                 # "Bester Preis seit X Monaten" statt nur Rabatt-Prozent.
-                kd   = enriched.get(asin) or {}
+                # (`kd` steht schon oben zur Verfügung — siehe sub_cat.)
                 hist = kd.get("history") or []
                 months = best_price_since_months(hist, live_price)
                 # Allzeittief ausschliesslich über resolve_atl(). Vorher stand hier
