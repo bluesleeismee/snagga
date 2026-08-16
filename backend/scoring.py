@@ -79,6 +79,49 @@ VERTRAUEN_RANG_ANTEIL = float(os.getenv("VERTRAUEN_RANG_ANTEIL", "0.5"))
 VERTRAUEN_MIN_REVIEWS = int(os.getenv("VERTRAUEN_MIN_REVIEWS", "100"))
 
 
+def rang_fenster_score(category: str, current: float) -> int:
+    """
+    Rangfenster, gegen das der SCORE die Popularität normiert.
+
+    Warum das nicht dieselbe Zeile ist wie im Hard-Filter (David, 16.08.2026):
+
+    Der Filter dehnt das Fenster ab RANK_BONUS_AB_EUR sprunghaft auf das
+    RANK_BONUS_FAKTOR-fache. Dort ist das richtig — er entscheidet bestanden
+    oder durchgefallen, und eine Schwelle darf eine Schwelle sein.
+
+    Im Score ist dieselbe Stufe schädlich, weil er eine Reihenfolge erzeugt.
+    Gemessen an echten Kategorien sprangen zwei ansonsten identische Produkte
+    mit 2 € Preisunterschied um bis zu 3 Punkte auseinander (Elektronik, Rang
+    9.000: 28 gegen 31) — am stärksten bei mittleren Rängen, also genau dort,
+    wo sich die Kachelreihenfolge entscheidet. 100 € wäre damit zu einer
+    künstlichen Ranggrenze im Schaufenster geworden.
+
+    Deshalb wächst das Fenster hier LINEAR mit dem Preis und erreicht bei
+    RANK_BONUS_AB_EUR den vollen Faktor:
+
+        0 €   → 1.0 ×      50 €  → 2.0 ×      ab 100 € → 3.0 ×
+
+    Ab RANK_BONUS_AB_EUR ist das Ergebnis identisch mit dem Filter; darunter
+    ist der Score etwas großzügiger. Das ist unkritisch und beabsichtigt: der
+    Filter hat da bereits gegen das engere Fenster entschieden, der Score
+    verteilt nur noch Plätze und lässt nichts herein.
+
+    Die Rampe beginnt bewusst bei 0 € und nicht bei scraper.MIN_PRICE, obwohl
+    Letzteres den Bonus sauberer über die tatsächlich vorkommende Preisspanne
+    verteilen würde (25 € → 1.0×). Das hiesse, MIN_PRICE hier zu duplizieren —
+    scraper importiert scoring, andersherum ginge es nicht ohne Zirkelbezug.
+    Genau solche doppelt gepflegten Konstanten sind in diesem Projekt schon
+    mehrfach auseinandergelaufen. Der Preis dafür: Ware am unteren Ende bekommt
+    rund 1,7 Punkte geschenkt. Das ist für alle gleich und ändert die
+    Reihenfolge innerhalb dieser Gruppe nicht.
+    """
+    basis = CATEGORY_MAX_RANK.get(category, 30_000)
+    if RANK_BONUS_AB_EUR <= 0:
+        return basis
+    anteil = min(1.0, max(0.0, (current or 0.0) / RANK_BONUS_AB_EUR))
+    return int(basis * (1.0 + (RANK_BONUS_FAKTOR - 1.0) * anteil))
+
+
 def erforderlicher_rabatt_faktor(current: float) -> float:
     """
     Faktor gegenüber dem 90-Tage-Ø, den ein Angebot unterschreiten muss.
@@ -511,19 +554,9 @@ def calculate_deal_score(
     f_atl = max(0.0, min(1.0, f_atl))
 
     # ── Popularität (20%) ───────────────────────────────────────────────────
-    # Dasselbe Rangfenster wie im Hard-Filter, inklusive RANK_BONUS_FAKTOR ab
-    # RANK_BONUS_AB_EUR (Korrektur 16.08.2026).
-    #
-    # Vorher rechnete der Score gegen das ungedehnte CATEGORY_MAX_RANK, der
-    # Filter dagegen gegen das 3-fache. Ein 600-€-Laptop mit Rang 30.000 bestand
-    # damit den Filter (Fenster 54.000) und bekam im Score trotzdem rank_f = 0,
-    # weil 30.000 > 18.000 — also die volle Strafe für einen Rang, den dieselbe
-    # Datei zwei Funktionen weiter oben ausdrücklich als in Ordnung erklärt.
-    # Betroffen war ausgerechnet die teure Kernware, für die der Bonus erfunden
-    # wurde; sie verlor bis zu 10 Punkte und scheiterte danach an MIN_SCORE.
-    max_rank = CATEGORY_MAX_RANK.get(category, 30_000)
-    if current >= RANK_BONUS_AB_EUR:
-        max_rank = int(max_rank * RANK_BONUS_FAKTOR)
+    # Rangfenster wie im Hard-Filter, aber STETIG statt gestuft — siehe
+    # rang_fenster_score() und den Kommentar dort (Korrektur 16.08.2026).
+    max_rank = rang_fenster_score(category, current)
     if sales_rank > 0 and sales_rank <= max_rank:
         # Invertiert und normiert: niedriger Rank → hoher Faktor
         rank_f = 1.0 - (sales_rank / max_rank)
@@ -578,12 +611,15 @@ def calculate_deal_score(
         "pop":       round(f_pop, 3),
         "stab":      round(f_stab, 3),
         "rank":      round(rank_f, 3),
-        # Welche Gewichtung wirklich galt — ohne das ist ein Score im
-        # Nachhinein nicht mehr nachrechenbar, sobald Anteile umgelegt werden.
-        "gewichte":  [w_avg, w_atl, w_pop, w_stab],
-        # Sagt, welche Gewichtung galt — ohne belegtes Tief wandern dessen 30 %
-        # auf den Ø90-Abstand. Ohne dieses Feld ist ein Score im Nachhinein
-        # nicht mehr nachvollziehbar.
+        # Beides nötig, damit ein Score im Nachhinein nachrechenbar bleibt:
+        # `gewichte` sagt, welche Anteile galten (ohne belegtes Tief wandern
+        # dessen 30 % auf den Ø90-Abstand), `rang_fenster` sagt, wogegen der
+        # Rang normiert wurde — seit dem preisabhängigen Fenster ist `rank`
+        # allein nicht mehr rekonstruierbar.
+        "gewichte":    [w_avg, w_atl, w_pop, w_stab],
+        "rang_fenster": max_rank,
+        # Redundant zu gewichte[1] > 0, bleibt für ältere gespeicherte
+        # Breakdowns lesbar.
         "tief_beleg": bool(atl > 0),
     })
     return score, breakdown

@@ -350,3 +350,31 @@ def test_rangbonus_gilt_im_score_wie_im_filter():
                                      "Elektronik & Foto", 4.5, 800, title="Sony Kabel")
     assert teuer > billig, (
         f"Rangbonus wirkt im Score nicht: teuer={teuer}, billig={billig}")
+
+
+def test_rangfenster_im_score_hat_keine_stufe():
+    """
+    Das Fenster darf im Score keinen Sprung an RANK_BONUS_AB_EUR haben: er
+    erzeugt eine Reihenfolge, und eine Stufe macht aus 100 € eine künstliche
+    Ranggrenze. Gemessen am 16.08.2026 lagen zwei ansonsten identische Produkte
+    mit 2 € Preisunterschied 3 Punkte auseinander.
+
+    Geprüft wird beides: kein Sprung über die Grenze UND ab der Grenze exakt
+    dasselbe Fenster wie im Hard-Filter.
+    """
+    from scoring import rang_fenster_score, CATEGORY_MAX_RANK
+    from scoring import RANK_BONUS_AB_EUR, RANK_BONUS_FAKTOR
+
+    cat = "Elektronik & Foto"
+    basis = CATEGORY_MAX_RANK[cat]
+
+    # Ab der Grenze deckungsgleich mit dem Filter.
+    for preis in (RANK_BONUS_AB_EUR, 250.0, 1500.0):
+        assert rang_fenster_score(cat, preis) == int(basis * RANK_BONUS_FAKTOR)
+
+    # Darunter stetig: kein Score-Sprung > 1 Punkt bei 1 € Preisunterschied.
+    for preis in (49.0, 98.0, 99.0, 99.5):
+        a, _ = calculate_deal_score(preis, preis * 1.25, 0.0, 9_000, cat, 4.5, 800)
+        b, _ = calculate_deal_score(preis + 1, (preis + 1) * 1.25, 0.0, 9_000,
+                                    cat, 4.5, 800)
+        assert abs(b - a) <= 1, f"Sprung bei {preis} €: {a} → {b}"
