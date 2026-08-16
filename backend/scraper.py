@@ -29,6 +29,8 @@ from scoring import (
     best_price_since_months,
     resolve_atl,
     historien_spanne_tage,
+    CATEGORY_MAX_RANK,
+    RANK_BONUS_FAKTOR,
     atl_for_display,
 )
 from sortiment import kern_namen, KATEGORIEN
@@ -141,6 +143,17 @@ KERN_DELTA_PCT  = int(os.getenv("KERN_DELTA_PCT", "10"))
 # mehrere Kategorien, statt eine einzige das Fenster füllen zu lassen.
 KERN_BATCH      = int(os.getenv("KERN_BATCH", "12"))
 KERN_AKTIV      = os.getenv("KERN_DISCOVERY_AKTIV", "1") not in ("0", "false", "False")
+# Rangobergrenze, die Keepa serverseitig anwenden soll (gemessen 16.08.2026:
+# Rang über 30.000 fällt damit von 101 auf 0 Kandidaten je Seite).
+#
+# ABGELEITET statt festgeschrieben: Sie muss das WEITESTE Fenster abdecken, das
+# hard_filter_reason() zulässt — sonst wirft Keepa Ware weg, die wir zeigen
+# wollen. Die Bosch-Küchenmaschine mit Rang 28.174 wäre bei einer Grenze von
+# 30.000 knapp durchgerutscht, bei 25.000 verloren gewesen. Eine zweite,
+# handgepflegte Zahl wäre genau die Sorte Konstante, die in diesem Projekt
+# schon mehrfach von ihrem Original weggelaufen ist.
+KEEPA_MAX_RANK = int(max(CATEGORY_MAX_RANK.values()) * RANK_BONUS_FAKTOR)
+
 DEEPSYNC_LIMIT  = 500   # Deep-Sync deckt den ganzen aktiven Bestand ab (~283).
                         # Muss die Zahl aktiver Deals übersteigen. History steckt
                         # im Basis-Token (gratis), daher unkritisch hoch — der
@@ -1324,6 +1337,7 @@ async def fetch_and_update_deals():
                     domain=3, delta_pct=KERN_DELTA_PCT, min_rating=40, min_reviews=50,
                     page=page, client=client, include_cats=batch,
                     min_price_cents=int(MIN_PRICE * 100),
+                    max_sales_rank=KEEPA_MAX_RANK,
                 )
                 if not page_deals:
                     break
@@ -1345,6 +1359,7 @@ async def fetch_and_update_deals():
                 domain=3, delta_pct=DEAL_DELTA_PCT, min_rating=40, min_reviews=50,
                 page=page, client=client,
                 min_price_cents=int(MIN_PRICE * 100),
+                max_sales_rank=KEEPA_MAX_RANK,
             )
             if not page_deals:
                 break

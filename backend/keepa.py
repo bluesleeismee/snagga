@@ -12,6 +12,10 @@ KEEPA_BASE = "https://api.keepa.com"
 # Keepa epoch: Minuten von Unix-Epoch bis 2011-01-01 00:00 UTC
 KEEPA_EPOCH = 21_564_000
 
+# Obergrenze für Spannen-Filter. Bewusst eine echte Zahl: -1 als "kein Limit"
+# ergibt bei Keepa eine LEERE Spanne und damit null Treffer (16.08.2026).
+MAX_CENT = 99_999_999
+
 # Keepa Preis-Typ-Indices (csv- und stats.current-Arrays). Siehe constants.py:
 # 0=AMAZON, 1=NEW, 3=SALES_RANK, 10=NEW_FBA, 16=RATING(×10), 17=REVIEWS,
 # 18=BUY_BOX_SHIPPING. Die Deals laufen über die BuyBox (priceTypes=[18]),
@@ -78,6 +82,7 @@ def deal_selection(
     page:            int = 0,
     include_cats:    list[int] | None = None,
     min_price_cents: int = 2500,
+    max_sales_rank:  int = 0,        # 0 = kein serverseitiger Rangfilter
 ) -> dict:
     """
     Baut das `selection`-Objekt für Keepas /deal.
@@ -132,23 +137,68 @@ def deal_selection(
         "page":                page,
         "domainId":            domain,
         "priceTypes":          [18],                 # BuyBox — Keepa erlaubt nur EINEN Wert pro Query
-        "deltaPercentRange":   [-100, -delta_pct],  # mind. X% unter Ø90
+        # ── Spannen-Filter (gemessen 16.08.2026, siehe /debug/selektion-test) ──
+        #
+        # `isRangeEnabled` ist der HAUPTSCHALTER. Ohne ihn ignoriert Keepa
+        # sämtliche Spannen-Parameter — still, ohne Fehlermeldung. Genau daran
+        # sind hier monatelang drei Filter wirkungslos gelaufen:
+        #
+        #   gemessen ohne Schalter: 100 von 150 Kandidaten unter der
+        #   Preisuntergrenze, 101 von 150 über der Rangobergrenze.
+        #   gemessen mit Schalter:  0 und 0.
+        #
+        # Zwei Fallen dabei, beide teuer bezahlt:
+        #   * Das Feld heisst `currentRange`, nicht `priceRange`. Ein falscher
+        #     Feldname wird kommentarlos verworfen.
+        #   * `deltaPercentRange` erwartet POSITIVE Werte: [10, 100] = 10 bis
+        #     100 % gefallen. Die negative Schreibweise [-100, -10] war nie
+        #     wirksam — Gegenprobe: [80, 100] schneidet 150 Kandidaten auf 37,
+        #     [-100, -80] lässt alle 150 durch.
+        #
+        # Deshalb kam die Rabatt-Sortierung bisher allein aus `sortType: 1`.
+        # Das erklärt rückwirkend, warum die vier verschiedenen Prozentwerte vom
+        # 15.08.2026 (15/10/10/8 %) nie einen erkennbaren Unterschied machten.
+        #
+        # WICHTIG bei Änderungen: die Obergrenze darf nicht -1 sein. Eine Spanne
+        # von 2500 bis -1 ist leer und liefert null Kandidaten — was wie ein
+        # falscher Feldname aussieht, aber das Gegenteil bedeutet.
+        "isRangeEnabled":      True,
+        "deltaPercentRange":   [delta_pct, 100],
         "dateRange":           3,                   # 3 = 90 Tage (DealInterval)
         "minRating":           min_rating,          # 40 = 4.0 Sterne (×10)
-        "minReviews":          100,                 # mind. 100 Reviews (Keepa-seitig vorfiltern)
+        # `minReviews` stand hier und ist KEIN gültiges Feld — gemessen blieben
+        # 90 von 150 Kandidaten unter 100 Bewertungen. Ersatzlos entfernt statt
+        # stehen gelassen: ein toter Parameter, der wie ein aktiver Filter
+        # aussieht, ist schlimmer als keiner. Die Prüfung macht der Hard-Filter
+        # (scoring.hard_filter_reason, `reviews`). `hasReviews` unten wirkt.
         # Preisuntergrenze. Entscheidend im Zusammenspiel mit sortType=1: Keepa
         # gibt die Treffer nach Rabatt-PROZENT sortiert zurück, und dort stehen
         # praktisch nur Kleinteile oben. Ein Airfryer mit −20 % taucht in den
         # ersten 2.400 Treffern nie auf. Erst eine eigene Abfrage mit hoher
         # Untergrenze macht das Fenster für hochwertige Ware überhaupt sichtbar
         # (siehe HIGHVALUE_PAGES in scraper.py).
-        "priceRange":          [min_price_cents, -1],
+        "currentRange":        [min_price_cents, MAX_CENT],
         "hasReviews":          True,
         "isFilterEnabled":     True,
         "filterErotic":        True,
         "sortType":            1,                   # 1 = nach deltaPercent
+        # Nur eine Variante je Elternprodukt. Amazon führt Farben und Grössen
+        # als eigene ASINs; am 16.08.2026 standen vier Carpettex-Teppiche
+        # gleichzeitig im Schaufenster. Amazons eigener Variantenbegriff ist
+        # verlässlicher als unsere Heuristik über Marke und Rang in
+        # scraper._varianten_entdoppeln — die bleibt als Auffangnetz bestehen,
+        # weil dieser Parameter in der Messung keinen belegbaren Effekt hatte
+        # (die Stichprobe enthielt schon ohne ihn keine Dubletten).
+        "singleVariation":     True,
         "includeCategories":   include_cats or INCLUDE_CAT_IDS,  # optional Teilmenge
     }
+    if max_sales_rank > 0:
+        # Serverseitiger Rangfilter — gemessen: Rang über 30.000 fällt von 101
+        # auf 0. Die Grenze kommt vom Aufrufer und muss das WEITESTE Fenster
+        # abdecken, das der Hard-Filter zulässt (CATEGORY_MAX_RANK × Rangbonus),
+        # sonst wirft Keepa Ware weg, die wir eigentlich zeigen wollen — etwa
+        # die Bosch-Küchenmaschine mit Rang 28.174.
+        selection["salesRankRange"] = [1, max_sales_rank]
     return selection
 
 
@@ -165,6 +215,7 @@ async def fetch_keepa_deals(
     client: httpx.AsyncClient | None = None,
     include_cats: list[int] | None = None,  # None = volle Whitelist unten
     min_price_cents: int = 2500,            # Preisuntergrenze, Keepa-seitig
+    max_sales_rank:  int = 0,               # Rangobergrenze, Keepa-seitig (0 = aus)
 ) -> list[dict]:
     """
     Ruft den Keepa /deal Endpoint ab.
@@ -198,6 +249,7 @@ async def fetch_keepa_deals(
     selection = deal_selection(
         domain=domain, delta_pct=delta_pct, min_rating=min_rating,
         page=page, include_cats=include_cats, min_price_cents=min_price_cents,
+        max_sales_rank=max_sales_rank,
     )
 
     own_client = client is None

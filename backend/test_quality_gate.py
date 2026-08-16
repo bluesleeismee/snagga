@@ -432,3 +432,48 @@ def test_variantenpruefung_ohne_rang_greift_nicht():
     ]
     behalten, entfernt = scraper._varianten_entdoppeln(kandidaten)
     assert entfernt == 0 and len(behalten) == 2
+
+
+# ── Keepa-Selektion: die Felder, die tatsächlich wirken (16.08.2026) ───────
+
+def test_deal_selektion_benutzt_wirksame_feldnamen():
+    """
+    Gemessen über /debug/selektion-test: Keepa verwirft unbekannte Felder still.
+    `priceRange` und `minReviews` standen monatelang wirkungslos in der Abfrage,
+    und `deltaPercentRange` wirkte nur mit POSITIVEN Werten.
+
+    Belege aus der Messung (je 150 Kandidaten einer Seite):
+      ohne isRangeEnabled: 100 unter Preisgrenze, 101 über Rangobergrenze
+      mit  isRangeEnabled: 0 und 0
+      deltaPercentRange [-100,-80]: 150 durch · [80,100]: 37 durch
+    """
+    from keepa import deal_selection, MAX_CENT
+
+    sel = deal_selection(delta_pct=10, min_price_cents=2500, max_sales_rank=90_000)
+
+    assert sel.get("isRangeEnabled") is True, "Hauptschalter fehlt — alle Spannen wirkungslos"
+    assert "priceRange" not in sel, "priceRange ist kein gültiges Keepa-Feld"
+    assert "minReviews" not in sel, "minReviews ist kein gültiges Keepa-Feld"
+    assert sel["currentRange"] == [2500, MAX_CENT]
+    assert sel["currentRange"][1] > 0, "Obergrenze -1 ergibt eine LEERE Spanne"
+    assert sel["deltaPercentRange"] == [10, 100], "Negative Werte wirken nicht"
+    assert sel["salesRankRange"] == [1, 90_000]
+
+
+def test_keepa_rangfenster_sperrt_keine_erlaubte_ware_aus():
+    """
+    Die serverseitige Rangobergrenze muss mindestens so weit sein wie das
+    weiteste Fenster, das der Hard-Filter durchlässt. Sonst filtert Keepa Ware
+    weg, die wir zeigen wollen — etwa die Bosch-Küchenmaschine (Rang 28.174,
+    218,55 €), die am 16.08.2026 durch den Rangbonus zulässig war.
+    """
+    import scraper
+    from scoring import CATEGORY_MAX_RANK, RANK_BONUS_FAKTOR
+
+    weitestes = max(CATEGORY_MAX_RANK.values()) * RANK_BONUS_FAKTOR
+    assert scraper.KEEPA_MAX_RANK >= weitestes
+
+    assert scraper.hard_filter_reason(
+        4.5, 4243, 28_174, "Küche, Haushalt & Wohnen", 218.55, 243.41,
+        brand="bosch", title="Bosch Küchenmaschine MUM54A00") != "sales_rank"
+    assert 28_174 <= scraper.KEEPA_MAX_RANK
