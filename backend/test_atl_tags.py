@@ -215,3 +215,58 @@ if __name__ == "__main__":
                 print(f"  FAIL {name}: {e or 'assert'}")
     print("\nAlle Tests bestanden." if not failed else f"\n{failed} Test(s) fehlgeschlagen.")
     raise SystemExit(1 if failed else 0)
+
+
+# ── Zeitspanne der Historie (16.08.2026) ───────────────────────────────────
+
+def test_kurze_historie_belegt_kein_allzeittief():
+    """
+    Drei Punkte über drei Wochen sind kein Beleg für „Allzeittief".
+
+    Gemessen am 16.08.2026: acht von sechzehn frisch entdeckten Deals trugen den
+    Badge, durchweg frisch gelistete No-Name-Ware, deren Preis seit der
+    Einführung nur gefallen war. Formal korrekt, für den Kunden irreführend.
+    """
+    from datetime import datetime, timedelta
+    from scoring import resolve_atl, historien_spanne_tage, ATL_MIN_HISTORY_DAYS
+
+    heute = datetime(2026, 8, 16)
+    kurz = [(54.46, heute - timedelta(days=20)),
+            (44.90, heute - timedelta(days=10)),
+            (37.83, heute)]
+    lang = [(54.46, heute - timedelta(days=300)),
+            (44.90, heute - timedelta(days=150)),
+            (37.83, heute)]
+
+    assert historien_spanne_tage(kurz) < ATL_MIN_HISTORY_DAYS
+    assert historien_spanne_tage(lang) >= ATL_MIN_HISTORY_DAYS
+
+    atl, ok = resolve_atl(37.83, history_prices=[p for p, _ in kurz],
+                          history_span_days=historien_spanne_tage(kurz))
+    assert ok is False, "Kurze Historie darf kein bestätigtes Tief ergeben"
+    assert atl > 0, "Der Wert bleibt als Anker erhalten, nur unbestätigt"
+
+    atl, ok = resolve_atl(37.83, history_prices=[p for p, _ in lang],
+                          history_span_days=historien_spanne_tage(lang))
+    assert ok is True and atl == 37.83
+
+
+def test_kurze_historie_entwertet_auch_keepa_atl_und_gespeichertes_flag():
+    """
+    Die Spanne schlägt jede Quelle: `enrich_with_keepa` mischt selbst schon das
+    History-Minimum in `all_time_low`, und ein früher gesetztes `atl_confirmed`
+    darf eine heute unbelegbare Aussage nicht am Leben halten.
+    """
+    from scoring import resolve_atl
+    _, ok = resolve_atl(37.83, keepa_atl=37.83, stored_atl=37.83,
+                        stored_confirmed=True, history_prices=[54.0, 44.0, 37.83],
+                        history_span_days=20.0)
+    assert ok is False
+
+
+def test_spanne_vertraegt_text_zeitstempel_aus_der_db():
+    """price_history.timestamp ist eine TEXT-Spalte — der Helfer muss das können."""
+    from scoring import historien_spanne_tage
+    punkte = [(54.46, "2026-01-01 00:00:00"), (37.83, "2026-08-16 00:00:00")]
+    assert historien_spanne_tage(punkte) > 200
+    assert historien_spanne_tage([(1.0, "kaputt"), (2.0, None)]) == 0.0

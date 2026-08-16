@@ -28,7 +28,8 @@ from scraper import (
     fetch_and_update_deals, AFFILIATE_TAG, classify_category, _affiliate_tag_for,
     fetch_and_store_history, PRICE_FRESH_HOURS,
 )
-from scoring import is_catalog_quality, resolve_atl, atl_for_display, ATL_TOL
+from scoring import (is_catalog_quality, resolve_atl, atl_for_display, ATL_TOL,
+                     historien_spanne_tage)
 from scheduler import create_scheduler
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
@@ -1434,6 +1435,7 @@ def _compute_detail(row, hist_rows) -> dict:
         stored_atl=row["all_time_low"] or 0,
         stored_confirmed=bool(row["atl_confirmed"]) if "atl_confirmed" in row.keys() else False,
         history_prices=[p for p, _ in points],
+        history_span_days=historien_spanne_tage(points),
     )
     # Anzeigewert: geklemmt (Tief nie über aktuellem Preis). Das Urteil unten
     # bekommt bewusst den UNGEKLEMMTEN Wert — sonst macht das Klemmen den Claim wahr.
@@ -1747,6 +1749,7 @@ async def preis_check(request: Request, q: str = Query(default="")):
             kd["current_price"],
             keepa_atl=kd.get("all_time_low") or 0.0,
             history_prices=hist_prices,
+            history_span_days=historien_spanne_tage(kd.get("history") or []),
         )
         atl = atl_for_display(atl_real, kd["current_price"]) if atl_ok else 0.0
 

@@ -378,3 +378,57 @@ def test_rangfenster_im_score_hat_keine_stufe():
         b, _ = calculate_deal_score(preis + 1, (preis + 1) * 1.25, 0.0, 9_000,
                                     cat, 4.5, 800)
         assert abs(b - a) <= 1, f"Sprung bei {preis} €: {a} → {b}"
+
+
+# ── Varianten über Marke + Verkaufsrang (16.08.2026) ───────────────────────
+
+def test_varianten_ueber_gleichen_rang_erkannt():
+    """
+    Die drei Carpettex-Teppiche aus dem Lauf vom 16.08.2026, 11:05. Titelanfang
+    unterscheidet sich (Farbe und Maß stehen vorn), der Verkaufsrang praktisch
+    nicht: 5678, 5677, 5677.
+    """
+    import scraper
+
+    kandidaten = [
+        {"asin": "B0F83Z4YFG", "title": "Carpettex Teppich Rot 200x280 cm- Kurzflor Teppich Waschbar",
+         "brand": "Carpettex", "sales_rank": 5678, "deal_score": 39},
+        {"asin": "B0F83WVP6V", "title": "Carpettex Teppich Rund Beige 200 cm- Kurzflor Teppich Waschbar",
+         "brand": "Carpettex", "sales_rank": 5677, "deal_score": 32},
+        {"asin": "B0F83SK4N5", "title": "Carpettex Teppich Weiss 240x340 cm- Kurzflor Teppich Waschbar",
+         "brand": "Carpettex", "sales_rank": 5677, "deal_score": 31},
+    ]
+    behalten, entfernt = scraper._varianten_entdoppeln(kandidaten)
+    assert entfernt == 2, f"Nur {entfernt} Dubletten erkannt"
+    assert behalten[0]["asin"] == "B0F83Z4YFG", "Der beste Kandidat muss bleiben"
+
+
+def test_verschiedene_produkte_derselben_marke_bleiben():
+    """
+    Gegenprobe: Die Regel darf keine echten Geschwistermodelle einsammeln.
+    Zwei Bosch-Werkzeuge mit deutlich verschiedenem Rang bleiben beide.
+    """
+    import scraper
+
+    kandidaten = [
+        {"asin": "B01MYFFK9G", "title": "Bosch Professional 35 tlg. Bohrer- und Schrauberbit Set",
+         "brand": "Bosch", "sales_rank": 1032, "deal_score": 43},
+        {"asin": "B09ZB8M5KP", "title": "Bosch Professional Laser-Entfernungsmesser GLM 150-27 C",
+         "brand": "Bosch", "sales_rank": 6857, "deal_score": 25},
+    ]
+    behalten, entfernt = scraper._varianten_entdoppeln(kandidaten)
+    assert entfernt == 0 and len(behalten) == 2
+
+
+def test_variantenpruefung_ohne_rang_greift_nicht():
+    """Rang 0 heisst „unbekannt" und darf nichts zusammenlegen."""
+    import scraper
+
+    kandidaten = [
+        {"asin": "A1", "title": "Makita ImpactX T10 Torx Einsatz Bit",
+         "brand": "Makita", "sales_rank": 0, "deal_score": 27},
+        {"asin": "A2", "title": "Makita Akku-Schlagbohrschrauber DHP482",
+         "brand": "Makita", "sales_rank": 0, "deal_score": 25},
+    ]
+    behalten, entfernt = scraper._varianten_entdoppeln(kandidaten)
+    assert entfernt == 0 and len(behalten) == 2

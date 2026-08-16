@@ -642,6 +642,61 @@ ATL_TOL = 1.0
 # gerade eingefügte aktuelle Preis — der würde sich selbst zum Allzeittief erklären.
 ATL_MIN_HISTORY_POINTS = 3
 
+# Wie weit die Preishistorie ZEITLICH zurückreichen muss, damit „Allzeittief"
+# eine belastbare Aussage ist (David, 16.08.2026).
+#
+# ATL_MIN_HISTORY_POINTS zählt Punkte, nicht Zeit — und drei Punkte können drei
+# Tage umfassen. Gemessen am 16.08.2026 trugen acht von sechzehn frisch
+# entdeckten Deals „Allzeittiefpreis", durchweg No-Name-Ware (vier Teppiche,
+# Kleiderbügel, Vorratsgläser, Badspiegel, Gymnastikstange), bei allen war
+# `all_time_low` exakt der aktuelle Preis. Formal korrekt: das Minimum einer
+# dreiwöchigen Historie eines frisch gelisteten Artikels, dessen Preis seit der
+# Einführung nur gefallen ist, IST der aktuelle Preis.
+#
+# Nur versteht der Kunde unter „Allzeittief" Jahre, nicht Wochen. Das ist die
+# vierte Variante desselben Problems in diesem Projekt — diesmal ohne Bug,
+# allein durch eine Bedingung, die die falsche Größe misst.
+#
+# 90 Tage, weil das die Referenzspanne der ganzen Seite ist (Ø90 im Filter, im
+# Chart, im Tooltip). Was kürzer beobachtet ist, bekommt kein absolutes Urteil.
+ATL_MIN_HISTORY_DAYS = int(os.getenv("ATL_MIN_HISTORY_DAYS", "90"))
+
+
+def historien_spanne_tage(history: list | None) -> float:
+    """
+    Zeitspanne einer Preishistorie [(preis, zeit), …] in Tagen.
+
+    Verträgt beide Formen, in denen die Historie im Projekt vorliegt: frisch von
+    Keepa mit `datetime`-Objekten, und aus der Datenbank, wo
+    `price_history.timestamp` eine TEXT-Spalte ist (siehe _count_price_moves,
+    das aus demselben Grund nach `id` statt nach Zeit sortiert). Ein Aufrufer
+    soll sich darum nicht kümmern müssen.
+
+    0.0 heisst „unbekannt" — weniger als zwei brauchbare Zeitstempel. resolve_atl()
+    behandelt das bewusst nachsichtig, sonst würde ein unvollständiger Aufruf
+    still jeden Tief-Beleg entwerten.
+    """
+    if not history or len(history) < 2:
+        return 0.0
+
+    zeiten: list[datetime] = []
+    for eintrag in history:
+        try:
+            ts = eintrag[1]
+        except (TypeError, IndexError):
+            continue
+        if isinstance(ts, datetime):
+            zeiten.append(ts)
+        elif isinstance(ts, str) and ts:
+            try:
+                zeiten.append(datetime.fromisoformat(ts.strip().replace("Z", "")))
+            except ValueError:
+                continue
+
+    if len(zeiten) < 2:
+        return 0.0
+    return max(0.0, (max(zeiten) - min(zeiten)).total_seconds() / 86400.0)
+
 
 def resolve_atl(
     current:        float,
@@ -649,6 +704,7 @@ def resolve_atl(
     stored_atl:     float = 0.0,   # products.all_time_low
     stored_confirmed: bool = False,  # products.atl_confirmed
     history_prices: list | None = None,  # Preise der gespeicherten/frischen Historie
+    history_span_days: float = 0.0,      # Zeitspanne derselben Historie, 0 = unbekannt
 ) -> tuple[float, bool]:
     """
     Löst das Allzeittief aus allen verfügbaren Quellen auf und sagt, ob es
@@ -678,7 +734,22 @@ def resolve_atl(
       * Belege sind: Keepas stats.atl aus /product und das Minimum einer echten
         Preishistorie mit mindestens ATL_MIN_HISTORY_POINTS Punkten.
       * Ohne Beleg → (0.0, False). Kein Rückfall auf irgendeinen Ersatzwert.
+      * Ist die Zeitspanne der Historie bekannt und kürzer als
+        ATL_MIN_HISTORY_DAYS, gibt es KEINEN Beleg — egal aus welcher Quelle
+        (siehe dort). Der ermittelte Wert wird trotzdem zurückgegeben, nur eben
+        als unbestätigt: er taugt weiter als Anker für Score und Filter, aber
+        nicht für den Badge. Deshalb (wert, False) statt (0.0, False).
+
+    Warum die Spanne auch `keepa_atl` und `stored_confirmed` entwertet: Keepas
+    stats.atl bezieht sich auf den beobachteten Zeitraum, und der ist bei einem
+    jungen Produkt genauso kurz. `enrich_with_keepa()` mischt ausserdem selbst
+    schon das History-Minimum in `all_time_low` — die Quelle ist also gar nicht
+    sauber trennbar. Und ein früher einmal gesetztes `atl_confirmed` darf eine
+    Aussage nicht am Leben halten, die heute nicht mehr belegbar ist.
     """
+    spanne_bekannt = history_span_days > 0.0
+    spanne_reicht  = (not spanne_bekannt) or history_span_days >= ATL_MIN_HISTORY_DAYS
+
     evidence: list[float] = []
     if keepa_atl and keepa_atl > 0:
         evidence.append(float(keepa_atl))
@@ -690,7 +761,8 @@ def resolve_atl(
 
     if not evidence:
         return 0.0, False
-    return round(min(evidence), 2), True
+    wert = round(min(evidence), 2)
+    return wert, spanne_reicht
 
 
 def atl_for_display(atl: float, current: float) -> float:

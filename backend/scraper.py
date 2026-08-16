@@ -28,6 +28,7 @@ from scoring import (
     determine_tag,
     best_price_since_months,
     resolve_atl,
+    historien_spanne_tage,
     atl_for_display,
 )
 from sortiment import kern_namen, KATEGORIEN
@@ -762,6 +763,7 @@ async def hourly_keepa_price_check():
                     stored_atl=atl,
                     stored_confirmed=bool(row["atl_confirmed"]),
                     history_prices=[pr for pr, _ in hist if pr and pr > 0],
+                    history_span_days=historien_spanne_tage(hist),
                 )
                 tag = determine_tag(live_price, atl_now, avg90, avg180,
                                     atl_confirmed=atl_ok, months_since_lower=months)
@@ -920,21 +922,78 @@ def _varianten_schluessel(titel: str) -> str:
     return " ".join(worte[:VARIANTEN_WORTE])
 
 
+# Rang-Toleranz für die zweite Variantenprüfung (siehe _varianten_entdoppeln).
+# Amazon führt Farb- und Größenvarianten als eigene ASINs, die sich den
+# Verkaufsrang des Elternprodukts teilen — gemessen am 16.08.2026 an drei
+# Carpettex-Teppichen: 5678, 5677, 5677. Eine kleine absolute Toleranz reicht;
+# grösser gefasst träfe sie zufällig gleichplatzierte Fremdprodukte.
+VARIANTEN_RANG_TOLERANZ = int(os.getenv("VARIANTEN_RANG_TOLERANZ", "5"))
+
+
+def _marken_schluessel(kandidat: dict) -> str:
+    """
+    Marke klein geschrieben; ersatzweise das erste Titelwort.
+
+    Der /deal-Endpoint liefert `brand` oft leer, der Titel beginnt bei Amazon
+    aber praktisch immer mit der Marke — dieselbe Annahme, auf der schon
+    scoring.is_known_brand() aufbaut.
+    """
+    b = (kandidat.get("brand") or "").strip().lower()
+    if b:
+        return b
+    worte = re.findall(r"[a-z0-9äöüß]+", (kandidat.get("title") or "").lower())
+    return worte[0] if worte else ""
+
+
 def _varianten_entdoppeln(kandidaten: list[dict]) -> tuple[list[dict], int]:
     """
     Behält je Produktschlüssel nur den besten Kandidaten. Erwartet eine bereits
     nach Score absteigend sortierte Liste — der erste Treffer ist damit der
     beste, alle weiteren sind Farb-/Größenvarianten mit schlechterem Angebot.
     Gibt (bereinigte Liste, Anzahl entfernter Dubletten) zurück.
+
+    ZWEI Prüfungen seit 16.08.2026, weil die erste allein nicht reicht:
+
+      1. Titelanfang (_varianten_schluessel) — greift, solange sich Varianten
+         erst hinten unterscheiden ("… Space 2, Schwarz" / "… Space 2, Blau").
+      2. Marke + fast gleicher Verkaufsrang — greift, wenn Farbe und Maß schon
+         im Titelanfang stehen und die erste Prüfung damit ins Leere läuft.
+
+    Auslöser für (2): Im Lauf um 11:05 kamen vier Teppiche herein, drei davon
+    aus derselben Carpettex-Serie — „Carpettex Teppich Rot 200x280 cm",
+    „… Weiss 240x340 cm", „… Rund Beige 200 cm". Die ersten fünf Wörter gehen
+    auseinander, der Verkaufsrang aber kaum: 5678, 5677, 5677. Genau dieser
+    Fingerabdruck steht schon in sortiment.py bei „gartendeko" beschrieben
+    (13 von 15 Treffern Kunstrasen-Meterware desselben Anbieters, alle mit Rang
+    12188) — er war nur nie ausgewertet.
+
+    Bewusst eng gefasst: nur bei gleicher Marke UND einem Rangabstand von
+    höchstens VARIANTEN_RANG_TOLERANZ. Zwei verschiedene Bosch-Werkzeuge mit
+    zufällig fünf Rängen Abstand sind selten; eine ganze Teppichserie mit
+    identischem Rang ist es nicht.
     """
     gesehen: set[str] = set()
+    # Marke → Ränge der bereits behaltenen Kandidaten dieser Marke. Als Dict,
+    # damit nicht bei jedem Kandidaten die ganze behaltene Liste durchlaufen
+    # werden muss (die Discovery prüft bis zu 2.400 Stück pro Lauf).
+    raenge_je_marke: dict[str, list[int]] = {}
     behalten: list[dict] = []
     for k in kandidaten:
         schluessel = _varianten_schluessel(k.get("title") or "")
         if schluessel and schluessel in gesehen:
             continue
+
+        marke = _marken_schluessel(k)
+        rang  = int(k.get("sales_rank") or 0)
+        if marke and rang > 0 and any(
+            abs(rang - r) <= VARIANTEN_RANG_TOLERANZ for r in raenge_je_marke.get(marke, ())
+        ):
+            continue
+
         if schluessel:
             gesehen.add(schluessel)
+        if marke and rang > 0:
+            raenge_je_marke.setdefault(marke, []).append(rang)
         behalten.append(k)
     return behalten, len(kandidaten) - len(behalten)
 
@@ -1626,6 +1685,7 @@ async def fetch_and_store_history(asin: str) -> bool:
         kd["current_price"],
         keepa_atl=kd.get("all_time_low") or 0.0,
         history_prices=hist_prices,
+        history_span_days=historien_spanne_tage(hist),
     )
     months = best_price_since_months(hist, kd["current_price"])
     tag = determine_tag(kd["current_price"], atl, kd["avg90_price"], kd["avg180_price"],
@@ -1826,6 +1886,7 @@ async def seed_bestsellers(max_tokens: int = 6000, max_per_cat: int = 400,
                         kd["current_price"],
                         keepa_atl=kd.get("all_time_low") or 0.0,
                         history_prices=hist_prices,
+                        history_span_days=historien_spanne_tage(hist),
                     )
                     atl = atl_for_display(atl_real, kd["current_price"]) if atl_ok else 0.0
 
@@ -1923,6 +1984,7 @@ async def nightly_deep_sync():
                 kd["current_price"],
                 keepa_atl=kd.get("all_time_low") or 0.0,
                 history_prices=hist_prices,
+                history_span_days=historien_spanne_tage(kd.get("history") or []),
             )
             # In die DB/Anzeige geht der geklemmte Wert (Tief nie über aktuellem
             # Preis); in die Tag-Entscheidung unten der unbeschnittene atl_real.
