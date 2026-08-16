@@ -2936,6 +2936,131 @@ async def debug_deal_rohdaten(token: str = Query(default=""), page: int = Query(
     }
 
 
+@app.get("/debug/selektion-test")
+async def debug_selektion_test(token: str = Query(default=""), page: int = Query(default=0)):
+    """
+    Probiert mehrere Schreibweisen der Deal-Selektion gegen die echte API durch.
+
+    Warum (16.08.2026): /debug/deal-rohdaten hat belegt, dass `priceRange` und
+    `minReviews` KEINE Wirkung haben — 75 von 150 Kandidaten lagen mit ihrem
+    BuyBox-Preis unter der angeblichen Untergrenze, 78 unter der angeblichen
+    Mindest-Bewertungszahl. Keepa verwirft unbekannte Felder offenbar still,
+    statt einen Fehler zu melden. Damit ist jede Annahme über die Feldnamen
+    wertlos, solange sie nicht gemessen ist.
+
+    Die Doku ist eine JavaScript-Seite und serverseitig nicht lesbar, mein
+    Gedächtnis ist als Beleg zu schwach. Also der empirische Weg: dieselbe Seite
+    mit verschiedenen Selektionen abfragen und schauen, welche Variante die
+    Verteilung tatsächlich verändert.
+
+    Kostet die Tokens EINER Deal-Seite je Variante. Verändert nichts am Bestand.
+    """
+    _check_admin(token)
+    import os, json, httpx
+    from keepa import deal_selection
+    from scraper import MIN_PRICE, DEAL_DELTA_PCT
+
+    KEEPA_KEY = os.getenv("KEEPA_API_KEY", "")
+    if not KEEPA_KEY:
+        return {"error": "KEEPA_API_KEY nicht gesetzt"}
+
+    min_cents = int(MIN_PRICE * 100)
+    basis = deal_selection(domain=3, delta_pct=DEAL_DELTA_PCT, min_rating=40,
+                           page=page, min_price_cents=min_cents)
+
+    def ohne(sel: dict, *felder: str) -> dict:
+        neu = dict(sel)
+        for f in felder:
+            neu.pop(f, None)
+        return neu
+
+    # Jede Variante ändert genau EINE Sache gegenüber der Basis, damit die
+    # Wirkung zuordenbar bleibt.
+    varianten: dict[str, dict] = {
+        "1_ist_zustand": basis,
+        # Vermutung: die Preisspanne heisst `currentRange`, und Spannen-Filter
+        # greifen erst mit `isRangeEnabled`.
+        "2_currentRange": {**ohne(basis, "priceRange"),
+                           "currentRange": [min_cents, -1], "isRangeEnabled": True},
+        # Verkaufsrang serverseitig statt bei uns — spart Fenster, wenn es geht.
+        "3_salesRankRange": {**ohne(basis, "priceRange"),
+                             "currentRange": [min_cents, -1], "isRangeEnabled": True,
+                             "salesRankRange": [1, 30000]},
+        # Gegen die Variantenflut (vier Carpettex-Teppiche am 16.08.2026):
+        # Keepa soll nur eine Variante je Elternprodukt liefern.
+        "4_singleVariation": {**ohne(basis, "priceRange"),
+                              "currentRange": [min_cents, -1], "isRangeEnabled": True,
+                              "singleVariation": True},
+        # Kontrolle für das Vorzeichen: liefert die positive Schreibweise
+        # dieselben Preissenkungen, ist deltaPercentRange womöglich ebenfalls
+        # wirkungslos und nur sortType=1 sorgt für die Rabatte.
+        "5_deltaPositiv": {**basis, "deltaPercentRange": [DEAL_DELTA_PCT, 100]},
+    }
+
+    IDX_SALES, IDX_REVIEWS, IDX_BUYBOX = 3, 17, 18
+
+    def wert(arr, idx):
+        if arr and idx < len(arr):
+            v = arr[idx]
+            if isinstance(v, (int, float)) and v > 0:
+                return v
+        return 0
+
+    ergebnis: dict[str, dict] = {}
+    tokens_zuletzt = None
+    async with httpx.AsyncClient(timeout=30) as client:
+        for name, sel in varianten.items():
+            try:
+                r = await client.get("https://api.keepa.com/deal",
+                                     params={"key": KEEPA_KEY,
+                                             "selection": json.dumps(sel, separators=(',', ':'))})
+                r.raise_for_status()
+                data = r.json()
+            except Exception as e:
+                ergebnis[name] = {"fehler": str(e)[:200]}
+                continue
+
+            raw = (data.get("deals") or {}).get("dr") or []
+            tokens_zuletzt = data.get("tokensLeft")
+            n = len(raw)
+            bb_unter = sum(1 for d in raw
+                           if 0 < wert(d.get("current") or [], IDX_BUYBOX) < min_cents)
+            rev_unter = sum(1 for d in raw
+                            if wert(d.get("current") or [], IDX_REVIEWS) < 100)
+            rang_ueber = sum(1 for d in raw
+                             if wert(d.get("current") or [], IDX_SALES) > 30000)
+            # Marken-Dubletten als Näherung für den Variantenanteil: gleiches
+            # erstes Titelwort UND Rangabstand <= 5 (dieselbe Heuristik wie
+            # scraper._varianten_entdoppeln).
+            gesehen: dict[str, list[int]] = {}
+            dubletten = 0
+            for d in raw:
+                titel = (d.get("title") or "").lower().split()
+                schl  = titel[0] if titel else ""
+                rang  = wert(d.get("current") or [], IDX_SALES)
+                if schl and rang:
+                    if any(abs(rang - r) <= 5 for r in gesehen.get(schl, ())):
+                        dubletten += 1
+                    else:
+                        gesehen.setdefault(schl, []).append(rang)
+            ergebnis[name] = {
+                "kandidaten":        n,
+                "buybox_unter_min":  bb_unter,
+                "reviews_unter_100": rev_unter,
+                "rang_ueber_30k":    rang_ueber,
+                "varianten_dubletten": dubletten,
+            }
+
+    return {
+        "hinweis": ("Je Variante eine Deal-Seite. Wirkt ein Parameter, muss die "
+                    "zugehörige Zahl gegenüber 1_ist_zustand deutlich fallen."),
+        "seite": page,
+        "untergrenze_cent": min_cents,
+        "tokens_uebrig": tokens_zuletzt,
+        "varianten": ergebnis,
+    }
+
+
 @app.get("/debug/keepa-cats")
 async def debug_keepa_cats(token: str = Query(default="")):
     """Gibt rootCat-Verteilung + avg-Datenverfügbarkeit aus Keepa /deal zurück."""
