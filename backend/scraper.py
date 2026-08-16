@@ -1345,8 +1345,28 @@ async def fetch_and_update_deals():
                 # Preishistorie" — erfundene Punkte wären ein Etikettenschwindel.
                 # Echte Historie kommt ausschließlich aus dem Keepa-Deep-Sync.
 
-    print(f"  Fertig: {len(active_pool)} aktiv, {len(backup_pool)} Backup, "
-          f"{min(TOP_PICKS_COUNT, len(active_pool))} Top Picks")
+    print(f"  Fertig: {len(active_pool)} aktiv, {len(backup_pool)} Backup")
+
+    # Top Picks über den GESAMTEN aktiven Bestand neu rechnen, nicht nur über
+    # die Funde dieses Laufs (Fund 16.08.2026).
+    #
+    # Die Schleife oben setzt `is_top_pick = i < TOP_PICKS_COUNT` — aber `i`
+    # läuft über `active_pool`, und das sind ausschliesslich die Kandidaten
+    # DIESES Durchlaufs. Zusammen mit dem `UPDATE products SET is_top_pick=false`
+    # weiter oben heisst das: nach jedem Discovery-Lauf sind die Top Picks das,
+    # was zufällig gerade hereinkam, unabhängig vom Score.
+    #
+    # Sichtbar wurde es am 16.08.2026 um 09:05: die Startseite führte mit zwei
+    # iPhone-Hüllen (Score 43 und 34), während JBL-Kopfhörer, Bosch-Set und der
+    # AOC-Monitor keine Top Picks mehr waren. Repariert hat sich das erst beim
+    # Preis-Check um :30 — also fast eine halbe Stunde pro Stunde mit einer
+    # falsch sortierten Startseite. Vorher fiel es kaum auf, weil pro Lauf ohnehin
+    # nur ein bis zwei Deals hereinkamen; mit dem höheren Zufluss seit MIN_SCORE=18
+    # ist es der sichtbarste Fehler auf der Seite.
+    #
+    # `_recalculate_top_picks()` rechnet rein auf der DB (kein Keepa-Token) und
+    # berücksichtigt zusätzlich die Marken-Vielfalt.
+    await _recalculate_top_picks()
 
     await _post_new_deals_to_telegram()
     return len(active_pool)
