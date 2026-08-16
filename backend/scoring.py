@@ -511,7 +511,19 @@ def calculate_deal_score(
     f_atl = max(0.0, min(1.0, f_atl))
 
     # ── Popularität (20%) ───────────────────────────────────────────────────
+    # Dasselbe Rangfenster wie im Hard-Filter, inklusive RANK_BONUS_FAKTOR ab
+    # RANK_BONUS_AB_EUR (Korrektur 16.08.2026).
+    #
+    # Vorher rechnete der Score gegen das ungedehnte CATEGORY_MAX_RANK, der
+    # Filter dagegen gegen das 3-fache. Ein 600-€-Laptop mit Rang 30.000 bestand
+    # damit den Filter (Fenster 54.000) und bekam im Score trotzdem rank_f = 0,
+    # weil 30.000 > 18.000 — also die volle Strafe für einen Rang, den dieselbe
+    # Datei zwei Funktionen weiter oben ausdrücklich als in Ordnung erklärt.
+    # Betroffen war ausgerechnet die teure Kernware, für die der Bonus erfunden
+    # wurde; sie verlor bis zu 10 Punkte und scheiterte danach an MIN_SCORE.
     max_rank = CATEGORY_MAX_RANK.get(category, 30_000)
+    if current >= RANK_BONUS_AB_EUR:
+        max_rank = int(max_rank * RANK_BONUS_FAKTOR)
     if sales_rank > 0 and sales_rank <= max_rank:
         # Invertiert und normiert: niedriger Rank → hoher Faktor
         rank_f = 1.0 - (sales_rank / max_rank)
@@ -526,6 +538,14 @@ def calculate_deal_score(
     f_pop = rank_f * 0.5 + rating_f * 0.3 + review_f * 0.2
 
     # ── Stabilität (10%) ────────────────────────────────────────────────────
+    # `price_updated=None` heisst „unbekannt" (Discovery: es gab noch keinen
+    # Prüfzeitpunkt) und fliesst deshalb neutral mit 0.5 ein.
+    #
+    # Am 16.08.2026 kurz erwogen, auch dieses Gewicht auf `f_avg` umzulegen wie
+    # beim fehlenden Tief. Nachgerechnet ist das schädlich: 0.5 × 10 % sind 5
+    # sichere Punkte, die Umlage gibt nur 0.10 × f_avg zurück — bei den 10–20 %
+    # Rabatt, um die es hier geht, also 1–2. Ausgerechnet die günstig bepreisten
+    # Kernprodukte hätten dabei verloren. Bleibt wie es ist.
     if price_updated:
         hours = (datetime.utcnow() - price_updated).total_seconds() / 3600
         f_stab = 1.0 if hours >= 24 else 0.3
@@ -542,10 +562,11 @@ def calculate_deal_score(
     # entfernt ist, hätte jeder frisch entdeckte Deal 30 Punkte eingebüsst und
     # wäre reihenweise an MIN_SCORE gescheitert — ein Qualitätsfilter, der in
     # Wahrheit nur misst, ob /product schon gelaufen ist.
-    if atl > 0:
-        raw = f_avg * 0.40 + f_atl * 0.30 + f_pop * 0.20 + f_stab * 0.10
-    else:
-        raw = f_avg * 0.70 + f_pop * 0.20 + f_stab * 0.10
+    w_avg, w_atl, w_pop, w_stab = 0.40, 0.30, 0.20, 0.10
+    if atl <= 0:
+        w_avg += w_atl
+        w_atl = 0.0
+    raw = f_avg * w_avg + f_atl * w_atl + f_pop * w_pop + f_stab * w_stab
     # Kein Stichwort-Abzug und keine Kategorie-Gewichtung mehr (siehe oben).
     # Der Score misst ab jetzt nur noch das, was er behauptet zu messen:
     # Preisvorteil, Nähe zum Tief, Nachfrage, Stabilität.
@@ -557,6 +578,9 @@ def calculate_deal_score(
         "pop":       round(f_pop, 3),
         "stab":      round(f_stab, 3),
         "rank":      round(rank_f, 3),
+        # Welche Gewichtung wirklich galt — ohne das ist ein Score im
+        # Nachhinein nicht mehr nachrechenbar, sobald Anteile umgelegt werden.
+        "gewichte":  [w_avg, w_atl, w_pop, w_stab],
         # Sagt, welche Gewichtung galt — ohne belegtes Tief wandern dessen 30 %
         # auf den Ø90-Abstand. Ohne dieses Feld ist ein Score im Nachhinein
         # nicht mehr nachvollziehbar.

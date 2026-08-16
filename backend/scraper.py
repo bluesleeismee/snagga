@@ -54,7 +54,27 @@ MAX_ACTIVE      = 500
 CHART_GRACE_HOURS = int(os.getenv("CHART_GRACE_HOURS", "3"))
 MAX_BACKUP      = 150
 TOP_PICKS_COUNT = 10
-MIN_SCORE       = 30
+# Punkte-Untergrenze bei der Entdeckung (David, 16.08.2026: 30 → 18, per Env).
+#
+# Die 30 stammen aus der Zeit, als der avg365-Proxy als Allzeittief galt: weil
+# überall `min(…, current_price)` gerechnet wurde, war `f_atl` praktisch immer
+# 1.0 — jeder Kandidat bekam 30 Punkte geschenkt. Seit der Proxy weg ist, liefert
+# die Discovery `atl=0`; die Umlage auf `f_avg` gibt bei realistischen 10–25 %
+# Rabatt nur 3–8 Punkte zurück. Netto verlor jeder Kandidat rund 25 Punkte,
+# während die Schwelle stehen blieb.
+#
+# Wirkung, gemessen am 16.08.2026: übrig blieben 18 aktive Deals, ihre Scores
+# drängten sich bei 30/31. Der Score war damit die eigentliche Rabatthürde und
+# verlangte je nach Rang 15–28 % — der AOC-Monitor mit 10,3 % unter Ø90 kam auf
+# 27 Punkte und wäre abgelehnt worden. Weil nur hoher PROZENTrabatt durchkam,
+# überlebte ausgerechnet billige Massenware (Bettdecke, Teppich, Matratze) —
+# das Gegenteil des Umbauziels.
+#
+# Die Qualitätsprüfung leistet der Hard-Filter (Rabattregel, Mindestersparnis,
+# Anti-Spike, Rang, Vertrauenssignal). Der Score sortiert danach die Reihenfolge;
+# er soll nicht heimlich ein zweites, strengeres Rabattkriterium sein. 18 lässt
+# die Rangfolge intakt und schneidet nur ab, was auch im Filter grenzwertig ist.
+MIN_SCORE       = int(os.getenv("MIN_SCORE", "18"))
 # Ein Mindestpreis für alle Kategorien (David, 15.08.2026, Stufe 2).
 #
 # Vorher: 20 € global plus elf kategorieabhängige Werte zwischen 25 und 50 €

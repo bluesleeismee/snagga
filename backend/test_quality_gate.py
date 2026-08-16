@@ -16,6 +16,7 @@ from scoring import (
     QUALITY_DISCOUNT_FACTOR,
     QUALITY_MIN_ERSPARNIS_EUR,
 )
+import scoring
 import sortiment
 
 
@@ -308,12 +309,44 @@ def test_classify_category_laesst_nur_bekannte_durch():
 def test_score_ohne_tief_bleibt_ueber_min_score():
     """
     Der /deal-Endpoint liefert kein Allzeittief. Flösse dessen 30 % Gewicht als
-    harte Null ein, scheiterte jeder frisch entdeckte Deal an MIN_SCORE (30) —
-    ein „Qualitätsfilter", der in Wahrheit nur misst, ob /product schon lief.
+    harte Null ein, scheiterte jeder frisch entdeckte Deal an MIN_SCORE — ein
+    „Qualitätsfilter", der in Wahrheit nur misst, ob /product schon lief.
+
+    Die Schwelle wird aus scraper importiert statt hier wiederholt: sie stand
+    am 16.08.2026 noch auf 30 und war damit die eigentliche Rabatthürde (siehe
+    Kommentar bei scraper.MIN_SCORE). Ein Test, der die Zahl selbst nochmal
+    hinschreibt, hätte diesen Bruch nicht gemeldet.
     """
+    from scraper import MIN_SCORE
+
     ohne, _ = calculate_deal_score(100.0, 120.0, 0.0, 3_000,
                                    "Elektronik & Foto", 4.5, 800, title="Sony WH-1000XM5")
     mit, _ = calculate_deal_score(100.0, 120.0, 98.0, 3_000,
                                   "Elektronik & Foto", 4.5, 800, title="Sony WH-1000XM5")
-    assert ohne >= 30, f"Score ohne Tief zu niedrig: {ohne}"
+    assert ohne >= MIN_SCORE, f"Score ohne Tief zu niedrig: {ohne}"
     assert mit > ohne, "Ein belegtes Tief muss den Score weiterhin heben"
+
+
+def test_rangbonus_gilt_im_score_wie_im_filter():
+    """
+    Ein teures Kernprodukt, dessen Rang über CATEGORY_MAX_RANK liegt, aber
+    innerhalb des per RANK_BONUS_FAKTOR gedehnten Fensters: der Hard-Filter
+    lässt es durch, also darf der Score es nicht mit rank_f = 0 bestrafen.
+
+    Vor dem 16.08.2026 tat er genau das — der Score rechnete gegen das
+    ungedehnte Fenster. Betroffen war ausgerechnet die teure Ware, für die der
+    Bonus erfunden wurde.
+    """
+    # Elektronik & Foto: Fenster 18.000, ab 100 € gedehnt auf 54.000.
+    assert scoring.hard_filter_reason(
+        4.5, 800, 30_000, "Elektronik & Foto", 600.0, 700.0,
+        brand="sony", title="Sony Laptop") != "sales_rank"
+
+    teuer, _ = calculate_deal_score(600.0, 700.0, 0.0, 30_000,
+                                    "Elektronik & Foto", 4.5, 800, title="Sony Laptop")
+    # Gegenprobe: derselbe Rang bei einem Preis unter der Bonusgrenze bleibt
+    # ausserhalb des Fensters und damit rank_f = 0.
+    billig, _ = calculate_deal_score(60.0, 70.0, 0.0, 30_000,
+                                     "Elektronik & Foto", 4.5, 800, title="Sony Kabel")
+    assert teuer > billig, (
+        f"Rangbonus wirkt im Score nicht: teuer={teuer}, billig={billig}")
