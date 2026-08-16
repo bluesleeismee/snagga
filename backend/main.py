@@ -2937,7 +2937,9 @@ async def debug_deal_rohdaten(token: str = Query(default=""), page: int = Query(
 
 
 @app.get("/debug/selektion-test")
-async def debug_selektion_test(token: str = Query(default=""), page: int = Query(default=0)):
+async def debug_selektion_test(token: str = Query(default=""), page: int = Query(default=0),
+                               override: str = Query(default=""),
+                               entfernen: str = Query(default="")):
     """
     Probiert mehrere Schreibweisen der Deal-Selektion gegen die echte API durch.
 
@@ -2974,28 +2976,49 @@ async def debug_selektion_test(token: str = Query(default=""), page: int = Query
             neu.pop(f, None)
         return neu
 
-    # Jede Variante ändert genau EINE Sache gegenüber der Basis, damit die
+    # Obergrenze der Spannen-Filter. NICHT -1 (Korrektur 16.08.2026): Runde 1
+    # setzte `currentRange: [2500, -1]` in Anlehnung an `priceRange` und bekam
+    # NULL Kandidaten zurück — bei drei Varianten gleichzeitig. Das sah nach
+    # „Feldname falsch" aus, war aber das Gegenteil: `currentRange` WIRKT, und
+    # eine Spanne von 2500 bis -1 ist leer. Ein wirkungsloser Parameter hätte
+    # 150 Kandidaten geliefert wie die Basiszeile.
+    MAX_CENT = 99_999_999
+
+    # Jede Variante ändert genau EINE Sache gegenüber der Vorgängerin, damit die
     # Wirkung zuordenbar bleibt.
     varianten: dict[str, dict] = {
         "1_ist_zustand": basis,
-        # Vermutung: die Preisspanne heisst `currentRange`, und Spannen-Filter
-        # greifen erst mit `isRangeEnabled`.
         "2_currentRange": {**ohne(basis, "priceRange"),
-                           "currentRange": [min_cents, -1], "isRangeEnabled": True},
+                           "currentRange": [min_cents, MAX_CENT], "isRangeEnabled": True},
         # Verkaufsrang serverseitig statt bei uns — spart Fenster, wenn es geht.
         "3_salesRankRange": {**ohne(basis, "priceRange"),
-                             "currentRange": [min_cents, -1], "isRangeEnabled": True,
+                             "currentRange": [min_cents, MAX_CENT], "isRangeEnabled": True,
                              "salesRankRange": [1, 30000]},
         # Gegen die Variantenflut (vier Carpettex-Teppiche am 16.08.2026):
         # Keepa soll nur eine Variante je Elternprodukt liefern.
         "4_singleVariation": {**ohne(basis, "priceRange"),
-                              "currentRange": [min_cents, -1], "isRangeEnabled": True,
+                              "currentRange": [min_cents, MAX_CENT], "isRangeEnabled": True,
                               "singleVariation": True},
-        # Kontrolle für das Vorzeichen: liefert die positive Schreibweise
-        # dieselben Preissenkungen, ist deltaPercentRange womöglich ebenfalls
-        # wirkungslos und nur sortType=1 sorgt für die Rabatte.
-        "5_deltaPositiv": {**basis, "deltaPercentRange": [DEAL_DELTA_PCT, 100]},
+        # Kontrolle für deltaPercentRange. In Runde 1 lieferte die positive
+        # Schreibweise ZEICHENGLEICHE Zahlen wie die negative (150/96/104/113/7)
+        # — ein starker Hinweis, dass der Parameter gar nicht wirkt und die
+        # Rabatte allein aus sortType=1 kommen. Eine absurd hohe Schwelle
+        # entscheidet das: wirkt der Parameter, bleibt fast nichts übrig.
+        "5_deltaExtrem": {**basis, "deltaPercentRange": [-100, -80]},
     }
+
+    # Freie Variante zum Nachfassen ohne Deploy: `override` ist ein JSON-Objekt,
+    # das auf die Basis gelegt wird, `entfernen` eine Komma-Liste von Feldern.
+    # Ohne das kostet jede Hypothese einen Deploy — bei einer API, die falsche
+    # Felder still verschluckt, sind das zu viele Runden.
+    if override or entfernen:
+        frei = ohne(basis, *[f.strip() for f in entfernen.split(",") if f.strip()])
+        if override:
+            try:
+                frei = {**frei, **json.loads(override)}
+            except json.JSONDecodeError as e:
+                return {"error": f"override ist kein gültiges JSON: {e}"}
+        varianten = {"1_ist_zustand": basis, "6_frei": frei}
 
     IDX_SALES, IDX_REVIEWS, IDX_BUYBOX = 3, 17, 18
 
@@ -3049,6 +3072,11 @@ async def debug_selektion_test(token: str = Query(default=""), page: int = Query
                 "reviews_unter_100": rev_unter,
                 "rang_ueber_30k":    rang_ueber,
                 "varianten_dubletten": dubletten,
+                # Damit im Nachhinein nachvollziehbar ist, was tatsächlich
+                # geschickt wurde — bei einer API, die unbekannte Felder still
+                # verschluckt, ist das der halbe Befund.
+                "gesendet": {k: v for k, v in sel.items()
+                             if k not in ("includeCategories", "page", "domainId")},
             }
 
     return {
