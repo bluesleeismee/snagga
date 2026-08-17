@@ -50,7 +50,27 @@ def _affiliate_tag_for(category: str) -> str:
     return CATEGORY_TAGS.get(category, AFFILIATE_TAG)
 
 
-MAX_ACTIVE      = 500
+# Wie viele Deals gleichzeitig im Schaufenster stehen.
+#
+# 500 → 300 am 16.08.2026, und zwar aus einem harten Grund: Der stündliche
+# Preis-Check kostet Keepa-Tokens PROPORTIONAL zur Zahl aktiver Deals. Die
+# Tier-Staffelung prüft das oberste Fünftel stündlich und den Rest alle vier
+# Stunden, macht 0.4 × N Produkte je Stunde à ~2 Tokens:
+#
+#     N =  50  →  ~40 Tokens/Std        N = 300  →  ~240 Tokens/Std
+#     N = 300  →  ~240 Tokens/Std       N = 712  →  ~570 Tokens/Std
+#
+# Das Budget sind 1.200 Tokens/Std (20/min). Davon gehen bereits ~300 an den
+# Katalog-Aufbau und ~300 an die Discovery. Bei 712 aktiven Deals — dem Stand
+# vom 16.08.2026, nachdem die reparierte Keepa-Selektion den Zufluss
+# verzehnfachte — war das Budget aufgebraucht: der Token-Vorrat fiel im Lauf
+# des Nachmittags von ~1.180 auf 152.
+#
+# 300 ist ausserdem die bessere Zahl fürs Schaufenster. Seit MIN_SCORE bewusst
+# zahnlos ist (18), ist DIESER Deckel die einzige Auswahl, die noch stattfindet:
+# er zeigt die N besten nach Score. Eine Schwelle lässt eine unbekannte Menge
+# herein, ein Deckel wählt aus.
+MAX_ACTIVE      = int(os.getenv("MAX_ACTIVE", "300"))
 # Karenzzeit, bis ein Deal ohne echte Preishistorie aus der Liste fliegt. Der
 # stündliche Preis-Check versucht in dieser Zeit mehrfach, Historie zu holen —
 # klappt es nicht, kann der Deal das Chart-Versprechen nicht einlösen.
@@ -1425,16 +1445,6 @@ async def fetch_and_update_deals():
                 list(new_asins),
             )
 
-            # MAX_ACTIVE in DB erzwingen: überzählige ältere aktive Deals deaktivieren
-            await conn.execute(
-                "UPDATE products SET is_active=false, is_top_pick=false "
-                "WHERE is_active=true AND asin NOT IN ("
-                "  SELECT asin FROM products WHERE is_active=true "
-                "  ORDER BY deal_score DESC LIMIT $1"
-                ")",
-                MAX_ACTIVE,
-            )
-
             for i, p in enumerate(active_pool + backup_pool):
                 is_active   = i < len(active_pool)
                 is_backup   = not is_active
@@ -1515,6 +1525,29 @@ async def fetch_and_update_deals():
                 # KEINE simulierte Historie mehr: snagga wirbt mit "geprüfter
                 # Preishistorie" — erfundene Punkte wären ein Etikettenschwindel.
                 # Echte Historie kommt ausschließlich aus dem Keepa-Deep-Sync.
+
+            # ── Deckel ZULETZT durchsetzen (Korrektur 16.08.2026) ───────────
+            # Diese Abfrage stand vor der Insert-Schleife und war deshalb
+            # wirkungslos: sie kappte den ALTEN Bestand auf MAX_ACTIVE, danach
+            # setzte die Schleife bis zu MAX_ACTIVE weitere Deals auf aktiv. Das
+            # Ergebnis konnte doppelt so gross sein wie der Deckel — gemessen am
+            # 16.08.2026: 712 aktive Deals bei MAX_ACTIVE = 500.
+            #
+            # (David sah im Frontend genau 500 und vermutete den Deckel. Das war
+            # Zufall: die Seite ruft /deals?limit=500 auf, und der API-Parameter
+            # begrenzt die Antwort — nicht den Bestand.)
+            #
+            # Jetzt am Ende, über den Gesamtbestand, nach Score sortiert.
+            gekappt = await conn.fetch(
+                "UPDATE products SET is_active=false, is_top_pick=false "
+                "WHERE is_active=true AND asin NOT IN ("
+                "  SELECT asin FROM products WHERE is_active=true "
+                "  ORDER BY deal_score DESC, last_updated DESC LIMIT $1"
+                ") RETURNING asin",
+                MAX_ACTIVE,
+            )
+            if gekappt:
+                print(f"  Über MAX_ACTIVE={MAX_ACTIVE} gekappt: {len(gekappt)}")
 
     print(f"  Fertig: {len(active_pool)} aktiv, {len(backup_pool)} Backup")
 
