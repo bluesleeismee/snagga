@@ -52,25 +52,28 @@ def _affiliate_tag_for(category: str) -> str:
 
 # Wie viele Deals gleichzeitig im Schaufenster stehen.
 #
-# 500 → 300 am 16.08.2026, und zwar aus einem harten Grund: Der stündliche
-# Preis-Check kostet Keepa-Tokens PROPORTIONAL zur Zahl aktiver Deals. Die
-# Tier-Staffelung prüft das oberste Fünftel stündlich und den Rest alle vier
-# Stunden, macht 0.4 × N Produkte je Stunde à ~2 Tokens:
+# Bleibt bei 500, ist aber jetzt per Env verstellbar (16.08.2026).
 #
-#     N =  50  →  ~40 Tokens/Std        N = 300  →  ~240 Tokens/Std
-#     N = 300  →  ~240 Tokens/Std       N = 712  →  ~570 Tokens/Std
+# Am 16.08.2026 kurz auf 300 gesenkt, weil der Token-Vorrat von ~1.180 auf 152
+# gefallen war und der Preis-Check PROPORTIONAL zur Zahl aktiver Deals kostet
+# (Tier-Staffelung: 0.4 × N Produkte je Stunde à ~2 Tokens, bei N=712 also
+# ~570/Std von 1.200/Std Budget).
 #
-# Das Budget sind 1.200 Tokens/Std (20/min). Davon gehen bereits ~300 an den
-# Katalog-Aufbau und ~300 an die Discovery. Bei 712 aktiven Deals — dem Stand
-# vom 16.08.2026, nachdem die reparierte Keepa-Selektion den Zufluss
-# verzehnfachte — war das Budget aufgebraucht: der Token-Vorrat fiel im Lauf
-# des Nachmittags von ~1.180 auf 152.
+# Wieder zurückgenommen, nachdem nachgemessen war: Der Vorrat stieg innerhalb
+# von 16 Minuten wieder von 152 auf 432 — der Verbrauch lag also weit unter der
+# Nachlieferung. Der Einbruch kam nicht aus dem Betrieb, sondern aus rund sechs
+# Deploys an diesem Tag (jeder Neustart lädt den Kategoriebaum neu, ~100 Tokens)
+# plus den Messabfragen. Beides einmalig.
 #
-# 300 ist ausserdem die bessere Zahl fürs Schaufenster. Seit MIN_SCORE bewusst
-# zahnlos ist (18), ist DIESER Deckel die einzige Auswahl, die noch stattfindet:
-# er zeigt die N besten nach Score. Eine Schwelle lässt eine unbekannte Menge
-# herein, ein Deckel wählt aus.
-MAX_ACTIVE      = int(os.getenv("MAX_ACTIVE", "300"))
+# Entscheidung David: lieber die Qualitätsregeln wirken lassen als deckeln. Ein
+# Deckel wählt nach deal_score, und der misst Preisvorteil und Nachfrage — nicht,
+# ob ein Produkt ins Sortiment gehört. Er würde also am Ende auch gute Ware
+# wegwerfen, nur weil die Liste voll ist. Die Menge soll stattdessen über RAUS,
+# Zubehör-Quote und Variantenerkennung sinken, also über Gründe.
+#
+# Wird der Vorrat doch wieder knapp, lässt sich der Wert jetzt ohne Deploy
+# senken — das war der eigentliche Gewinn an dieser Stelle.
+MAX_ACTIVE      = int(os.getenv("MAX_ACTIVE", "500"))
 # Karenzzeit, bis ein Deal ohne echte Preishistorie aus der Liste fliegt. Der
 # stündliche Preis-Check versucht in dieser Zeit mehrfach, Historie zu holen —
 # klappt es nicht, kann der Deal das Chart-Versprechen nicht einlösen.
