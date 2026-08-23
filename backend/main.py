@@ -3727,6 +3727,19 @@ async def debug_preis_saison(
     """
     _check_admin(token)
 
+    # `bis` hier parsen statt als String in die Query geben (Fix 23.08.2026):
+    # durch das `$3::timestamp` in der Abfrage leitet asyncpg fuer den Parameter
+    # den Typ timestamp ab und lehnt einen str dann mit einem 500er ab. Ein
+    # echtes datetime-Objekt ist ausserdem die ehrlichere Schnittstelle — ein
+    # Tippfehler im Datum wird so zu einem klaren 400 statt zu einem Serverfehler.
+    try:
+        bis_dt = datetime.fromisoformat(bis) if bis else datetime.utcnow()
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"bis={bis!r} ist kein ISO-Datum (erwartet z. B. 2026-01-01)",
+        )
+
     pool = await get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
@@ -3739,8 +3752,8 @@ async def debug_preis_saison(
                 WHERE h.price > 0
                   -- Fenster relativ zur Obergrenze, nicht zu now(): sonst
                   -- schneidet `bis` nur hinten ab und verschiebt den Zeitraum.
-                  AND h.timestamp <  $3::timestamp
-                  AND h.timestamp >= $3::timestamp - ($1 || ' years')::interval
+                  AND h.timestamp <  $3
+                  AND h.timestamp >= $3 - ($1 || ' years')::interval
                 GROUP BY 1, 2
             ),
             base AS (
@@ -3758,7 +3771,7 @@ async def debug_preis_saison(
             GROUP BY 1, 2
             ORDER BY 1, 2
             """,
-            str(jahre), min_monate, (bis or datetime.utcnow().date().isoformat()),
+            str(jahre), min_monate, bis_dt,
         )
         basis = await conn.fetchrow(
             """
@@ -3808,7 +3821,7 @@ async def debug_preis_saison(
     return {
         "parameter": {"jahre": jahre, "min_monate": min_monate,
                       "min_produkte": min_produkte,
-                      "bis": bis or "offen (bis heute)"},
+                      "bis": bis_dt.date().isoformat()},
         "datenbasis": {
             "produkte_mit_historie": basis["produkte_mit_historie"],
             "preispunkte":           basis["preispunkte"],
