@@ -3668,6 +3668,140 @@ async def debug_brand_coverage(token: str = Query(default=""), min_products: int
     }
 
 
+@app.get("/debug/preis-saison")
+async def debug_preis_saison(
+    token:      str = Query(default=""),
+    jahre:      int = Query(default=3, ge=1, le=10),
+    min_monate: int = Query(default=10, ge=3, le=12),
+    min_produkte: int = Query(default=30, ge=5),
+):
+    """
+    Rohdaten für die Presse-/Datenstory „Wann kauft man was am günstigsten?".
+
+    Read-only, keine Keepa-Tokens. Rechnet ausschliesslich auf der bereits
+    bezahlten `price_history`.
+
+    Methode — und warum nicht einfacher
+    -----------------------------------
+    Keepa speichert Preise nur bei ÄNDERUNGEN, nicht in festen Abständen. Ein
+    schlichtes AVG über alle Punkte eines Monats würde deshalb Produkte
+    übergewichten, deren Preis oft springt (Marktplatzware mit
+    Repricer-Algorithmen), und Produkte mit stabilem Preis fast unsichtbar
+    machen. Deshalb zweistufig:
+
+    1. `pm`   — ein Wert je (Produkt, Kalendermonat). Damit zählt jedes Produkt
+                pro Monat genau einmal, egal wie oft sein Preis sprang.
+    2. `base` — Referenzpreis je Produkt = Mittel über seine Monatswerte. Erst
+                dadurch sind ein 900-Euro-Grill und ein 20-Euro-Kabel
+                vergleichbar; verglichen wird nur noch das VERHÄLTNIS.
+    3. Produkte mit weniger als `min_monate` abgedeckten Monaten fliegen raus.
+       Ohne diese Bedingung entsteht ein klassischer Trugschluss: ein Produkt,
+       das nur im Dezember erfasst wurde, hat im Dezember per Definition seinen
+       eigenen Durchschnittspreis — und verzerrt den Monat gegen null Aussage.
+
+    Ergebnis `index_rel`: 1,00 = Produkt kostet in diesem Monat so viel wie im
+    eigenen Jahresmittel. 0,92 = 8 % darunter.
+
+    WICHTIG für die Story-Formulierung: Das ist eine Aussage über PREISVERLÄUFE
+    IM KATALOG von snagga, nicht über „den Handel" und schon gar nicht über
+    Amazon als Unternehmen. Siehe project-snagga-positionierung — Service-Stück,
+    kein Enthüllungsstück. `hinweise` unten nennt die Grenzen ausdrücklich, damit
+    sie in der Story nicht unterschlagen werden.
+    """
+    _check_admin(token)
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            WITH pm AS (
+                SELECT h.asin,
+                       EXTRACT(MONTH FROM h.timestamp)::int AS monat,
+                       AVG(h.price) AS preis
+                FROM price_history h
+                WHERE h.price > 0
+                  AND h.timestamp >= now() - ($1 || ' years')::interval
+                GROUP BY 1, 2
+            ),
+            base AS (
+                SELECT asin, AVG(preis) AS ref, COUNT(*) AS monate
+                FROM pm GROUP BY asin
+            )
+            SELECT p.category            AS kategorie,
+                   pm.monat              AS monat,
+                   COUNT(*)              AS produkte,
+                   AVG(pm.preis / b.ref) AS index_rel
+            FROM pm
+            JOIN base b     ON b.asin = pm.asin AND b.ref > 0 AND b.monate >= $2
+            JOIN products p ON p.asin = pm.asin
+            WHERE p.category IS NOT NULL AND p.category <> ''
+            GROUP BY 1, 2
+            ORDER BY 1, 2
+            """,
+            str(jahre), min_monate,
+        )
+        basis = await conn.fetchrow(
+            """
+            SELECT COUNT(DISTINCT asin) AS produkte_mit_historie,
+                   COUNT(*)             AS preispunkte,
+                   MIN(timestamp)::date AS aeltester_punkt
+            FROM price_history WHERE price > 0
+            """
+        )
+
+    # Nach Kategorie bündeln; zu dünn besetzte Monate fliegen raus, damit in der
+    # Story keine Zahl steht, die auf einer Handvoll Produkte beruht.
+    kat: dict[str, dict] = {}
+    for r in rows:
+        if r["produkte"] < min_produkte:
+            continue
+        k = kat.setdefault(r["kategorie"], {"monate": {}, "min_produkte": 10**9})
+        k["monate"][r["monat"]] = round(float(r["index_rel"]), 4)
+        k["min_produkte"] = min(k["min_produkte"], r["produkte"])
+
+    ergebnis = []
+    for name, k in sorted(kat.items()):
+        m = k["monate"]
+        # Nur Kategorien mit vollem Jahr: eine „Saison" aus acht Monaten
+        # abzuleiten waere genau die Sorte Zahl, die ein Redakteur zerlegt.
+        if len(m) < 12:
+            continue
+        guenstigster = min(m, key=m.get)
+        teuerster    = max(m, key=m.get)
+        ergebnis.append({
+            "kategorie":         name,
+            "guenstigster_monat": guenstigster,
+            "teuerster_monat":    teuerster,
+            # Wie viel Prozent guenstiger der beste gegenueber dem teuersten
+            # Monat ist — die eine Zahl, die eine Schlagzeile tragen kann.
+            "spanne_prozent":     round((1 - m[guenstigster] / m[teuerster]) * 100, 1),
+            "min_produkte_je_monat": k["min_produkte"],
+            "index_je_monat":     {str(i): m[i] for i in range(1, 13)},
+        })
+    # Groesste Spanne zuerst: dort ist die Aussage am stärksten.
+    ergebnis.sort(key=lambda e: -e["spanne_prozent"])
+
+    return {
+        "parameter": {"jahre": jahre, "min_monate": min_monate,
+                      "min_produkte": min_produkte},
+        "datenbasis": {
+            "produkte_mit_historie": basis["produkte_mit_historie"],
+            "preispunkte":           basis["preispunkte"],
+            "aeltester_punkt":       str(basis["aeltester_punkt"]),
+        },
+        "kategorien_mit_vollem_jahr": len(ergebnis),
+        "kategorien_verworfen":       len(kat) - len(ergebnis),
+        "hinweise": [
+            "index_rel 1,00 = Preis entspricht dem Jahresmittel DIESES Produkts.",
+            "Aussage gilt fuer den snagga-Katalog, nicht fuer den Handel allgemein.",
+            "Keepa speichert nur Preisaenderungen — deshalb je Produkt und Monat "
+            "nur ein Wert, sonst dominieren Produkte mit Repricer.",
+            "Kategorien mit weniger als 12 abgedeckten Monaten sind verworfen.",
+        ],
+        "kategorien": ergebnis,
+    }
+
+
 @app.api_route("/health", methods=["GET", "HEAD"])
 async def health():
     pool = await get_pool()
