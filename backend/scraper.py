@@ -1670,8 +1670,13 @@ async def post_next_bluesky_deal():
     Taktung wie Mastodon (feste Uhrzeiten, siehe scheduler.py) — die
     Spam-Sperre auf mastodon.social soll sich nicht wiederholen.
     """
-    from bluesky import post_deal as post_deal_bluesky, MIN_SCORE as BLUESKY_MIN_SCORE
-    if not BLUESKY_MIN_SCORE:
+    from bluesky import (post_deal as post_deal_bluesky, MIN_SCORE as BLUESKY_MIN_SCORE,
+                         BLUESKY_HANDLE, BLUESKY_PASSWORD)
+    # Abbruchgrund sind die Zugangsdaten, nicht der Score (Fix 23.08.2026): vorher
+    # stand hier `if not BLUESKY_MIN_SCORE: return`. Ein naheliegend gemeintes
+    # BLUESKY_MIN_SCORE=0 ("kein Mindest-Score, poste alles") haette den Job damit
+    # stillschweigend fuer immer stillgelegt — genau das Gegenteil der Absicht.
+    if not BLUESKY_HANDLE or not BLUESKY_PASSWORD:
         return
     db = await get_pool()
     async with db.acquire() as conn:

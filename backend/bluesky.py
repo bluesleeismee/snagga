@@ -53,7 +53,13 @@ def _build_post(deal: dict) -> tuple[str, list[dict]]:
     if disc > 0:
         price_line += f" (-{disc}%) statt {_fmt(original)}"
 
-    url      = f"https://www.snagga.de/share/{asin}"
+    # /preis statt /share (23.08.2026): /share ist eine reine OG-Vorschau, die
+    # per JS auf /?asin= weiterleitet — fuer Crawler eine Sackgasse ohne Inhalt.
+    # Oeffentliche, crawlbare Posts sind der einzige SEO-Wert dieses Kanals;
+    # der Link muss deshalb auf die kanonische Produktseite zeigen. /preis ist
+    # immer indexierbar und hat dieselben OG-Tags, die Vorschau bleibt gleich.
+    # Telegram behaelt bewusst /share (Chat-Links werden nicht gecrawlt).
+    url      = f"https://www.snagga.de/preis/{asin}"
     hashtags = _HASHTAG_SETS[hash(asin) % len(_HASHTAG_SETS)]
 
     text = "\n\n".join([f"{tag_line} {name}", price_line, url, hashtags])
