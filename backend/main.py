@@ -1198,6 +1198,13 @@ async def category_page(slug: str):
 <p>{desc}</p>
 {body_extra}
 <nav class="catnav">{other_cats}</nav>
+<!-- Interner Link auf die Ratgeberseite. Die Sitemap allein reicht nicht: eine
+     Seite ohne eingehende interne Links wird von Google regelmaessig als
+     "gefunden, zurzeit nicht indexiert" liegen gelassen — genau der Zustand, in
+     dem ein Grossteil des Bestands ohnehin schon steckt. Die Kategorieseiten
+     sind dafuer die richtige Stelle: wenige, indexierte Seiten, und thematisch
+     passend direkt neben der Deal-Liste. -->
+<p><a class="back" href="https://www.snagga.de/ratgeber/kaufzeitpunkt">Wann kauft man am günstigsten? Was unsere Preisdaten zeigen</a></p>
 <p><a class="back" href="https://www.snagga.de/">Alle Deals ansehen</a></p>
 </main>
 </body>
@@ -2650,6 +2657,196 @@ tatsächlich günstiger ist.</p>
 </html>""")
 
 
+# ---------------------------------------------------------------------------
+# Ratgeber: Kaufzeitpunkt
+# ---------------------------------------------------------------------------
+
+# Zahlen aus zwei Auswertungen vom 23.08.2026 (/debug/preis-saison und
+# /debug/tiefpreis-dauer), jeweils ueber ZWEI unabhaengige Zeitfenster gerechnet.
+# Bewusst FEST verdrahtet statt bei jedem Seitenaufruf berechnet:
+#
+# 1. Die Auswertung braucht eine sorgfaeltig gesetzte obere Zeitgrenze (`bis`),
+#    weil der laufende Monat durch die Katalogaufnahme kuenstlich tief ausfaellt
+#    — Produkte kommen herein, WEIL sie gerade guenstig sind. Eine Live-Rechnung
+#    wuerde diese Verzerrung staendig neu einbauen.
+# 2. Die Abfragen laufen ueber ~580.000 Preispunkte. Pro Seitenaufruf waere das
+#    absurd, und Supabase ist der Engpass.
+#
+# Beim Aktualisieren: beide Endpoints erneut mit zwei Fenstern aufrufen und nur
+# uebernehmen, was in BEIDEN stabil ist. STAND unten mitziehen.
+_RATGEBER_STAND = "August 2026"
+
+# (Kategorie, November-Effekt Fenster 2023-2025, Fenster 2022-2024)
+# Nur die drei Kategorien, die in beiden Fenstern dasselbe Vorzeichen und eine
+# aehnliche Groesse zeigen. Games und Musikinstrumente sahen staerker aus, haben
+# aber nur 30-46 Produkte — das ist Rauschen und gehoert nicht auf eine Seite,
+# die Vertrauen aufbauen soll.
+_NOVEMBER = [
+    ("Elektronik & Foto",        "4,1 %", "3,9 %"),
+    ("Computer & Zubehör",      "1,9 %", "3,8 %"),
+    ("Küche, Haushalt & Wohnen", "3,0 %", "2,9 %"),
+]
+
+
+@app.api_route("/ratgeber/kaufzeitpunkt", methods=["GET", "HEAD"],
+               response_class=HTMLResponse)
+async def ratgeber_kaufzeitpunkt():
+    """
+    Dauerhafte Ratgeberseite: „Wann kauft man am guenstigsten?"
+
+    Warum diese Seite existiert und NICHT als Pressemitteilung
+    ----------------------------------------------------------
+    Der Wachstumsplan sah eine Datenstory mit Pitch an heise/t3n/Golem vor. Zwei
+    Auswertungen haben gezeigt, dass das Material dafuer nicht traegt: der
+    November-Effekt ist echt, aber mit 2-4 % klein und ausserdem allgemein
+    bekannt; die Wiederkehrquoten schwanken zwischen den Zeitfenstern zu stark
+    fuer eine Schlagzeile; und die Dauer eines Tiefpreises misst nachweislich
+    Keepas Wochenraster statt des Marktes (Median 6,9-7,7 Tage ueber 13 voellig
+    unterschiedliche Kategorien — das ist kein Marktverhalten).
+
+    Fuer eine eigene Seite reicht es dagegen, weil hier kein Anspruch erhoben
+    wird, fuer „den Handel" zu sprechen. Die Einschraenkungen stehen sichtbar im
+    Text, nicht im Kleingedruckten — eine Marke, deren Versprechen „ehrlich
+    gepruefte Preise" lautet, darf ihre eigenen Zahlen nicht schoenen.
+
+    Ton: Service-Stueck. Kein Wort gegen Amazon (snagga verdient ueber
+    PartnerNet), keine Rede von „Fake-Rabatten". Die Aussage richtet sich gegen
+    FAUSTREGELN, nicht gegen einen Haendler.
+    """
+    canonical = "https://www.snagga.de/ratgeber/kaufzeitpunkt"
+    title = "Wann kauft man am günstigsten? Was die Preisdaten zeigen | snagga.de"
+    desc  = ("Lohnt es sich, auf den November zu warten? Und verpasst man etwas, "
+             "wenn man einen guten Preis verstreichen lässt? Auswertung von rund "
+             "580.000 Preispunkten — mit den Grenzen der Aussage.")
+
+    zeilen = "".join(
+        f"<tr><td>{html.escape(k)}</td><td>−{a}</td><td>−{b}</td></tr>"
+        for k, a, b in _NOVEMBER
+    )
+
+    ld_json = {
+        "@context": "https://schema.org",
+        "@type":    "Article",
+        "headline": "Wann kauft man am günstigsten?",
+        "description": desc,
+        "mainEntityOfPage": canonical,
+        "publisher": {"@type": "Organization", "name": "snagga.de"},
+    }
+
+    return HTMLResponse(f"""<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+{_THEME_INIT_SCRIPT}
+<title>{title}</title>
+<meta name="description" content="{html.escape(desc)}">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{canonical}">
+<meta property="og:type" content="article">
+<meta property="og:title" content="{title}">
+<meta property="og:description" content="{html.escape(desc)}">
+<meta property="og:url" content="{canonical}">
+<script type="application/ld+json">{json.dumps(ld_json, ensure_ascii=False)}</script>
+<style>
+  body {{ font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); margin:0; }}
+  {_SITE_HEADER_CSS}
+  main {{ max-width:760px; width:92%; margin:0 auto; padding:40px 0 72px; }}
+  h1 {{ font-size:34px; line-height:1.2; margin:0 0 8px; }}
+  h2 {{ font-size:23px; margin:44px 0 12px; }}
+  p, li {{ font-size:17px; line-height:1.65; }}
+  .lead {{ font-size:19px; color:var(--muted); margin-bottom:8px; }}
+  .stand {{ font-size:14px; color:var(--muted); }}
+  table {{ border-collapse:collapse; width:100%; margin:20px 0; font-size:16px; }}
+  th, td {{ text-align:left; padding:10px 12px; border-bottom:1px solid var(--border); }}
+  th {{ font-size:13px; text-transform:uppercase; letter-spacing:0.6px; color:var(--muted); font-weight:600; }}
+  .wrap {{ overflow-x:auto; }}
+  .kasten {{ background:var(--bg-card); border:1px solid var(--border); padding:18px 20px; margin:28px 0; }}
+  .kasten p:last-child {{ margin-bottom:0; }}
+  .kasten p:first-child {{ margin-top:0; }}
+  .cta {{ display:inline-block; background:#C85E43; color:#fff; text-decoration:none;
+          padding:13px 26px; font-weight:600; margin-top:8px; }}
+  a {{ color:inherit; }}
+</style>
+</head>
+<body>
+{_SITE_HEADER_HTML}
+<main>
+
+<h1>Wann kauft man am günstigsten?</h1>
+<p class="lead">Zwei Faustregeln halten sich hartnäckig: im November ist alles
+billiger, und einen guten Preis muss man sofort mitnehmen. Wir haben beide an
+unseren eigenen Preisdaten geprüft.</p>
+<p class="stand">Stand: {_RATGEBER_STAND}</p>
+
+<h2>Der November bringt wenig — aber er bringt etwas</h2>
+<p>Der November ist tatsächlich der günstigste Monat im Jahr. Das gilt aber nur
+für drei Kategorien stabil, und der Vorteil ist kleiner, als die Erwartung an
+den Black Friday vermuten lässt. Angegeben ist, wie weit ein Produkt im November
+unter seinem <em>eigenen</em> Jahresdurchschnitt liegt — gerechnet über zwei
+voneinander unabhängige Dreijahresfenster:</p>
+
+<div class="wrap">
+<table>
+<thead><tr><th>Kategorie</th><th>2023–2025</th><th>2022–2024</th></tr></thead>
+<tbody>{zeilen}</tbody>
+</table>
+</div>
+
+<p>Zwei bis vier Prozent. In allen anderen Kategorien war kein Muster zu finden,
+das über beide Zeiträume hinweg standhielt — Baumarkt und Drogerie lagen bei
+Schwankungen, die genauso gut Zufall sein können.</p>
+
+<h2>Verpasst du wirklich etwas?</h2>
+<p>Die zweite Frage ist die praktischere. Wir haben jeden Moment gesucht, in dem
+ein Produkt günstiger war als in den 180 Tagen davor, und nachgesehen, wann es
+das nächste Mal wieder so weit war.</p>
+<ul>
+  <li>Innerhalb von <strong>30 Tagen</strong> war rund <strong>jedes zweite</strong>
+      Produkt wieder mindestens so günstig.</li>
+  <li>Innerhalb von <strong>90 Tagen</strong> waren es <strong>zwei Drittel bis
+      drei Viertel</strong>.</li>
+</ul>
+<p>Ein verpasster Tiefpreis ist also meistens keine einmalige Gelegenheit. Wie
+schnell er wiederkommt, schwankt allerdings deutlich zwischen Kategorien und
+Zeiträumen — deshalb die Spannen statt exakter Zahlen.</p>
+
+<div class="kasten">
+<p><strong>Und was heißt das für den Kauf?</strong></p>
+<p>Beide Faustregeln taugen wenig. Bis November zu warten bringt im Schnitt
+wenige Prozent, und aus Angst vor der verpassten Gelegenheit sofort zuzuschlagen
+lohnt sich ebenfalls selten. Was tatsächlich entscheidet, ist der Verlauf des
+einzelnen Produkts: Liegt der Preis gerade unter seinem üblichen Niveau, oder
+sieht er nur wegen eines hohen Vergleichspreises danach aus?</p>
+</div>
+
+<p><a class="cta" href="https://www.snagga.de/preis-check">Preis eines Produkts prüfen</a></p>
+
+<h2>Wie wir gerechnet haben — und was die Zahlen nicht sagen</h2>
+<p>Grundlage sind rund <strong>580.000 Preispunkte</strong> aus der
+Preishistorie von etwa <strong>6.800 Produkten</strong>. Jede Aussage wurde über
+zwei getrennte Zeitfenster gerechnet; übernommen haben wir nur, was in beiden
+gleich aussah.</p>
+<p>Drei Einschränkungen, die dazugehören:</p>
+<ul>
+  <li><strong>Es sind unsere Produkte, nicht der Markt.</strong> In unserem
+      Bestand landen Produkte, die irgendwann im Preis gefallen sind. Das ist
+      keine repräsentative Auswahl des deutschen Handels, und die Zahlen gelten
+      ausdrücklich nur für diesen Bestand.</li>
+  <li><strong>Kleine Kategorien haben wir weggelassen.</strong> Einzelne
+      Bereiche sahen mit größeren Ausschlägen interessanter aus, beruhten aber
+      auf wenigen Dutzend Produkten. Solche Zahlen sind Rauschen.</li>
+  <li><strong>Wie lange ein Tiefpreis hält, können wir nicht seriös sagen.</strong>
+      Unsere Datenquelle speichert ältere Preisverläufe in Wochenschritten. Jede
+      Angabe zur Dauer würde dieses Raster wiedergeben und nicht das Verhalten
+      der Preise. Deshalb steht hier keine.</li>
+</ul>
+
+</main>
+</body>
+</html>""")
+
+
 @app.api_route("/sitemap.xml", methods=["GET", "HEAD"])
 async def sitemap():
     """
@@ -2688,6 +2885,9 @@ async def sitemap():
         "  <url><loc>https://www.snagga.de/</loc><changefreq>hourly</changefreq><priority>1.0</priority></url>",
         "  <url><loc>https://www.snagga.de/legal</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>",
         "  <url><loc>https://www.snagga.de/prime-day</loc><changefreq>daily</changefreq><priority>0.8</priority></url>",
+        # Ratgeberseite: aendert sich selten, ist aber eine der wenigen Seiten
+        # mit eigenem Inhalt statt Produktdaten — entsprechend hohe Prioritaet.
+        "  <url><loc>https://www.snagga.de/ratgeber/kaufzeitpunkt</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>",
     ]
     for slug, name in CATEGORY_SLUGS.items():
         if name in active_cats:
