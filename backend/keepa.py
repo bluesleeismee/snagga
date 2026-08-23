@@ -668,7 +668,17 @@ def _parse_product(p: dict) -> dict | None:
 
     return {
         "title":          (p.get("title") or "").strip(),
-        "brand":          (p.get("brand") or "").strip(),
+        # Fallback auf `manufacturer` (23.08.2026): Keepa fuehrt beide Felder,
+        # und bei EU-/Marktplatzware ist `brand` haeufig leer, waehrend
+        # `manufacturer` gefuellt ist. Vorher wurde nur `brand` gelesen —
+        # Messung an dem Tag: nur 86 von 360 aktiven Deals hatten ueberhaupt
+        # eine Marke (24 %), gegenueber 75,8 % im Gesamtkatalog. Die Leitung war
+        # nicht das Problem (brand wird an drei Stellen geschrieben), sondern
+        # das eine gelesene Feld. Bewusst KEIN Rateweg ueber den Titelanfang:
+        # is_known_brand() macht das bereits fuer das Quality Gate, aber eine
+        # geratene Marke in der DB-Spalte wuerde spaeter Markenseiten und
+        # Filter mit Falschangaben fuettern.
+        "brand":          ((p.get("brand") or p.get("manufacturer") or "").strip())[:80],
         "sub_category":   sub_category,
         "sub_category2":  sub_category2,
         "image_url":      image_url,
