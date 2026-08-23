@@ -3674,6 +3674,7 @@ async def debug_preis_saison(
     jahre:      int = Query(default=3, ge=1, le=10),
     min_monate: int = Query(default=10, ge=3, le=12),
     min_produkte: int = Query(default=30, ge=5),
+    bis:        str = Query(default=""),
 ):
     """
     Rohdaten für die Presse-/Datenstory „Wann kauft man was am günstigsten?".
@@ -3702,6 +3703,22 @@ async def debug_preis_saison(
     Ergebnis `index_rel`: 1,00 = Produkt kostet in diesem Monat so viel wie im
     eigenen Jahresmittel. 0,92 = 8 % darunter.
 
+    ⚠ Aufnahmeverzerrung — der Grund fuer `bis` (Fund 23.08.2026)
+    -------------------------------------------------------------
+    Der erste Lauf meldete August als guenstigsten Monat in 5 von 8 Kategorien —
+    am 23. August. Das ist kein Saisoneffekt, sondern die Bauweise des Katalogs:
+    Produkte kommen herein, WEIL Keepa sie als verguenstigt meldet, der
+    Aufnahmezeitpunkt ist also per Konstruktion ein Preistief. Waechst der
+    Katalog stark (20.586 → 27.741 allein im August 2026), fuellt sich der
+    laufende Monat mit Deal-Preisen und zieht den Index nach unten.
+
+    Deshalb `bis`: obere Zeitgrenze als ISO-Datum. Fuer belastbare Aussagen nur
+    ABGESCHLOSSENE Jahre rechnen (z. B. bis=2026-01-01), dann liegt kein Monat
+    im Auswertungsfenster, der noch von frischer Aufnahme lebt. Bleibt ein
+    Muster auch dann bestehen, ist es echt. `produkte_je_monat` in der Antwort
+    macht die Verzerrung sichtbar: ein Monat mit auffaellig vielen Produkten ist
+    verdaechtig.
+
     WICHTIG für die Story-Formulierung: Das ist eine Aussage über PREISVERLÄUFE
     IM KATALOG von snagga, nicht über „den Handel" und schon gar nicht über
     Amazon als Unternehmen. Siehe project-snagga-positionierung — Service-Stück,
@@ -3720,7 +3737,10 @@ async def debug_preis_saison(
                        AVG(h.price) AS preis
                 FROM price_history h
                 WHERE h.price > 0
-                  AND h.timestamp >= now() - ($1 || ' years')::interval
+                  -- Fenster relativ zur Obergrenze, nicht zu now(): sonst
+                  -- schneidet `bis` nur hinten ab und verschiebt den Zeitraum.
+                  AND h.timestamp <  $3::timestamp
+                  AND h.timestamp >= $3::timestamp - ($1 || ' years')::interval
                 GROUP BY 1, 2
             ),
             base AS (
@@ -3738,7 +3758,7 @@ async def debug_preis_saison(
             GROUP BY 1, 2
             ORDER BY 1, 2
             """,
-            str(jahre), min_monate,
+            str(jahre), min_monate, (bis or datetime.utcnow().date().isoformat()),
         )
         basis = await conn.fetchrow(
             """
@@ -3755,8 +3775,9 @@ async def debug_preis_saison(
     for r in rows:
         if r["produkte"] < min_produkte:
             continue
-        k = kat.setdefault(r["kategorie"], {"monate": {}, "min_produkte": 10**9})
+        k = kat.setdefault(r["kategorie"], {"monate": {}, "zahl": {}, "min_produkte": 10**9})
         k["monate"][r["monat"]] = round(float(r["index_rel"]), 4)
+        k["zahl"][r["monat"]]   = r["produkte"]
         k["min_produkte"] = min(k["min_produkte"], r["produkte"])
 
     ergebnis = []
@@ -3777,13 +3798,17 @@ async def debug_preis_saison(
             "spanne_prozent":     round((1 - m[guenstigster] / m[teuerster]) * 100, 1),
             "min_produkte_je_monat": k["min_produkte"],
             "index_je_monat":     {str(i): m[i] for i in range(1, 13)},
+            # Sticht ein Monat hier heraus, ist sein Index vermutlich
+            # Aufnahmeverzerrung und keine Saison.
+            "produkte_je_monat":  {str(i): k["zahl"][i] for i in range(1, 13)},
         })
     # Groesste Spanne zuerst: dort ist die Aussage am stärksten.
     ergebnis.sort(key=lambda e: -e["spanne_prozent"])
 
     return {
         "parameter": {"jahre": jahre, "min_monate": min_monate,
-                      "min_produkte": min_produkte},
+                      "min_produkte": min_produkte,
+                      "bis": bis or "offen (bis heute)"},
         "datenbasis": {
             "produkte_mit_historie": basis["produkte_mit_historie"],
             "preispunkte":           basis["preispunkte"],
@@ -3797,6 +3822,10 @@ async def debug_preis_saison(
             "Keepa speichert nur Preisaenderungen — deshalb je Produkt und Monat "
             "nur ein Wert, sonst dominieren Produkte mit Repricer.",
             "Kategorien mit weniger als 12 abgedeckten Monaten sind verworfen.",
+            "ACHTUNG Aufnahmeverzerrung: Produkte kommen in den Katalog, WEIL sie "
+            "gerade guenstig sind. Ohne `bis` faellt der laufende Monat deshalb "
+            "kuenstlich tief aus. Fuer belastbare Aussagen nur abgeschlossene "
+            "Jahre rechnen und produkte_je_monat gegenpruefen.",
         ],
         "kategorien": ergebnis,
     }
