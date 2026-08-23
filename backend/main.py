@@ -3844,6 +3844,187 @@ async def debug_preis_saison(
     }
 
 
+@app.get("/debug/tiefpreis-dauer")
+async def debug_tiefpreis_dauer(
+    token:        str = Query(default=""),
+    jahre:        int = Query(default=3, ge=1, le=10),
+    bis:          str = Query(default=""),
+    min_vorpunkte: int = Query(default=10, ge=3, le=50),
+    toleranz_tage: int = Query(default=7, ge=1, le=30),
+    min_episoden: int = Query(default=50, ge=10),
+):
+    """
+    Rohdaten für die Story „Du siehst einen guten Preis — wie lange hast du
+    Zeit, und kommt er wieder?".
+
+    Read-only, keine Keepa-Tokens. Rechnet auf `price_history`.
+
+    Warum diese Frage und nicht Saisonalität
+    ----------------------------------------
+    Die Saisonalitätsauswertung (`/debug/preis-saison`) liefert zwar ein echtes
+    Ergebnis — November ist der günstigste Monat —, aber die Spannen liegen bei
+    2–8 %, mehrere Kategorien zeigen nur Rauschen, und „Black Friday ist
+    günstig" überrascht niemanden. Diese Frage hier ist handlungsrelevant,
+    öffentlich unbeantwortet, und sie hängt nicht an Kalenderabdeckung.
+
+    Definitionen — daran hängt alles
+    --------------------------------
+    * **Tief**: ein Preispunkt, der unter allem der 180 Tage davor liegt, mit
+      mindestens `min_vorpunkte` Punkten davor. Die Vorpunkt-Bedingung ist keine
+      Kosmetik: ohne sie zählt der Aufnahmepreis jedes frisch eingelesenen
+      Produkts automatisch als Tief, denn davor steht nichts. Genau diese
+      Verzerrung hat die erste Saisonauswertung ruiniert.
+    * **Episode**: aufeinanderfolgende Tiefs mit weniger als `toleranz_tage`
+      Abstand gelten als EIN Ereignis. Keepa speichert nur Änderungen — ein
+      Preis, der drei Wochen tief bleibt, ist ein Punkt, nicht 21 Ereignisse.
+    * **Dauer**: vom ersten Tief der Episode bis zum nächsten gespeicherten
+      Preispunkt danach, also bis zur nächsten Preisänderung.
+    * **Wiederkehr**: nur Episoden, nach denen für dieses Produkt mindestens
+      180 Tage Daten folgen. Ohne diese Bedingung gilt jedes Tief am Rand des
+      Zeitfensters als „kam nie wieder" — ein Zensierungsfehler, der die Quote
+      systematisch nach unten zieht.
+
+    `bis` wie bei /debug/preis-saison: obere Zeitgrenze, für belastbare
+    Aussagen nur abgeschlossene Jahre rechnen.
+    """
+    _check_admin(token)
+    try:
+        bis_dt = datetime.fromisoformat(bis) if bis else datetime.utcnow()
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"bis={bis!r} ist kein ISO-Datum (erwartet z. B. 2026-01-01)",
+        )
+
+    sql = """
+    WITH p AS (
+        SELECT h.asin, pr.category, h.timestamp AS ts, h.price,
+               LEAD(h.timestamp) OVER (PARTITION BY h.asin ORDER BY h.timestamp) AS ts_next,
+               MAX(h.timestamp)  OVER (PARTITION BY h.asin) AS ts_letzter
+        FROM price_history h
+        JOIN products pr ON pr.asin = h.asin
+        WHERE h.price > 0
+          AND pr.category IS NOT NULL AND pr.category <> ''
+          AND h.timestamp <  $1
+          AND h.timestamp >= $1 - ($2 || ' years')::interval
+    ),
+    m AS (
+        SELECT p.*,
+               MIN(price) OVER w AS min_vorher,
+               COUNT(*)   OVER w AS punkte_vorher
+        FROM p
+        WINDOW w AS (PARTITION BY asin ORDER BY ts
+                     RANGE BETWEEN INTERVAL '180 days' PRECEDING
+                               AND INTERVAL '1 second'  PRECEDING)
+    ),
+    ev AS (
+        SELECT asin, category, ts, ts_next, ts_letzter, price
+        FROM m
+        WHERE punkte_vorher >= $3 AND price <= min_vorher
+    ),
+    mark AS (
+        SELECT ev.*,
+               LAG(ts) OVER (PARTITION BY asin ORDER BY ts) AS vorher
+        FROM ev
+    ),
+    grp AS (
+        SELECT mark.*,
+               SUM(CASE WHEN vorher IS NULL
+                         OR ts - vorher > ($4 || ' days')::interval
+                        THEN 1 ELSE 0 END)
+                 OVER (PARTITION BY asin ORDER BY ts ROWS UNBOUNDED PRECEDING) AS episode
+        FROM mark
+    ),
+    epi AS (
+        SELECT asin, category, episode,
+               MIN(ts)                     AS start_ts,
+               MAX(COALESCE(ts_next, ts))  AS ende_ts,
+               MAX(ts_letzter)             AS ts_letzter
+        FROM grp GROUP BY 1, 2, 3
+    ),
+    epi2 AS (
+        SELECT epi.*,
+               EXTRACT(EPOCH FROM (ende_ts - start_ts)) / 86400.0 AS dauer_tage,
+               EXTRACT(EPOCH FROM (
+                   LEAD(start_ts) OVER (PARTITION BY asin ORDER BY start_ts) - ende_ts
+               )) / 86400.0 AS bis_naechste_tage,
+               -- Nur Episoden mit genug Nachlaufzeit duerfen die Wiederkehrquote
+               -- beeinflussen (Zensierung, siehe Docstring).
+               (ts_letzter - ende_ts) >= INTERVAL '180 days' AS beobachtbar
+        FROM epi
+    )
+    SELECT category                                        AS kategorie,
+           COUNT(DISTINCT asin)                            AS produkte,
+           COUNT(*)                                        AS episoden,
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY dauer_tage)  AS median_dauer_tage,
+           percentile_cont(0.9) WITHIN GROUP (ORDER BY dauer_tage)  AS p90_dauer_tage,
+           COUNT(*) FILTER (WHERE beobachtbar)             AS beobachtbare_episoden,
+           AVG(CASE WHEN bis_naechste_tage <=  30 THEN 1.0 ELSE 0.0 END)
+               FILTER (WHERE beobachtbar)                  AS wieder_30,
+           AVG(CASE WHEN bis_naechste_tage <=  90 THEN 1.0 ELSE 0.0 END)
+               FILTER (WHERE beobachtbar)                  AS wieder_90,
+           AVG(CASE WHEN bis_naechste_tage <= 180 THEN 1.0 ELSE 0.0 END)
+               FILTER (WHERE beobachtbar)                  AS wieder_180,
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY bis_naechste_tage)
+               FILTER (WHERE beobachtbar AND bis_naechste_tage IS NOT NULL)
+                                                           AS median_bis_naechste_tage
+    FROM epi2
+    GROUP BY 1
+    ORDER BY 3 DESC
+    """
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(sql, bis_dt, str(jahre), min_vorpunkte, str(toleranz_tage))
+
+    def pct(v):
+        return None if v is None else round(float(v) * 100, 1)
+
+    def tage(v):
+        return None if v is None else round(float(v), 1)
+
+    kategorien, verworfen = [], 0
+    ges_epi = ges_beob = 0
+    for r in rows:
+        if r["episoden"] < min_episoden:
+            verworfen += 1
+            continue
+        ges_epi  += r["episoden"]
+        ges_beob += r["beobachtbare_episoden"]
+        kategorien.append({
+            "kategorie":                r["kategorie"],
+            "produkte":                 r["produkte"],
+            "episoden":                 r["episoden"],
+            "median_dauer_tage":        tage(r["median_dauer_tage"]),
+            "p90_dauer_tage":           tage(r["p90_dauer_tage"]),
+            "beobachtbare_episoden":    r["beobachtbare_episoden"],
+            "wieder_guenstig_30_pct":   pct(r["wieder_30"]),
+            "wieder_guenstig_90_pct":   pct(r["wieder_90"]),
+            "wieder_guenstig_180_pct":  pct(r["wieder_180"]),
+            "median_bis_naechste_tage": tage(r["median_bis_naechste_tage"]),
+        })
+
+    return {
+        "parameter": {"jahre": jahre, "bis": bis_dt.date().isoformat(),
+                      "min_vorpunkte": min_vorpunkte,
+                      "toleranz_tage": toleranz_tage,
+                      "min_episoden": min_episoden},
+        "gesamt": {"episoden": ges_epi, "beobachtbare_episoden": ges_beob},
+        "kategorien_verworfen_zu_wenig_episoden": verworfen,
+        "hinweise": [
+            "Tief = Preispunkt unter allem der 180 Tage davor, mit mindestens "
+            "min_vorpunkte Punkten davor (sonst zaehlt jeder Aufnahmepreis als Tief).",
+            "Episode = aufeinanderfolgende Tiefs mit weniger als toleranz_tage "
+            "Abstand; Keepa speichert nur Aenderungen.",
+            "Dauer = bis zur naechsten gespeicherten Preisaenderung.",
+            "Wiederkehrquoten nur ueber Episoden mit >= 180 Tagen Nachlaufdaten, "
+            "sonst zaehlt jedes Tief am Rand als 'kam nie wieder'.",
+            "Aussage gilt fuer den snagga-Katalog, nicht fuer den Handel allgemein.",
+        ],
+        "kategorien": kategorien,
+    }
+
+
 @app.api_route("/health", methods=["GET", "HEAD"])
 async def health():
     pool = await get_pool()
