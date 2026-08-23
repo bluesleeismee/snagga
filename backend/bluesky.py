@@ -87,6 +87,47 @@ def _build_post(deal: dict) -> tuple[str, list[dict]]:
     return text, facets
 
 
+async def _upload_card(client, jwt: str, deal: dict) -> dict | None:
+    """
+    Rendert die snagga-Bildkarte und laedt sie als Blob hoch. Gibt das
+    Blob-Objekt fuer das Embed zurueck, oder None.
+
+    Bewusst fehlertolerant: schlaegt Rendern oder Upload fehl, wird der Post
+    trotzdem abgesetzt — nur eben ohne Bild. Ein Textpost ist immer noch
+    besser als ein stiller Ausfall des Kanals, und die Ursache steht im Log.
+
+    `stand` ist Pflicht, nicht Kosmetik: Amazon verlangt den Zeitstempel neben
+    jedem Preis, der seltener als stuendlich aktualisiert wird — ein
+    hochgeladenes Bild aktualisiert sich nie. Faellt `last_checked` aus, gibt
+    es kein Bild, denn ein Preis ohne belegbaren Erhebungszeitpunkt darf so
+    nicht hinaus.
+    """
+    stand = deal.get("last_checked")
+    if not stand:
+        print("  Bluesky: kein last_checked — Post ohne Bild (Zeitstempelpflicht)")
+        return None
+    try:
+        from pin_image import render_bsky_card
+        png = render_bsky_card(
+            name=deal.get("name") or "Produkt",
+            current=deal.get("current_price") or 0.0,
+            reference=deal.get("original_price") or 0.0,
+            tag=deal.get("tag") or "",
+            category=deal.get("category") or "",
+            stand=stand,
+        )
+        resp = await client.post(
+            f"{_PDS_URL}/xrpc/com.atproto.repo.uploadBlob",
+            headers={"Authorization": f"Bearer {jwt}", "Content-Type": "image/png"},
+            content=png,
+        )
+        resp.raise_for_status()
+        return resp.json()["blob"]
+    except Exception as e:
+        print(f"  Bluesky: Bildkarte fehlgeschlagen ({e}) — Post ohne Bild")
+        return None
+
+
 async def post_deal(deal: dict) -> bool:
     """Postet einen Deal auf Bluesky. Gibt True bei Erfolg zurück."""
     if not BLUESKY_HANDLE or not BLUESKY_PASSWORD:
@@ -113,6 +154,25 @@ async def post_deal(deal: dict) -> bool:
                 "langs":     ["de"],
                 "createdAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
             }
+
+            # 1a) Bildkarte in Markenoptik. Sobald ein Post ein Bild traegt,
+            # zeigt Bluesky KEINE Linkvorschau mehr — der Link bleibt aber ueber
+            # das Facet klickbar, und die eigene Karte sagt mehr als die
+            # generische Vorschau der Zielseite.
+            blob = await _upload_card(client, session["accessJwt"], deal)
+            if blob:
+                alt = (f"Preiskarte von snagga.de: {(deal.get('name') or 'Produkt')[:120]}, "
+                       f"aktuell {_fmt(deal.get('current_price') or 0)}.")
+                record["embed"] = {
+                    "$type": "app.bsky.embed.images",
+                    "images": [{
+                        "alt":   alt[:1000],
+                        "image": blob,
+                        # Ohne aspectRatio reserviert Bluesky im Feed die falsche
+                        # Hoehe und laesst die Karte springen.
+                        "aspectRatio": {"width": 1200, "height": 630},
+                    }],
+                }
             resp = await client.post(
                 f"{_PDS_URL}/xrpc/com.atproto.repo.createRecord",
                 headers={"Authorization": f"Bearer {session['accessJwt']}"},

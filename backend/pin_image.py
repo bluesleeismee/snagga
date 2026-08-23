@@ -239,3 +239,127 @@ def render_pin(
     buf = io.BytesIO()
     img.save(buf, format="PNG", optimize=True)
     return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Bluesky-Karte
+# ---------------------------------------------------------------------------
+
+BW, BH = 1200, 630
+
+
+def render_bsky_card(
+    name: str,
+    current: float,
+    reference: float,
+    tag: str,
+    category: str,
+    stand=None,
+) -> bytes:
+    """
+    Bild fuer einen Bluesky-Post: 1200x630 PNG aus snaggas eigenen Daten.
+
+    Warum hier KEINE Preiskurve steht (Entscheidung David, 23.08.2026)
+    ------------------------------------------------------------------
+    Auf der Website und auf dem Pinterest-Pin ist die Preiskurve das
+    Alleinstellungsmerkmal — hier bewusst nicht. Grund ist §6(y) des Operating
+    Agreement: Preistracking-Funktionalitaet ist ohne schriftliche Genehmigung
+    untersagt, passive Verlaufscharts gelten als Grauzone (siehe
+    Snagga_Amazon_Guidelines.html, Abschnitt „Preisverlauf-Charts", Punkt steht
+    dort als „Action Required" offen). Eine Kurve auf der eigenen Seite ist ein
+    kalkuliertes Risiko; dieselbe Kurve als Bild in einen fremden Feed zu
+    stellen macht sie maximal sichtbar, ohne dass ein Nutzen dagegensteht.
+    David hat das Risiko fuer Bluesky bewusst ausgeschlossen und fuer die
+    Website bewusst behalten. Diese Entscheidung NICHT stillschweigend
+    zurueckdrehen, wenn die Karte spaeter leer wirkt.
+
+    Pflicht-Zeitstempel (Amazon Associates)
+    ---------------------------------------
+    „Stand: ..." steht direkt unter dem Preis. Die Program Policies verlangen
+    ihn, sobald ein angezeigter Preis seltener als stuendlich aktualisiert wird
+    — und ein hochgeladenes Bild aktualisiert sich nie. Der Aufrufer soll den
+    echten Erhebungszeitpunkt (products.last_checked) mitgeben; ohne `stand`
+    faellt die Karte auf „jetzt" zurueck, was nur bei frisch geprueften Deals
+    stimmt. Der zugehoerige Disclaimer steht in der Fusszeile.
+
+    Kein Amazon-Produktfoto
+    -----------------------
+    Associates erlaubt Produktbilder nur ueber die PA API, snagga bezieht sie
+    ueber Keepa — sie auf eine fremde Plattform hochzuladen waere ein neuer
+    Schritt ins Risiko. Ebenso bewusst: kein Amazon-Logo und kein
+    Amazon-Schriftzug als Marke, nur das Wort in normalem Fliesstext.
+
+    Format 1200x630: Bluesky zeigt Bilder im Feed liegend und beschneidet
+    Hochformate hart.
+    """
+    from datetime import datetime
+
+    img  = Image.new("RGB", (BW, BH), NAVY)
+    draw = ImageDraw.Draw(img)
+
+    # ── Kopf ────────────────────────────────────────────────────────────────
+    draw.rectangle([0, 0, BW, 112], fill=NAVY_DARK)
+    _wordmark(draw, 56, 30, 44)
+    if category:
+        cf = _font(22)
+        tw = draw.textlength(category.upper(), font=cf)
+        draw.rounded_rectangle([BW - 56 - tw - 36, 34, BW - 56, 80], 23, fill=(35, 82, 132))
+        draw.text((BW - 74 - tw, 45), category.upper(), font=cf, fill=WHITE)
+
+    # ── Karte ───────────────────────────────────────────────────────────────
+    draw.rounded_rectangle([56, 144, BW - 56, 512], 28, fill=CARD)
+
+    # Urteil als Badge. Gruen nur fuer die Tags, die ein echtes Tief behaupten —
+    # sonst verliert die Farbe ihre Aussage.
+    label = (tag or "Preis gefallen").upper()
+    badge = GREEN if tag in ("Allzeittiefpreis", "Historisch günstig") else ACCENT
+    bf = _font(23, bold=True)
+    bw_ = draw.textlength(label, font=bf)
+    draw.rounded_rectangle([100, 184, 100 + bw_ + 42, 234], 25, fill=badge)
+    draw.text((121, 195), label, font=bf, fill=WHITE)
+
+    # ── Preis + Pflicht-Zeitstempel ─────────────────────────────────────────
+    draw.text((100, 258), _eur(current), font=_font(82, bold=True), fill=NAVY)
+
+    ts = stand or datetime.now()
+    draw.text((100, 364), f"Stand: {ts.strftime('%d.%m.%Y, %H:%M')} Uhr",
+              font=_font(21), fill=INK_SOFT)
+
+    if reference > current > 0:
+        disc = round((reference - current) / reference * 100)
+        rf   = _font(28)
+        ref_txt = f"statt {_eur(reference)}"
+        draw.text((100, 408), ref_txt, font=rf, fill=INK_SOFT)
+        rw = draw.textlength(ref_txt, font=rf)
+        draw.line([(100 + draw.textlength("statt ", font=rf), 423),
+                   (100 + rw, 423)], fill=INK_SOFT, width=2)
+        if disc >= 5:
+            df = _font(25, bold=True)
+            dl = f"-{disc} %"
+            dw = draw.textlength(dl, font=df)
+            draw.rounded_rectangle([126 + rw, 401, 126 + rw + dw + 34, 447], 23, fill=GREEN)
+            draw.text((143 + rw, 412), dl, font=df, fill=WHITE)
+
+    # ── Produktname ─────────────────────────────────────────────────────────
+    # Ohne Kurve waere die rechte Haelfte leer. Der Name rueckt deshalb dorthin
+    # und wird gross genug, um die Flaeche zu tragen — er ist hier die einzige
+    # Information ausser dem Preis, also darf er sie auch fuellen.
+    draw.line([(620, 196), (620, 460)], fill=LINE, width=2)
+    nf = _font(31)
+    ny = 214
+    for line in _wrap(draw, name, nf, BW - 100 - 672, 5):
+        draw.text((672, ny), line, font=nf, fill=INK)
+        ny += 44
+
+    # ── Fuss: Pflicht-Disclaimer ────────────────────────────────────────────
+    # Kurzform des von Amazon verlangten Hinweises. Die Langform steht auf der
+    # verlinkten /preis-Seite, wohin der Post ohnehin fuehrt.
+    draw.text((56, 546), "Preis zum genannten Zeitpunkt · maßgeblich ist der Preis",
+              font=_font(21), fill=MUTED)
+    draw.text((56, 574), "auf amazon.de zum Zeitpunkt des Kaufs",
+              font=_font(21), fill=MUTED)
+    _wordmark(draw, BW - 56 - 110, 558, 28)
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", optimize=True)
+    return buf.getvalue()

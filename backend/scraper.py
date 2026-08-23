@@ -1681,7 +1681,11 @@ async def post_next_bluesky_deal():
     db = await get_pool()
     async with db.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT asin, name, current_price, original_price, deal_score, tag, category "
+            # last_checked wird fuer den Pflicht-Zeitstempel auf der Bildkarte
+            # gebraucht (Amazon: Preis + Erhebungszeitpunkt). Ohne ihn postet
+            # bluesky.py bewusst ohne Bild statt mit einem undatierten Preis.
+            "SELECT asin, name, current_price, original_price, deal_score, tag, category, "
+            "       last_checked "
             "FROM products WHERE is_active=true AND bluesky_posted IS NULL "
             "AND deal_score >= $1 ORDER BY deal_score DESC LIMIT 1",
             BLUESKY_MIN_SCORE,
