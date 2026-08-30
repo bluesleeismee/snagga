@@ -1673,6 +1673,11 @@ async def check_and_send_price_alerts():
 # Messung in der Search Console nachjustierbar sein.
 INDEXABLE_MAX = int(os.getenv("INDEXABLE_MAX", "400"))
 
+# Wie viele der Plaetze hoechstens an AKTIVE Deals gehen duerfen. Deals rotieren
+# naturgemaess; ohne Deckel wandern fast alle Plaetze an sie und die Sitemap
+# tauscht sich woechentlich fast vollstaendig aus. Siehe recompute_indexable().
+INDEXABLE_ACTIVE_MAX = int(os.getenv("INDEXABLE_ACTIVE_MAX", "60"))
+
 
 async def recompute_indexable() -> dict:
     """
@@ -1704,10 +1709,33 @@ async def recompute_indexable() -> dict:
     selbst nach - das laeuft frueher oder spaeter auseinander. Jetzt gibt es eine
     Quelle der Wahrheit, die nachts gesetzt wird.
 
-    Reihenfolge der Auswahl: aktive Deals zuerst (sie sind der aktuelle Anlass,
-    die Seite zu besuchen), dann Katalogseiten nach Bewertungsanzahl - die ist
-    der beste verfuegbare Nachfrage-Proxy, weil sie zeigt, dass ueberhaupt
-    jemand das Produkt kauft.
+    Auswahl nach BESTAENDIGKEIT, nicht nach Aktualitaet (Korrektur 30.08.2026)
+    -------------------------------------------------------------------------
+    Der erste Entwurf sortierte aktive Deals nach vorn. Bei 305 aktiven Deals
+    und 400 Plaetzen waeren damit drei Viertel der Sitemap an Eintraege gegangen,
+    die staendig rotieren - die Sitemap haette sich woechentlich fast komplett
+    ausgetauscht. URLs, die dauernd erscheinen und verschwinden, sind fuer Google
+    ein Instabilitaetssignal, und es waere dieselbe Selbstsabotage wie die
+    Chart-Eviction, die weiter unten eigens abgefangen wird.
+
+    Es widerspricht ausserdem der Architektur: `/preis`-Seiten laufen bewusst NIE
+    ab, das ist ihr Sinn (siehe price_page in main.py). Die Auswahl muss deshalb
+    danach gehen, welche Seite dauerhaft etwas taugt, nicht danach, ob heute
+    zufaellig ein Deal laeuft.
+
+    Deshalb zwei Toepfe:
+    * hoechstens INDEXABLE_ACTIVE_MAX Plaetze fuer aktive Deals (nach Score) -
+      damit frische Deals vertreten sind, die Rotation aber gedeckelt bleibt;
+    * der Rest nach Bewertungsanzahl, dem besten verfuegbaren Nachfrage-Proxy:
+      viele Bewertungen heissen, dass ueberhaupt jemand das Produkt kauft und
+      danach sucht. Aktive Deals duerfen hier mitkonkurrieren - ein Deal mit
+      5.000 Bewertungen ist auch dauerhaft eine gute Seite.
+
+    `has_real_history` ist fuer ALLE Pflicht, auch fuer aktive Deals: eine
+    Produktseite ohne Preiskurve sagt nichts, was Amazon nicht besser sagt, und
+    ist genau die Sorte Seite, die Google als duenn einstuft. Aktive Deals
+    bekommen ihre Historie im naechtlichen Deep-Sync (nightly_deep_sync schreibt
+    price_history), der um 03:00 laeuft - also vor diesem Job um 04:15.
     """
     from scoring import is_catalog_quality
 
@@ -1725,23 +1753,32 @@ async def recompute_indexable() -> dict:
             continue
         if not (r["name"] or "").strip():
             continue
-        # Ohne echte Preishistorie hat die Seite nichts zu sagen, was Amazon
-        # nicht besser sagt - und genau solche Seiten sind es, die Google als
-        # duenn einstuft. Aktive Deals sind ausgenommen: sie holen ihre Historie
-        # beim ersten Aufruf selbst nach (_needs_history_refresh in main.py).
-        if not (r["is_active"] or r["has_real_history"]):
+        # Ohne Preiskurve hat die Seite nichts zu sagen, was Amazon nicht besser
+        # sagt. Gilt auch fuer aktive Deals - die bekommen ihre Historie im
+        # Deep-Sync um 03:00, also vor diesem Job.
+        if not r["has_real_history"]:
             continue
-        if not (r["is_active"] or is_catalog_quality(
-                r["rating"] or 0, r["reviews"] or 0, r["brand"] or "", r["name"] or "")):
+        # Quality Gate fuer ALLE, auch fuer aktive Deals: ein No-Name-Artikel
+        # wird durch einen Rabatt nicht zu einer Seite, die indexiert gehoert.
+        if not is_catalog_quality(
+                r["rating"] or 0, r["reviews"] or 0, r["brand"] or "", r["name"] or ""):
             continue
         kandidaten.append(r)
 
-    kandidaten.sort(key=lambda r: (
-        0 if r["is_active"] else 1,
-        -(r["reviews"] or 0),
-        -(r["deal_score"] or 0),
-    ))
-    gewinner = [r["asin"] for r in kandidaten[:INDEXABLE_MAX]]
+    def nachfrage(r):
+        """Beständige Qualität: Bewertungsanzahl, bei Gleichstand Sterne."""
+        return (-(r["reviews"] or 0), -(r["rating"] or 0))
+
+    # Topf 1: gedeckelte Zahl aktiver Deals, die besten nach Score.
+    aktive = sorted((r for r in kandidaten if r["is_active"]),
+                    key=lambda r: -(r["deal_score"] or 0))[:INDEXABLE_ACTIVE_MAX]
+    gesetzt = {r["asin"] for r in aktive}
+
+    # Topf 2: alles Uebrige nach Nachfrage auffuellen - aktive Deals inklusive,
+    # sofern sie es aus eigener Kraft schaffen.
+    rest = sorted((r for r in kandidaten if r["asin"] not in gesetzt), key=nachfrage)
+    auswahl = aktive + rest[:max(0, INDEXABLE_MAX - len(aktive))]
+    gewinner = [r["asin"] for r in auswahl]
 
     async with db.acquire() as conn:
         # Nur tatsaechliche Aenderungen schreiben: der naechtliche Lauf beruehrt
@@ -1756,10 +1793,11 @@ async def recompute_indexable() -> dict:
             "SELECT COUNT(*) FROM products WHERE is_indexable = true")
 
     ergebnis = {
-        "kandidaten":     len(kandidaten),
-        "obergrenze":     INDEXABLE_MAX,
-        "indexierbar":    gesamt,
-        "davon_aktiv":    sum(1 for r in kandidaten[:INDEXABLE_MAX] if r["is_active"]),
+        "kandidaten":       len(kandidaten),
+        "obergrenze":       INDEXABLE_MAX,
+        "deckel_aktive":    INDEXABLE_ACTIVE_MAX,
+        "indexierbar":      gesamt,
+        "davon_aktiv":      sum(1 for r in auswahl if r["is_active"]),
         "zeilen_geaendert": geaendert,
     }
     print(f"[indexable] {ergebnis}")
