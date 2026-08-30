@@ -11,6 +11,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from scraper import (
     fetch_and_update_deals, nightly_deep_sync, hourly_keepa_price_check,
     post_next_mastodon_deal, post_next_bluesky_deal, check_and_send_price_alerts,
+    recompute_indexable,
     seed_bestsellers, evict_stale_charts,
 )
 from retention import rollup_and_prune
@@ -117,6 +118,18 @@ def create_scheduler() -> AsyncIOScheduler:
         evict_stale_charts,
         CronTrigger(hour=(DEEP_SYNC_HOUR + 1) % 24, minute=0),
         id="evict_stale_charts",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+
+    # Index-Budget neu setzen (04:15) — NACH dem Deep-Sync, damit die frisch
+    # geholten Bewertungszahlen und Preishistorien schon drin sind, und VOR dem
+    # ersten Googlebot-Besuch des Tages. Entscheidet, welche Produktseiten in der
+    # Sitemap stehen und "index, follow" tragen; siehe recompute_indexable().
+    scheduler.add_job(
+        recompute_indexable,
+        CronTrigger(hour=(DEEP_SYNC_HOUR + 1) % 24, minute=15),
+        id="recompute_indexable",
         replace_existing=True,
         misfire_grace_time=3600,
     )

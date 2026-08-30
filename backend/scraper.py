@@ -1664,6 +1664,108 @@ async def check_and_send_price_alerts():
             await asyncio.sleep(0.3)  # sanftes Rate-Limit gegen Brevo
 
 
+# ---------------------------------------------------------------------------
+# Index-Budget: welche Seiten sich ueberhaupt bei Google anmelden duerfen
+# ---------------------------------------------------------------------------
+
+# Wie viele Produktseiten hoechstens indexierbar sind. Per Env ohne Deploy
+# verstellbar - der Wert ist eine Wette, keine Wahrheit, und muss nach der
+# Messung in der Search Console nachjustierbar sein.
+INDEXABLE_MAX = int(os.getenv("INDEXABLE_MAX", "400"))
+
+
+async def recompute_indexable() -> dict:
+    """
+    Setzt `products.is_indexable` neu: die besten INDEXABLE_MAX Produktseiten
+    duerfen in die Sitemap und tragen "index, follow", alle anderen bekommen
+    "noindex, follow" und fliegen aus der Sitemap.
+
+    Warum eine Obergrenze statt "alles Gute rein" (Befund 30.08.2026)
+    -----------------------------------------------------------------
+    Search Console: 72 indexierte gegen 11.659 nicht indexierte Seiten, davon
+    11.339 mit dem Grund "Gefunden - zurzeit nicht indexiert". Das ist keine
+    Warteschlange, sondern Googles Entscheidung, diese URLs gar nicht erst zu
+    crawlen. Drei Wochen vorher waren es 97 indexierte bei 2.880 nicht
+    indexierten - der Katalogausbau hat die Zahl der indexierten also SINKEN
+    lassen. Crawl-Budget wird nach wahrgenommener Qualitaet vergeben, und 9.804
+    fast identische Produktseiten auf einer Domain ohne Backlinks lesen sich wie
+    eine automatisch befuellte Feed-Seite.
+
+    Die Wette: eine kleine Seite mit einigen hundert guten Seiten wird eher
+    vollstaendig indexiert als eine grosse mit fast zehntausend duennen. Falls
+    sie nicht aufgeht, ist der Rueckweg eine Env-Variable - es wird nichts
+    geloescht, die Seiten bleiben erreichbar und funktionsfaehig.
+
+    Warum eine DB-Spalte und nicht dieselbe Regel an zwei Stellen
+    ------------------------------------------------------------
+    Sitemap und robots-Meta MUESSEN identisch entscheiden. Eine URL in der
+    Sitemap, die sich selbst auf noindex setzt, ist ein Widerspruch, den Google
+    als Qualitaetsmangel wertet. Vorher rechnete jede Stelle is_catalog_quality()
+    selbst nach - das laeuft frueher oder spaeter auseinander. Jetzt gibt es eine
+    Quelle der Wahrheit, die nachts gesetzt wird.
+
+    Reihenfolge der Auswahl: aktive Deals zuerst (sie sind der aktuelle Anlass,
+    die Seite zu besuchen), dann Katalogseiten nach Bewertungsanzahl - die ist
+    der beste verfuegbare Nachfrage-Proxy, weil sie zeigt, dass ueberhaupt
+    jemand das Produkt kauft.
+    """
+    from scoring import is_catalog_quality
+
+    db = await get_pool()
+    async with db.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT asin, is_active, has_real_history, rating, reviews, brand, "
+            "       name, deal_score, current_price "
+            "FROM products"
+        )
+
+    kandidaten = []
+    for r in rows:
+        if not r["current_price"] or r["current_price"] <= 0:
+            continue
+        if not (r["name"] or "").strip():
+            continue
+        # Ohne echte Preishistorie hat die Seite nichts zu sagen, was Amazon
+        # nicht besser sagt - und genau solche Seiten sind es, die Google als
+        # duenn einstuft. Aktive Deals sind ausgenommen: sie holen ihre Historie
+        # beim ersten Aufruf selbst nach (_needs_history_refresh in main.py).
+        if not (r["is_active"] or r["has_real_history"]):
+            continue
+        if not (r["is_active"] or is_catalog_quality(
+                r["rating"] or 0, r["reviews"] or 0, r["brand"] or "", r["name"] or "")):
+            continue
+        kandidaten.append(r)
+
+    kandidaten.sort(key=lambda r: (
+        0 if r["is_active"] else 1,
+        -(r["reviews"] or 0),
+        -(r["deal_score"] or 0),
+    ))
+    gewinner = [r["asin"] for r in kandidaten[:INDEXABLE_MAX]]
+
+    async with db.acquire() as conn:
+        # Nur tatsaechliche Aenderungen schreiben: der naechtliche Lauf beruehrt
+        # sonst jede der ~28.000 Zeilen und laesst last_updated-Trigger und
+        # Replikation unnoetig arbeiten.
+        geaendert = await conn.execute(
+            "UPDATE products SET is_indexable = (asin = ANY($1::text[])) "
+            "WHERE is_indexable IS DISTINCT FROM (asin = ANY($1::text[]))",
+            gewinner,
+        )
+        gesamt = await conn.fetchval(
+            "SELECT COUNT(*) FROM products WHERE is_indexable = true")
+
+    ergebnis = {
+        "kandidaten":     len(kandidaten),
+        "obergrenze":     INDEXABLE_MAX,
+        "indexierbar":    gesamt,
+        "davon_aktiv":    sum(1 for r in kandidaten[:INDEXABLE_MAX] if r["is_active"]),
+        "zeilen_geaendert": geaendert,
+    }
+    print(f"[indexable] {ergebnis}")
+    return ergebnis
+
+
 async def post_next_bluesky_deal():
     """
     Postet GENAU EINEN neuen Top-Deal auf Bluesky. Gleiche zurückhaltende
@@ -1839,6 +1941,15 @@ async def evict_stale_charts() -> int:
     seit > CHART_CACHE_DAYS nicht mehr angesehen wurden. Der Stub (Name/Eckdaten)
     bleibt — nur der Chart geht, wird bei erneutem Klick neu geholt. So bleibt der
     Chart-Speicher dauerhaft klein (nur Deals + kürzlich Angesehene).
+
+    AUSGENOMMEN sind indexierbare Seiten (30.08.2026). Ohne diese Ausnahme
+    zerstört sich das Index-Budget selbst: `recompute_indexable` verlangt von
+    Katalogseiten `has_real_history`, und genau die Seiten sind naturgemäss die,
+    die noch niemand angesehen hat — solange kein Traffic da ist, sieht sie
+    NIEMAND an. Die Eviction (04:00) würde ihnen also jede Nacht den Chart
+    löschen, 15 Minuten später fielen sie aus der Auswahl, am nächsten Tag kämen
+    andere hinein. Ergebnis wäre eine dauernd wechselnde Sitemap und Seiten, die
+    genau dann inhaltsleer sind, wenn Googlebot sie abruft.
     """
     db = await get_pool()
     cutoff = datetime.utcnow() - timedelta(days=CHART_CACHE_DAYS)
@@ -1846,6 +1957,7 @@ async def evict_stale_charts() -> int:
         victims = await conn.fetch("""
             SELECT asin FROM products
             WHERE has_real_history = true AND is_active = false
+              AND is_indexable = false
               AND (last_viewed IS NULL OR last_viewed < $1)
         """, cutoff)
         asins = [r["asin"] for r in victims]

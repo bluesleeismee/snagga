@@ -2289,7 +2289,7 @@ async def price_page(request: Request, asin: str):
             "SELECT asin, name, brand, image_url, current_price, original_price, "
             "all_time_low, atl_confirmed, avg_price, avg90_price, avg180_price, category, "
             "affiliate_url, is_active, rating, reviews, tag, has_real_history, prime, "
-            "last_checked, last_updated "
+            "last_checked, last_updated, is_indexable "
             "FROM products WHERE asin=$1",
             asin,
         )
@@ -2304,7 +2304,7 @@ async def price_page(request: Request, asin: str):
                 "SELECT asin, name, brand, image_url, current_price, original_price, "
                 "all_time_low, atl_confirmed, avg_price, avg90_price, avg180_price, category, "
                 "affiliate_url, is_active, rating, reviews, tag, has_real_history, prime, "
-                "last_checked, last_updated "
+                "last_checked, last_updated, is_indexable "
                 "FROM products WHERE asin=$1",
                 asin,
             )
@@ -2333,12 +2333,15 @@ async def price_page(request: Request, asin: str):
     def eur(v: float) -> str:
         return (f"{v:.2f}".replace(".", ",") + " €") if v and v > 0 else "—"
 
-    # Indexierbar nur "gutes Zeug": aktiver Deal ODER Katalog-Quality. Dünne
-    # No-Name-Seiten (Ramsch) bekommen noindex → raus aus Google (verhindert
-    # Thin-Content-Abwertung der Domain); erreichbar bleiben sie trotzdem.
-    indexable = is_active or is_catalog_quality(
-        row["rating"] or 0, row["reviews"] or 0, row["brand"] or "", row["name"] or ""
-    )
+    # Indexierbarkeit kommt aus products.is_indexable, gesetzt von
+    # scraper.recompute_indexable() — dieselbe Quelle wie die Sitemap. Hier NICHT
+    # nachrechnen: zwei Regeln laufen zwangsläufig auseinander, und eine
+    # Sitemap-URL mit noindex ist ein Widerspruch, den Google als Mangel wertet.
+    #
+    # "noindex, follow" statt "noindex, nofollow": die Seite soll sich nicht
+    # anmelden, ihre internen Links aber weiterhin Crawl-Pfade zu den
+    # indexierbaren Seiten öffnen.
+    indexable = bool(row["is_indexable"])
     robots = "index, follow" if indexable else "noindex, follow"
 
     canonical = f"https://www.snagga.de/preis/{asin}"
@@ -2866,20 +2869,25 @@ async def sitemap():
             r["category"] for r in
             await conn.fetch("SELECT DISTINCT category FROM products WHERE is_active=true")
         }
-        # Dauerhafte Preisseiten NUR für "gutes Zeug" (aktive Deals ODER
-        # Katalog-Quality). Dünne No-Name-Seiten (Ramsch) kommen NICHT in die
-        # Sitemap — sie sind zusätzlich per noindex ausgeschlossen (Thin Content
-        # würde sonst Googles Qualitätsbild der Domain drücken).
-        catalog_rows = await conn.fetch(
-            "SELECT asin, last_updated, is_active, rating, reviews, brand, name "
-            "FROM products ORDER BY is_active DESC, deal_score DESC"
+        # Nur Seiten mit is_indexable=true (30.08.2026). Die Spalte wird nachts
+        # von scraper.recompute_indexable() gesetzt und ist die EINZIGE Wahrheit
+        # für Sitemap und robots-Meta.
+        #
+        # Vorher entschied diese Stelle selbst über is_catalog_quality() — mit
+        # dem Ergebnis von 9.804 angemeldeten Produktseiten, von denen Google 72
+        # indexierte und 11.339 mit "Gefunden, zurzeit nicht indexiert" ablehnte.
+        # Eine Sitemap ist eine Empfehlung, keine Forderung: meldet man
+        # zehntausend Seiten an und Google nimmt 0,7 %, ist das ein
+        # Qualitätssignal gegen die eigene Domain.
+        #
+        # WICHTIG: nie wieder eine zweite Regel danebenstellen. Eine URL, die in
+        # der Sitemap steht und sich selbst auf noindex setzt, ist ein
+        # Widerspruch, den Google als Mangel wertet.
+        all_products = await conn.fetch(
+            "SELECT asin, last_updated, is_active FROM products "
+            "WHERE is_indexable = true "
+            "ORDER BY is_active DESC, deal_score DESC"
         )
-        all_products = [
-            r for r in catalog_rows
-            if r["is_active"] or is_catalog_quality(
-                r["rating"] or 0, r["reviews"] or 0, r["brand"] or "", r["name"] or ""
-            )
-        ]
 
     urls = [
         "  <url><loc>https://www.snagga.de/</loc><changefreq>hourly</changefreq><priority>1.0</priority></url>",
@@ -4222,6 +4230,62 @@ async def debug_tiefpreis_dauer(
             "Aussage gilt fuer den snagga-Katalog, nicht fuer den Handel allgemein.",
         ],
         "kategorien": kategorien,
+    }
+
+
+@app.post("/admin/reindex-budget")
+async def admin_reindex_budget(token: str = Query(default="")):
+    """
+    Setzt `products.is_indexable` sofort neu, statt bis zum naechtlichen Lauf zu
+    warten (scheduler: 04:15). Gedacht fuer den ersten Einsatz und fuer das
+    Nachjustieren, nachdem INDEXABLE_MAX in Render geaendert wurde.
+
+    Read-mostly: aendert nur eine Boolean-Spalte, kostet keine Keepa-Tokens und
+    loescht nichts. Seiten, die herausfallen, bleiben erreichbar und
+    funktionsfaehig - sie melden sich nur nicht mehr bei Google an.
+    """
+    _check_admin(token)
+    from scraper import recompute_indexable
+    return await recompute_indexable()
+
+
+@app.get("/debug/index-budget")
+async def debug_index_budget(token: str = Query(default="")):
+    """
+    Zeigt, wie das Index-Budget gerade verteilt ist — die Gegenprobe zur Search
+    Console. `sitemap_urls` ist eine Schaetzung: die Sitemap listet
+    Kategorieseiten nur, wenn sie gerade aktive Deals haben, diese Abfrage zaehlt
+    sie ueber indexierbare Produkte. Die PRODUKTZAHL dagegen muss exakt mit der
+    Sitemap uebereinstimmen — weicht sie ab, entscheiden wieder zwei Regeln
+    getrennt, und genau das war der Fehler vom 30.08.2026.
+    """
+    _check_admin(token)
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT COUNT(*) FILTER (WHERE is_indexable)                    AS indexierbar, "
+            "       COUNT(*) FILTER (WHERE is_indexable AND is_active)      AS davon_aktiv, "
+            "       COUNT(*) FILTER (WHERE is_indexable AND has_real_history) AS davon_mit_chart, "
+            "       COUNT(*)                                                AS produkte_gesamt, "
+            "       COUNT(*) FILTER (WHERE is_active)                       AS aktive_deals "
+            "FROM products"
+        )
+        kat = await conn.fetch(
+            "SELECT category, COUNT(*) AS n FROM products "
+            "WHERE is_indexable = true AND category <> '' "
+            "GROUP BY 1 ORDER BY 2 DESC"
+        )
+    from scraper import INDEXABLE_MAX
+    return {
+        "obergrenze":       INDEXABLE_MAX,
+        "indexierbar":      row["indexierbar"],
+        "davon_aktiv":      row["davon_aktiv"],
+        "davon_mit_chart":  row["davon_mit_chart"],
+        "produkte_gesamt":  row["produkte_gesamt"],
+        "aktive_deals":     row["aktive_deals"],
+        # Startseite, legal, prime-day, ratgeber + Kategorien + Produkte
+        "sitemap_urls":     row["indexierbar"] + 4 + len(kat),
+        "je_kategorie":     {r["category"]: r["n"] for r in kat},
     }
 
 

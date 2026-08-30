@@ -67,6 +67,23 @@ MIGRATE_PRODUCTS = [
     # Nur true, wenn echte Keepa-Preishistorie importiert wurde. Der Preisverlauf-
     # Chart wird ausschließlich für solche Produkte gezeigt (nie erfundene Daten).
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS has_real_history BOOLEAN DEFAULT false",
+    # Index-Budget (30.08.2026). Nur Produkte mit is_indexable=true stehen in der
+    # Sitemap und tragen "index, follow" auf /preis.
+    #
+    # Warum: Die Search Console meldete am 30.08. 72 indexierte gegen 11.659
+    # nicht indexierte Seiten - davon 11.339 mit dem Grund "Gefunden, zurzeit
+    # nicht indexiert". Das ist keine Warteschlange, das ist Googles Entscheidung,
+    # diese URLs gar nicht erst zu crawlen. Vorher waren es 97 indexierte bei
+    # 2.880 nicht indexierten; der Katalogausbau Anfang August hat die Zahl der
+    # indexierten also SINKEN lassen. 9.804 fast identische Produktseiten auf
+    # einer Domain ohne Backlinks lesen sich fuer Google wie eine automatisch
+    # befuellte Feed-Seite.
+    #
+    # Die Spalte wird naechtlich neu gesetzt (scraper.recompute_indexable) und
+    # ist die EINZIGE Wahrheit fuer Sitemap und robots-Meta - vorher entschied
+    # jede Stelle das fuer sich ueber is_catalog_quality(), was zwangslaeufig
+    # auseinanderlaeuft.
+    "ALTER TABLE products ADD COLUMN IF NOT EXISTS is_indexable BOOLEAN DEFAULT false",
     # Letzter Aufruf der /preis-Detailseite. Steuert die Chart-Eviction: Historie
     # (Schicht C) wird nur für aktive Deals + kürzlich angesehene Produkte gehalten,
     # der Rest wird evictet (Stub bleibt, Chart bei erneutem Klick neu geholt).
@@ -233,6 +250,9 @@ CREATE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_active_updated ON products(last_updated DESC) WHERE is_active = true",
     "CREATE INDEX IF NOT EXISTS idx_active_cat     ON products(category)        WHERE is_active = true",
     "CREATE INDEX IF NOT EXISTS idx_price_history_asin ON price_history(asin)",
+    # Die Sitemap filtert auf diese Spalte und wird von Googlebot regelmaessig
+    # geholt - ohne Index waere das jedes Mal ein Full Scan ueber ~28.000 Zeilen.
+    "CREATE INDEX IF NOT EXISTS idx_products_indexable ON products(is_indexable)",
     "CREATE INDEX IF NOT EXISTS idx_alerts_pending ON price_alerts(asin) WHERE confirmed = true AND notified_at IS NULL",
     "CREATE INDEX IF NOT EXISTS idx_alerts_token ON price_alerts(token)",
     # Auswertung läuft immer über Zeitraum, oft zusätzlich nach Kategorie gruppiert
