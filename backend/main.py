@@ -110,6 +110,35 @@ async def lifespan(app: FastAPI):
             print("Datenbank leer — lade initiale Deals via Keepa …")
             await fetch_and_update_deals()
         print(f"Datenbankverbindung OK — {count} aktive Deals.")
+
+        # Index-Budget beim Start setzen, falls noch keine einzige Seite
+        # indexierbar markiert ist (30.08.2026). Zwei Fälle: die Spalte wurde
+        # gerade erst per Migration angelegt und ist überall false, oder jemand
+        # hat INDEXABLE_MAX auf 0 gestellt und wieder hochgedreht.
+        #
+        # Ohne das hier stünde nach dem Deploy bis 04:15 eine LEERE Sitemap —
+        # aus Googles Sicht der Moment, in dem eine Domain ihre sämtlichen Seiten
+        # zurückzieht. Das ist ein deutlich schlechteres Signal als zu viele
+        # Seiten, und es wäre ein selbstverschuldeter Rückschritt genau bei dem
+        # Problem, das die Änderung lösen soll.
+        #
+        # Nur bei 0, nicht bei jedem Start: der reguläre Lauf gehört in die Nacht
+        # (scheduler 04:15), damit ein Neustart mitten am Tag die Sitemap nicht
+        # unter Googlebot wegzieht.
+        try:
+            # Eigene Verbindung: das `conn` von oben ist ausserhalb seines
+            # `async with`-Blocks längst zurückgegeben.
+            async with pool.acquire() as c2:
+                offen = await c2.fetchval(
+                    "SELECT COUNT(*) FROM products WHERE is_indexable = true")
+            if offen == 0:
+                from scraper import recompute_indexable
+                print("Index-Budget noch nicht gesetzt — berechne einmalig …")
+                await recompute_indexable()
+        except Exception as e:
+            # Nie den Start blockieren: ohne Budget ist die Sitemap kurz leer,
+            # mit abgestürztem Prozess ist die ganze Seite weg.
+            print(f"[WARN] Index-Budget beim Start fehlgeschlagen: {e}")
     except Exception as e:
         print(f"[WARN] DB-Verbindung beim Start fehlgeschlagen: {e}")
         print("App startet trotzdem -- DB wird beim ersten Request neu versucht.")
