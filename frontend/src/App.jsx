@@ -1,6 +1,24 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import DealsPage from './pages/DealsPage.jsx'
 import LegalPage from './pages/LegalPage.jsx'
+import PausePage from './pages/PausePage.jsx'
+import { api } from './api.js'
+
+// Pausenmodus (11.10.2026): Die Startseite fragt das Backend (/status), ob
+// SNAGGA_PAUSED gesetzt ist, und zeigt dann statt der Deals die Pausenseite.
+// Ein einziger Schalter in Render steuert so Backend UND Frontend — kein
+// zweiter Schalter in Vercel. Schlägt die Abfrage fehl, gilt "nicht pausiert"
+// (= bisheriges Verhalten), damit ein Netzproblem die Seite nie lahmlegt.
+function HomePage() {
+  const [paused, setPaused] = useState(null)
+  useEffect(() => {
+    api.status()
+      .then(s => setPaused(!!(s && s.paused)))
+      .catch(() => setPaused(false))
+  }, [])
+  if (paused === null) return null
+  return paused ? <PausePage /> : <DealsPage />
+}
 
 function NotFoundPage() {
   return (
@@ -21,7 +39,7 @@ export default function App() {
   return (
     <div style={{ minHeight: '100%', background: 'var(--bg)', color: 'var(--text)' }}>
       {path === '/' ? (
-        <DealsPage />
+        <HomePage />
       ) : path === '/legal' ? (
         <LegalPage />
       ) : (

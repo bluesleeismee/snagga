@@ -31,6 +31,7 @@ from scraper import (
 from scoring import (is_catalog_quality, resolve_atl, atl_for_display, ATL_TOL,
                      historien_spanne_tage)
 from scheduler import create_scheduler
+from pause import PAUSED, pause_kind
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 ADMIN_TOKEN  = os.getenv("ADMIN_TOKEN", "")
@@ -99,6 +100,10 @@ class Product(BaseModel):
 # Lifecycle
 # ---------------------------------------------------------------------------
 
+class _PauseSkip(Exception):
+    """Interner Ausstieg aus dem Start-Block im Pausenmodus."""
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
@@ -106,6 +111,13 @@ async def lifespan(app: FastAPI):
         pool = await get_pool()
         async with pool.acquire() as conn:
             count = await conn.fetchval("SELECT COUNT(*) FROM products WHERE is_active=true")
+        if PAUSED:
+            # Pausenmodus (11.10.2026, Keepa-Abo gekündigt): kein Erstimport,
+            # kein Index-Budget — beides braucht Keepa bzw. ist ohne frische
+            # Preise sinnlos. Siehe pause.py.
+            print("PAUSENMODUS aktiv (SNAGGA_PAUSED) — keine Keepa-Abrufe, "
+                  "keine Social-Posts, Deal- und Preisseiten liefern 503.")
+            raise _PauseSkip()
         if count == 0:
             print("Datenbank leer — lade initiale Deals via Keepa …")
             await fetch_and_update_deals()
@@ -139,13 +151,18 @@ async def lifespan(app: FastAPI):
             # Nie den Start blockieren: ohne Budget ist die Sitemap kurz leer,
             # mit abgestürztem Prozess ist die ganze Seite weg.
             print(f"[WARN] Index-Budget beim Start fehlgeschlagen: {e}")
+    except _PauseSkip:
+        pass
     except Exception as e:
         print(f"[WARN] DB-Verbindung beim Start fehlgeschlagen: {e}")
         print("App startet trotzdem -- DB wird beim ersten Request neu versucht.")
 
-    scheduler = create_scheduler()
+    scheduler = create_scheduler(paused=PAUSED)
     scheduler.start()
-    print("Scheduler aktiv — stündliche Updates + nächtlicher Deep-Sync 03:00 Uhr")
+    if PAUSED:
+        print("Scheduler im Pausenmodus — nur Keep-alive-Ping")
+    else:
+        print("Scheduler aktiv — stündliche Updates + nächtlicher Deep-Sync 03:00 Uhr")
 
     yield
 
@@ -157,6 +174,38 @@ async def lifespan(app: FastAPI):
 # ---------------------------------------------------------------------------
 
 app = FastAPI(title="Snagga API", version="2.0.0", lifespan=lifespan)
+
+
+# ---------------------------------------------------------------------------
+# Pausenmodus (11.10.2026) — siehe pause.py
+# ---------------------------------------------------------------------------
+# Bewusst VOR app.add_middleware(CORSMiddleware) registriert: Starlette legt
+# später hinzugefügte Middleware aussen herum. So bleibt CORS die äusserste
+# Schicht und auch die 503-Antworten tragen die CORS-Header — sonst sähe das
+# Frontend statt "pausiert" nur einen CORS-Fehler.
+@app.middleware("http")
+async def _pause_gate(request: Request, call_next):
+    if not PAUSED:
+        return await call_next(request)
+    kind = pause_kind(request.url.path)
+    if kind == "html":
+        # 503 + Retry-After = "vorübergehend weg", nicht "gelöscht". Google
+        # behält die URLs eine Weile und holt sie nach der Pause über die
+        # Sitemap zurück. noindex zusätzlich, falls ein Crawler den Body wertet.
+        return HTMLResponse(_pause_page_html(), status_code=503,
+                            headers={"Retry-After": "86400",
+                                     "X-Robots-Tag": "noindex"})
+    if kind == "api":
+        return JSONResponse({"paused": True,
+                             "detail": "snagga macht gerade Pause."},
+                            status_code=503, headers={"Retry-After": "86400"})
+    return await call_next(request)
+
+
+@app.get("/status")
+async def status():
+    """Vom Frontend beim Laden der Startseite abgefragt: Pause oder normal."""
+    return {"paused": PAUSED}
 
 app.add_middleware(
     CORSMiddleware,
@@ -2852,7 +2901,7 @@ einzelnen Produkts: Liegt der Preis gerade unter seinem üblichen Niveau, oder
 sieht er nur wegen eines hohen Vergleichspreises danach aus?</p>
 </div>
 
-<p><a class="cta" href="https://www.snagga.de/preis-check">Preis eines Produkts prüfen</a></p>
+{'' if PAUSED else '<p><a class="cta" href="https://www.snagga.de/preis-check">Preis eines Produkts prüfen</a></p>'}
 
 <h2>Wie wir gerechnet haben — und was die Zahlen nicht sagen</h2>
 <p>Grundlage sind rund <strong>580.000 Preispunkte</strong> aus der
@@ -2879,6 +2928,42 @@ gleich aussah.</p>
 </html>""")
 
 
+def _pause_page_html() -> str:
+    """Pausenseite für alle Deal-/Preis-URLs im Pausenmodus (Status 503)."""
+    return f"""<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+{_THEME_INIT_SCRIPT}
+<title>snagga macht gerade Pause</title>
+<meta name="robots" content="noindex, follow">
+<style>
+  body {{ font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); margin:0; }}
+  {_SITE_HEADER_CSS}
+  main {{ max-width:620px; width:90%; margin:0 auto; padding:64px 0 80px; }}
+  h1 {{ font-size:30px; line-height:1.25; margin:0 0 16px; }}
+  p {{ font-size:17px; line-height:1.65; }}
+  .muted {{ color:var(--muted); font-size:15px; }}
+  a {{ color:var(--accent); }}
+</style>
+</head>
+<body>
+{_SITE_HEADER_HTML}
+<main>
+<h1>snagga macht gerade Pause</h1>
+<p>Deals, Preisseiten und der Preis-Check sind im Moment offline. Lieber gar
+kein Preis als ein veralteter — deshalb zeigen wir in dieser Zeit keine
+Angebote.</p>
+<p>Weiterhin lesbar ist unser Ratgeber:
+<a href="https://www.snagga.de/ratgeber/kaufzeitpunkt">Wann kauft man am günstigsten?</a></p>
+<p class="muted"><a href="https://www.snagga.de/">Zur Startseite</a> ·
+<a href="https://www.snagga.de/legal">Impressum &amp; Datenschutz</a></p>
+</main>
+</body>
+</html>"""
+
+
 @app.api_route("/sitemap.xml", methods=["GET", "HEAD"])
 async def sitemap():
     """
@@ -2892,6 +2977,17 @@ async def sitemap():
     /preis-Seiten in "Gefunden – zurzeit nicht indexiert" hängen (GSC 08/2026:
     2.580 Seiten). /deal bleibt erreichbar und teilbar, nur eben nicht angemeldet.
     """
+    if PAUSED:
+        # Pausenmodus: nur Seiten ohne Live-Preise. Alles andere liefert 503
+        # und gehört nicht in eine Empfehlung an Google.
+        xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+               '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+               '  <url><loc>https://www.snagga.de/</loc></url>\n'
+               '  <url><loc>https://www.snagga.de/ratgeber/kaufzeitpunkt</loc></url>\n'
+               '  <url><loc>https://www.snagga.de/legal</loc></url>\n'
+               '</urlset>')
+        return Response(content=xml, media_type="application/xml")
+
     pool = await get_pool()
     async with pool.acquire() as conn:
         active_cats = {

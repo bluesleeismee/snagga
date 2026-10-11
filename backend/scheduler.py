@@ -52,8 +52,23 @@ DEEP_SYNC_MINUTE = int(os.getenv("DEEP_SYNC_MINUTE", "0"))
 HOURLY_MINUTE    = int(os.getenv("HOURLY_MINUTE",    "5"))  # jede Stunde um :05
 
 
-def create_scheduler() -> AsyncIOScheduler:
+def create_scheduler(paused: bool = False) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler()
+
+    # Pausenmodus (SNAGGA_PAUSED, 11.10.2026): nur der Keep-alive-Ping läuft.
+    # Kein Keepa-Abruf (Abo gekündigt), keine Social-Posts mit eingefrorenen
+    # Preisen, keine Preisalarme, kein Index-Budget, keine Chart-Eviction —
+    # die Daten bleiben unangetastet liegen, bis die Pause endet.
+    # Der Ping hält ausserdem Supabase aktiv (/health fragt die DB ab); ohne
+    # Anfragen pausiert Supabase ein Gratis-Projekt nach rund einer Woche.
+    if paused:
+        scheduler.add_job(
+            _ping,
+            IntervalTrigger(minutes=10),
+            id="keepalive_ping",
+            replace_existing=True,
+        )
+        return scheduler
 
     # Stündlicher Job: neue Deals via Keepa /deals + Preis-Check
     scheduler.add_job(

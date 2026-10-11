@@ -30,5 +30,14 @@ export const api = {
       .catch(() => ({ ok: false, message: 'Verbindung fehlgeschlagen. Bitte versuch es erneut.' }))
   },
   categories: ()     => get('/categories'),
+  // Pausenmodus (11.10.2026): fragt ab, ob das Backend mit SNAGGA_PAUSED läuft.
+  // Eigenes Timeout, damit ein hängender Abruf die Startseite nicht blockiert.
+  status: () => {
+    const ctrl = new AbortController()
+    const t = setTimeout(() => ctrl.abort(), 8000)
+    return fetch(BASE + '/status', { signal: ctrl.signal })
+      .then(r => r.ok ? r.json() : { paused: false })
+      .finally(() => clearTimeout(t))
+  },
   refresh:    ()     => fetch(BASE + '/refresh', { method: 'POST' }).then(r => r.json()),
 }
